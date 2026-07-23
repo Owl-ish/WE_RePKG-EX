@@ -1,72 +1,70 @@
 <p align="center"><img alt="WeRePKG" src="docs/logo.png" width="480px"></p>
 
-<div align="center"><h2>Wallpaper Engine 壁纸提取工具，基于开源项目 <a href="https://github.com/notscuffed/repkg">RePKG</a> 开发</h2></div>
+<div align="center"><h2>Wallpaper Engine Wallpaper Extraction Tool, Developed Based on the Open-Source Project <a href="https://github.com/notscuffed/repkg">RePKG</a></h2></div>
 
-简体中文 | [English](README-EN.md)
+[简体中文](README.md) | English
 
-## 语言支持
-* 中文
+## Language Support
+* Chinese (Simplified)
 * English
 
-## 快速上手
+## Quick Start
 
-软件会自动寻找并识别 Wallpaper Engine 下载的壁纸，你也可以手动在设置里面修改。
-
-软件第一启动会自动隐藏网页和程序类的壁纸，可以手动在设置里面打开：
+The software will automatically detect and recognize wallpapers downloaded by Wallpaper Engine. You can also manually modify the wallpaper path in the settings if needed.
+When the software is launched for the first time, it will automatically hide web-based and application-type wallpapers. You can manually enable their display in the settings:
 
 ![01](docs/01.gif)
 
-通过设置的过滤来精准的找到我们需要导出的壁纸：
+Use the filters in the settings to accurately find the wallpapers you want to export:
 
 ![02](docs/02.gif)
 
-也可以通过搜索名称：
+You can also search for wallpapers by name:
 
 ![03](docs/03.gif)
 
-当我们在 Wallpaper Engine 上订阅了新的壁纸后，可以通过刷新来加载：
+After subscribing to new wallpapers on Wallpaper Engine, you can click the refresh button to load them into the tool:
 
 ![04](docs/04.gif)
 
-作为 Wallpaper Engine 的辅助类软件，操作逻辑自然也要与之对齐。
-
-我们可以通过点击某个壁纸来进行单独操作：
+As an auxiliary tool for Wallpaper Engine, its operation logic is designed to be consistent with Wallpaper Engine for a seamless experience.
+You can click on a specific wallpaper to perform individual operations:
 
 ![05](docs/05.gif)
 
-也可以通过右键弹出的菜单来进行操作：
+Operations can also be performed via the right-click menu.
 
 ![11](docs/11.gif)
 
-不同类型的壁纸右侧显示菜单会有点差异，比如视频壁纸可以直接调用系统默认播放器来播放：
+The right-side menu may vary slightly depending on the wallpaper type. For example, video wallpapers allow you to play the video directly using your system's default media player:
 
 ![06](docs/06.gif)
 
-我们可以通过点击每个壁纸右上角的选择框来选择需要一起提取的多个壁纸：
+You can select multiple wallpapers for batch extraction by checking the box in the upper-right corner of each wallpaper:
 
 ![07](docs/07.gif)
 
-也通过按住 Ctrl 键来点击快速切换选中状态（当然，也可以通过 Shift 键来快速选中）：
+You can also hold the Ctrl key and click to quickly toggle the selection status (alternatively, use the Shift key to select a continuous range of wallpapers):
 
 ![08](docs/08.gif)
 
-当我们没有选中任何壁纸时默认提取所有显示的壁纸：
+If no wallpapers are selected, the software will export all currently displayed wallpapers by default:
 
 ![09](docs/09.gif)
 
-也可以通过多选来提取选中的壁纸：
+You can also export only the selected wallpapers via multi-selection:
 
 ![10](docs/10.gif)
 
-在提取前，你可以在设置里面对提取的内容进行设置：
+Before extraction, you can configure the export settings in the "Settings" menu:
 
 ![01](docs/01.png)
 
-当我们在 Wallpaper Engine 取消某个壁纸的订阅后，它不会立马被删除，你可以通过在本软件内手动删除至回收站
+When you unsubscribe from a wallpaper on Wallpaper Engine, it will not be deleted immediately. You can manually delete it to the Recycle Bin within this tool:
 
 ![02](docs/02.png)
 
-可以通过在左下角切换来更改批量将文件提取为壁纸还是项目
+You can switch between batch extracting files as wallpapers or projects via the toggle in the bottom-left corner:
 
 ![03](docs/03.png)
 
