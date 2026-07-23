@@ -1,5 +1,5 @@
 class AppStrings {
-  static const String appName = "WeRePKG";
+  static const String appName = "WeRePKG-EX";
   static const String license = "GPL-2.0 license";
   static const String repkgVersion = "0.4.0";
   static const String repkgAuthor = "notscuffed";
