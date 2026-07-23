@@ -138,7 +138,7 @@ Future<void> extractWallpapers(
   bool needClear = false;
   for (WallpaperInfo wallpaper in wallpapers) {
     ref.read(currentIndexProvider.notifier).update(index);
-    (String?, bool) res = await extractBranch(ref, wallpaper.target, outPath);
+    (String?, bool) res = await extractBranch(ref, wallpaper, outPath);
     String? err = res.$1;
     needClear = res.$2;
     if (err != null) errList.add(ErrorInfo(wallpaper: wallpaper, message: err));
@@ -180,13 +180,14 @@ Future<void> extractAll(WidgetRef ref) async {
 
 Future<(String?, bool)> extractBranch(
   WidgetRef ref,
-  String target,
+  WallpaperInfo wallpaper,
   String outPath,
 ) async {
+  final target = wallpaper.target;
   if (target.toLowerCase().endsWith('pkg')) {
     return (await extractPKG(ref, target, outPath), true);
   } else if (target.endsWith('.mp4')) {
-    return (await extractVideo(ref, target, outPath), false);
+    return (await extractVideo(ref, wallpaper, outPath), false);
   } else if (target.endsWith('customdirectory')) {
     return (await extractImages(ref, target, outPath), false);
   }
@@ -232,13 +233,22 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
 
 Future<String?> extractVideo(
   WidgetRef ref,
-  String filePath,
+  WallpaperInfo wallpaper,
   String outPath,
 ) async {
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
   try {
-    final fileName = filePath.split(Platform.pathSeparator).last;
+    final filePath = wallpaper.target;
+    // Name the exported video after the wallpaper title (sanitized), keeping the
+    // source extension, instead of the cryptic source filename. Falls back to the
+    // source base name when the title is empty.
+    final extension = path.extension(filePath);
+    final title = renameFolder(wallpaper.title).trim();
+    final baseName = title.isEmpty
+        ? path.basenameWithoutExtension(filePath)
+        : title;
+    final fileName = '$baseName$extension';
     final targetPath = renameFile(path.join(outPath, fileName));
     final sourceFile = File(filePath);
     final destinationFile = File(targetPath);

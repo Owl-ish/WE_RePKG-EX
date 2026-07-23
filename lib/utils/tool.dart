@@ -41,16 +41,18 @@ List<String> splitOnFirstColon(String message) {
 
 // 写一个重命名文件名的方法，先检测文件是否已存在，存在就在文件名后面加“-1”，如果“-1”也存在，就加“-2”，以此类推
 String renameFile(String filePath) {
-  String fileName = path.basename(filePath);
   String dirPath = path.dirname(filePath);
+  String fileName = path.basename(filePath);
+  // Split off only the last extension so multi-dot names ("a.b.c.mp4") and
+  // extension-less names are handled correctly (the old split('.')[0/1] mangled
+  // the former and threw on the latter).
+  String stem = path.basenameWithoutExtension(fileName);
+  String ext = path.extension(fileName); // includes leading '.', or '' if none
   String newFilePath = path.join(dirPath, fileName);
   int index = 1;
   while (FileSystemEntity.typeSync(newFilePath) !=
       FileSystemEntityType.notFound) {
-    newFilePath = path.join(
-      dirPath,
-      '${fileName.split('.')[0]}-$index.${fileName.split('.')[1]}',
-    );
+    newFilePath = path.join(dirPath, '$stem-$index$ext');
     index++;
   }
   return newFilePath;
