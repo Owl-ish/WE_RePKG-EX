@@ -5,8 +5,10 @@ class AppStrings {
   static const String repkgAuthor = "notscuffed";
   static const String repkgRepo = "https://github.com/notscuffed/repkg";
   static const String appAuthor = "ilgnefz";
-  static const String appRepoGithub = "https://github.com/ilgnefz/we_repkg";
-  static const String appRepoGitte = "https://gitee.com/ilgnefz/we_repkg";
+  // Original project by the author, linked under "Author" for attribution.
+  static const String appOriginalRepo = "https://github.com/ilgnefz/we_repkg";
+  // This fork's repository, shown as the homepage.
+  static const String appRepoGithub = "https://github.com/Owl-ish/we_repkg-ex";
   static const String baseWallpaperPath1 =
       r'\SteamLibrary\steamapps\workshop\content\431960';
   static const String baseWallpaperPath2 =

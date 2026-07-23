@@ -44,24 +44,17 @@ class SettingAboutGroup extends ConsumerWidget {
         ),
         SettingInfo(
           title: tr(AppI10n.settingAboutWeRepkgAuthor),
-          content: AppStrings.appAuthor,
+          child: LinkText(
+            label: AppStrings.appAuthor,
+            uri: AppStrings.appOriginalRepo,
+          ),
         ),
         SettingInfo(
           title: tr(AppI10n.settingAboutWeRepkgUrl),
           child: Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LinkText(
-                  label: AppStrings.appRepoGithub,
-                  uri: AppStrings.appRepoGithub,
-                ),
-                LinkText(
-                  label: AppStrings.appRepoGitte,
-                  uri: AppStrings.appRepoGitte,
-                ),
-              ],
+            child: LinkText(
+              label: AppStrings.appRepoGithub,
+              uri: AppStrings.appRepoGithub,
             ),
           ),
         ),
