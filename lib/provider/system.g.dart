@@ -20,7 +20,7 @@ final class CurrentStateProvider
         argument: null,
         retry: null,
         name: r'currentStateProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class CurrentStateProvider
   }
 }
 
-String _$currentStateHash() => r'dbb8ca2577fb8aa29f650711019cd4349c993704';
+String _$currentStateHash() => r'20ff1e1a529631220dd61304abb80989b674d7cc';
 
 abstract class _$CurrentState extends $Notifier<RunState> {
   RunState build();
@@ -72,7 +72,7 @@ final class WallpaperPathProvider
         argument: null,
         retry: null,
         name: r'wallpaperPathProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -93,7 +93,7 @@ final class WallpaperPathProvider
   }
 }
 
-String _$wallpaperPathHash() => r'3a2731c53aa4a9c1a1b331685f333c10139919ec';
+String _$wallpaperPathHash() => r'9052c4a8895fdc46611e07251e32810f490ae962';
 
 abstract class _$WallpaperPath extends $Notifier<String?> {
   String? build();
@@ -123,7 +123,7 @@ final class ToolPathProvider extends $NotifierProvider<ToolPath, String?> {
         argument: null,
         retry: null,
         name: r'toolPathProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -144,7 +144,7 @@ final class ToolPathProvider extends $NotifierProvider<ToolPath, String?> {
   }
 }
 
-String _$toolPathHash() => r'e0fb153365576e868593ef20a24a16cd84f3ffc0';
+String _$toolPathHash() => r'e4931e7bdf2fb720ad6c2446e7e9765191b32de5';
 
 abstract class _$ToolPath extends $Notifier<String?> {
   String? build();
@@ -175,7 +175,7 @@ final class ProjectPathProvider
         argument: null,
         retry: null,
         name: r'projectPathProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -196,7 +196,7 @@ final class ProjectPathProvider
   }
 }
 
-String _$projectPathHash() => r'085f435dd97ea2362873b41da52f40ac23779025';
+String _$projectPathHash() => r'3a72a3056cba8b44758d33f91c5fbd0bdf743d09';
 
 abstract class _$ProjectPath extends $Notifier<String?> {
   String? build();
@@ -226,7 +226,7 @@ final class ExportPathProvider extends $NotifierProvider<ExportPath, String?> {
         argument: null,
         retry: null,
         name: r'exportPathProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -247,7 +247,7 @@ final class ExportPathProvider extends $NotifierProvider<ExportPath, String?> {
   }
 }
 
-String _$exportPathHash() => r'a6d437cc35e3f9e8e6b924ce2a0018061f96dd59';
+String _$exportPathHash() => r'283f48de6aa8083796d99ade7fe8e1b1e2f98243';
 
 abstract class _$ExportPath extends $Notifier<String?> {
   String? build();
@@ -278,7 +278,7 @@ final class ToolVersionProvider
         argument: null,
         retry: null,
         name: r'toolVersionProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -299,7 +299,7 @@ final class ToolVersionProvider
   }
 }
 
-String _$toolVersionHash() => r'a17f17793c844f453aa35db57e58625a9b450fe4';
+String _$toolVersionHash() => r'fda3a1d3cd2514e77e09fe6083243d5685822323';
 
 abstract class _$ToolVersion extends $Notifier<String?> {
   String? build();
@@ -330,7 +330,7 @@ final class EarliestTimeProvider
         argument: null,
         retry: null,
         name: r'earliestTimeProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -351,7 +351,7 @@ final class EarliestTimeProvider
   }
 }
 
-String _$earliestTimeHash() => r'9708c6622db404fffae34898ad3716ecdd896009';
+String _$earliestTimeHash() => r'6b1844bc5eb1c91005a24ad616017773df51215f';
 
 abstract class _$EarliestTime extends $Notifier<String?> {
   String? build();
@@ -382,7 +382,7 @@ final class SearchContentProvider
         argument: null,
         retry: null,
         name: r'searchContentProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -403,7 +403,7 @@ final class SearchContentProvider
   }
 }
 
-String _$searchContentHash() => r'2ad72268d8e98b714d994b87f12d0559a6f2a853';
+String _$searchContentHash() => r'64ccd3d91137dd0bf7da4b8e74918c8d94ae287a';
 
 abstract class _$SearchContent extends $Notifier<String> {
   String build();
@@ -434,7 +434,7 @@ final class CurrentThemeProvider
         argument: null,
         retry: null,
         name: r'currentThemeProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -455,7 +455,7 @@ final class CurrentThemeProvider
   }
 }
 
-String _$currentThemeHash() => r'1abdaab8aa66cc869001aa98a9d319789a6000eb';
+String _$currentThemeHash() => r'2a5c46b023500f83f3ac6ccfde43a9b0aaa82e90';
 
 abstract class _$CurrentTheme extends $Notifier<ThemeType> {
   ThemeType build();
@@ -486,7 +486,7 @@ final class CurrentLanguageProvider
         argument: null,
         retry: null,
         name: r'currentLanguageProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -507,7 +507,7 @@ final class CurrentLanguageProvider
   }
 }
 
-String _$currentLanguageHash() => r'52d41ffe10bd800f6d9e78072c62c7e50c4984b8';
+String _$currentLanguageHash() => r'f51b7b30609cb46419d5d0374017565f5edc8641';
 
 abstract class _$CurrentLanguage extends $Notifier<LanguageType?> {
   LanguageType? build();
@@ -537,7 +537,7 @@ final class LoadingTextProvider extends $NotifierProvider<LoadingText, String> {
         argument: null,
         retry: null,
         name: r'loadingTextProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -558,7 +558,7 @@ final class LoadingTextProvider extends $NotifierProvider<LoadingText, String> {
   }
 }
 
-String _$loadingTextHash() => r'8f1b694310b720018a867ff9f337c360d7117242';
+String _$loadingTextHash() => r'bc09a3907bd89e15e5e02d93bf429da32323dd10';
 
 abstract class _$LoadingText extends $Notifier<String> {
   String build();
@@ -589,7 +589,7 @@ final class CurrentExtractTypeProvider
         argument: null,
         retry: null,
         name: r'currentExtractTypeProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -611,7 +611,7 @@ final class CurrentExtractTypeProvider
 }
 
 String _$currentExtractTypeHash() =>
-    r'5ae27e21f3a5463d3714f4c74468256ffa859caf';
+    r'17a598ff54918c4e14cc705319001abf81917bd7';
 
 abstract class _$CurrentExtractType extends $Notifier<ExtractType> {
   ExtractType build();
@@ -641,7 +641,7 @@ final class AcfPathProvider extends $NotifierProvider<AcfPath, String?> {
         argument: null,
         retry: null,
         name: r'acfPathProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -662,7 +662,7 @@ final class AcfPathProvider extends $NotifierProvider<AcfPath, String?> {
   }
 }
 
-String _$acfPathHash() => r'7fba3e41d8fa7313e9346ca9ad10f25b30c38c9b';
+String _$acfPathHash() => r'b4a51db380fe92c02a58594100d40bd6289af336';
 
 abstract class _$AcfPath extends $Notifier<String?> {
   String? build();

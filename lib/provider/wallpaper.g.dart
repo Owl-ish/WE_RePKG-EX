@@ -20,7 +20,7 @@ final class WallpaperListProvider
         argument: null,
         retry: null,
         name: r'wallpaperListProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class WallpaperListProvider
   }
 }
 
-String _$wallpaperListHash() => r'3bd23ce59e11396976fe56a33a5d0f02d0956623';
+String _$wallpaperListHash() => r'20948ed9ba76cea499a0fdcd58bed099f9cdb90b';
 
 abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -72,7 +72,7 @@ final class HoverWallpaperProvider
         argument: null,
         retry: null,
         name: r'hoverWallpaperProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -93,7 +93,7 @@ final class HoverWallpaperProvider
   }
 }
 
-String _$hoverWallpaperHash() => r'ec6d7d8ce6e8957479f6824fdd4e622aa573c706';
+String _$hoverWallpaperHash() => r'312e4fe561eeb2886af2e452c7404a5eaec41bdb';
 
 abstract class _$HoverWallpaper extends $Notifier<WallpaperInfo?> {
   WallpaperInfo? build();
@@ -124,7 +124,7 @@ final class SelectedWallpaperProvider
         argument: null,
         retry: null,
         name: r'selectedWallpaperProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -145,7 +145,7 @@ final class SelectedWallpaperProvider
   }
 }
 
-String _$selectedWallpaperHash() => r'e5f054d0317ea932a91e379223512b79ed614963';
+String _$selectedWallpaperHash() => r'1d4f473402bccbf66b0537ef7f1bc2b2859991cb';
 
 abstract class _$SelectedWallpaper extends $Notifier<WallpaperInfo?> {
   WallpaperInfo? build();
@@ -272,7 +272,7 @@ final class ExtractListProvider
         argument: null,
         retry: null,
         name: r'extractListProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -293,7 +293,7 @@ final class ExtractListProvider
   }
 }
 
-String _$extractListHash() => r'6f9c280eb764d277a11262a04ed22e47d0903f5c';
+String _$extractListHash() => r'12ecd00d629ca547d5f5c332e8f114092f175394';
 
 abstract class _$ExtractList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -323,7 +323,7 @@ final class CurrentIndexProvider extends $NotifierProvider<CurrentIndex, int> {
         argument: null,
         retry: null,
         name: r'currentIndexProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -344,7 +344,7 @@ final class CurrentIndexProvider extends $NotifierProvider<CurrentIndex, int> {
   }
 }
 
-String _$currentIndexHash() => r'09603265b70d94fae5a5848728798f7955e3b522';
+String _$currentIndexHash() => r'ccbb7f2f4cab3ae7874d0120beaf604a2cf89edf';
 
 abstract class _$CurrentIndex extends $Notifier<int> {
   int build();

@@ -17,9 +17,6 @@ class AppConfig {
     await EasyLocalization.ensureInitialized();
     await windowManager.ensureInitialized();
 
-    // TODO: 注释
-    // await StorageUtil.clear();
-
     await localNotifier.setup(
       appName: AppStrings.appName,
       shortcutPolicy: ShortcutPolicy.requireCreate,

@@ -39,8 +39,8 @@ class ImageItem extends ConsumerWidget {
         ref.read(wallpaperListProvider.notifier).toggleChecked(wallpaper);
       } else if (isShiftPressed) {
         int beginIndex = 0, endIndex = index;
-        List<WallpaperInfo> list = ref.watch(filterWallpaperListProvider);
-        List<WallpaperInfo> checkedList = ref.watch(
+        List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
+        List<WallpaperInfo> checkedList = ref.read(
           checkedWallpaperListProvider,
         );
         if (checkedList.isNotEmpty) {
@@ -73,7 +73,7 @@ class ImageItem extends ConsumerWidget {
             showRightMenu(context, details, ref, wallpaper),
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          onHover: (e) =>
+          onEnter: (e) =>
               ref.read(hoverWallpaperProvider.notifier).update(wallpaper),
           onExit: (e) => ref.read(hoverWallpaperProvider.notifier).update(null),
           child: Container(

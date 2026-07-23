@@ -94,12 +94,16 @@ Future<void> _handleStorageLogic(String? wallpaperPath) async {
 }
 
 Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
-  String? wallpaperPath = ref.watch(wallpaperPathProvider);
+  // Capture notifiers synchronously up front: switching folders triggers a
+  // state change that unmounts the widget owning `ref`, and touching `ref`
+  // after the scan (await) would throw "Using ref when widget is unmounted".
+  final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
+  final CurrentState currentState = ref.read(currentStateProvider.notifier);
+  String? wallpaperPath = ref.read(wallpaperPathProvider);
   if (wallpaperPath == null) {
     wallpaperPath = await getWallpaperPath();
-    ref.read(wallpaperPathProvider.notifier).update(wallpaperPath);
+    wallpaperPathNotifier.update(wallpaperPath);
   }
-  CurrentState currentState = ref.read(currentStateProvider.notifier);
   currentState.update(RunState.initial);
   List<WallpaperInfo> wallpapers = [];
   try {
@@ -135,6 +139,9 @@ Future<List<WallpaperInfo>> getAllWallpaper(
   String? folderPath,
 ) async {
   if (folderPath == null) return [];
+  // Capture the notifier synchronously; the scan (workshop folders can be slow)
+  // may finish after the widget that owns `ref` has been unmounted.
+  final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
   List<WallpaperInfo> wallpapers = [];
   Directory dir = Directory(folderPath);
   if (!(await dir.exists())) return [];
@@ -151,78 +158,109 @@ Future<List<WallpaperInfo>> getAllWallpaper(
   for (var acfInfo in acfInfoList) {
     acfInfoMap[acfInfo.id] = acfInfo;
   }
-  for (FileSystemEntity folder in dirList) {
-    if (folder is Directory) {
-      String id = path.basename(folder.path);
-      File file = File('${folder.path}\\project.json');
-      if (await file.exists()) {
-        String jsonString = await file.readAsString();
-        final jsonMap = json.decode(jsonString);
-        String title = jsonMap['title'];
-        String? contentRating = jsonMap['contentrating'];
-        if (contentRating == null) {
-          debugPrint('没有分级: ${folder.path}');
-          contentRating = '';
-        }
-        List<String> tags = List<String>.from(jsonMap['tags'] ?? []);
-        String? type = jsonMap['type'];
-        if (type == null) {
-          debugPrint('没有类型: ${folder.path}');
-          type = '';
-        }
-        String imgName = jsonMap['preview'];
-        String previews = '${folder.path}\\$imgName';
-        String? target = jsonMap['file'];
-        if (target == null) {
-          String temp = '${folder.path}\\directories\\customdirectory';
-          target = await Directory(temp).exists() ? temp : '';
-        } else {
-          if (target.endsWith('json')) target = 'scene.pkg';
-          if (target == '') debugPrint('空文件：${folder.path}');
-          target = target == '' ? '' : '${folder.path}\\$target';
-        }
-        int size = 0;
-        int? updateTime;
-        final fileStat = await file.stat();
-        DateTime createTime = fileStat.changed;
-        if (earliestDate == null || createTime.isBefore(earliestDate)) {
-          earliestDate = createTime;
-        }
-        if (acfInfoMap.containsKey(id)) {
-          size = acfInfoMap[id]!.size;
-          updateTime = acfInfoMap[id]!.time;
-        } else {
-          debugPrint('$id 没有获取到信息');
-          size = await getSize(target);
-          updateTime = null;
-        }
-        wallpapers.add(
-          WallpaperInfo(
-            id: id,
-            title: title,
-            contentRating: contentRating.toLowerCase(),
-            tags: tags,
-            previews: previews,
-            type: type.toLowerCase(),
-            updateTime: updateTime,
-            createTime: createTime,
-            target: target,
-            size: size,
-            folder: folder.path,
-          ),
-        );
+  // Only directory entries, kept in original order (Future.wait returns
+  // results in input order).
+  final folders = dirList.whereType<Directory>().toList();
+  // Bounded concurrency: parse project.json in parallel batches to avoid
+  // opening too many file handles at once.
+  const int batchSize = 24;
+  for (int i = 0; i < folders.length; i += batchSize) {
+    final batch = folders.skip(i).take(batchSize);
+    final parsed = await Future.wait(
+      batch.map((folder) => _parseWallpaperFolder(folder, acfInfoMap)),
+    );
+    for (final wallpaper in parsed) {
+      if (wallpaper == null) continue; // skip missing/corrupt entries
+      wallpapers.add(wallpaper);
+      if (earliestDate == null || wallpaper.createTime.isBefore(earliestDate)) {
+        earliestDate = wallpaper.createTime;
       }
     }
   }
   if (earliestDate != null) {
     String earliestDateStr = earliestDate.toString().substring(0, 10);
-    ref.read(earliestTimeProvider.notifier).update(earliestDateStr);
+    earliestTimeNotifier.update(earliestDateStr);
   }
   return wallpapers;
 }
 
+/// Parses a single wallpaper folder's project.json into a [WallpaperInfo].
+/// Returns null (skipping the item, without aborting the whole scan) when the
+/// project.json is missing or fails to parse.
+Future<WallpaperInfo?> _parseWallpaperFolder(
+  Directory folder,
+  Map<String, AcfInfo> acfInfoMap,
+) async {
+  String id = path.basename(folder.path);
+  File file = File('${folder.path}\\project.json');
+  if (!await file.exists()) return null;
+  try {
+    String jsonString = await file.readAsString();
+    final jsonMap = json.decode(jsonString);
+    // User-created wallpapers (myprojects) may have a project.json without a
+    // title; fall back to the folder id.
+    String title = jsonMap['title'] ?? id;
+    String? contentRating = jsonMap['contentrating'];
+    if (contentRating == null) {
+      debugPrint('没有分级: ${folder.path}');
+      contentRating = '';
+    }
+    List<String> tags = List<String>.from(jsonMap['tags'] ?? []);
+    String? type = jsonMap['type'];
+    if (type == null) {
+      debugPrint('没有类型: ${folder.path}');
+      type = '';
+    }
+    // preview may be missing (e.g. a self-made wallpaper with no preview yet);
+    // leave it empty and the UI shows a placeholder.
+    String? imgName = jsonMap['preview'];
+    String previews = imgName == null ? '' : '${folder.path}\\$imgName';
+    String? target = jsonMap['file'];
+    if (target == null) {
+      String temp = '${folder.path}\\directories\\customdirectory';
+      target = await Directory(temp).exists() ? temp : '';
+    } else {
+      if (target.endsWith('json')) target = 'scene.pkg';
+      if (target == '') debugPrint('空文件：${folder.path}');
+      target = target == '' ? '' : '${folder.path}\\$target';
+    }
+    int size = 0;
+    int? updateTime;
+    final fileStat = await file.stat();
+    DateTime createTime = fileStat.changed;
+    if (acfInfoMap.containsKey(id)) {
+      size = acfInfoMap[id]!.size;
+      updateTime = acfInfoMap[id]!.time;
+    } else {
+      debugPrint('$id 没有获取到信息');
+      size = await getSize(target);
+      updateTime = null;
+    }
+    return WallpaperInfo(
+      id: id,
+      title: title,
+      contentRating: contentRating.toLowerCase(),
+      tags: tags,
+      previews: previews,
+      type: type.toLowerCase(),
+      updateTime: updateTime,
+      createTime: createTime,
+      target: target,
+      size: size,
+      folder: folder.path,
+    );
+  } catch (e) {
+    // A single failed parse shouldn't abort the whole scan; skip and log it.
+    debugPrint('解析壁纸失败，已跳过 ${folder.path}: $e');
+    return null;
+  }
+}
+
 Future<void> refreshWallpaper(WidgetRef ref) async {
-  ref.read(wallpaperListProvider.notifier).clear();
+  // Capture the notifier before awaiting so a refresh can't crash if the
+  // widget owning `ref` is unmounted mid-scan.
+  final wallpaperListNotifier = ref.read(wallpaperListProvider.notifier);
+  wallpaperListNotifier.clear();
   List<WallpaperInfo> wallpapers = await getAllFile(ref);
-  ref.read(wallpaperListProvider.notifier).addAll(wallpapers);
+  wallpaperListNotifier.addAll(wallpapers);
 }

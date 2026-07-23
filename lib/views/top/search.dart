@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,19 +16,26 @@ class Search extends ConsumerStatefulWidget {
 
 class _SearchState extends ConsumerState<Search> {
   late TextEditingController controller;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     controller = TextEditingController()
       ..addListener(() {
-        setState(() {});
-        ref.read(searchContentProvider.notifier).update(controller.text);
+        setState(() {}); // update the clear button / text display immediately
+        // Debounce: only trigger filtering 250ms after typing stops, so each
+        // keystroke doesn't re-filter the whole list.
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(milliseconds: 250), () {
+          ref.read(searchContentProvider.notifier).update(controller.text);
+        });
       });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     controller.dispose();
     super.dispose();
   }

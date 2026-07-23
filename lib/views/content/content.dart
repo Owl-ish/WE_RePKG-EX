@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/enums.dart';
@@ -35,7 +36,6 @@ class _ContentViewState extends ConsumerState<ContentView> {
     List<WallpaperInfo> list = ref.watch(filterWallpaperListProvider);
     return Expanded(
       child: GridView.builder(
-        shrinkWrap: true,
         itemCount: list.length,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -43,7 +43,7 @@ class _ContentViewState extends ConsumerState<ContentView> {
           mainAxisSpacing: 8,
           maxCrossAxisExtent: width,
         ),
-        cacheExtent: 500,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(500),
         itemBuilder: (context, index) =>
             ImageItem(width: width, index: index, wallpaper: list[index]),
       ),

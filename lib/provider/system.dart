@@ -8,14 +8,14 @@ import 'package:we_repkg/utils/storage.dart';
 
 part 'system.g.dart';
 
-@riverpod
+@Riverpod(keepAlive: true)
 class CurrentState extends _$CurrentState {
   @override
   RunState build() => RunState.initial;
   void update(RunState value) => state = value;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class WallpaperPath extends _$WallpaperPath {
   @override
   String? build() => StorageUtil.getString(AppKeys.wallpaperPath);
@@ -26,7 +26,7 @@ class WallpaperPath extends _$WallpaperPath {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class ToolPath extends _$ToolPath {
   @override
   String? build() => getToolPath();
@@ -37,7 +37,7 @@ class ToolPath extends _$ToolPath {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class ProjectPath extends _$ProjectPath {
   @override
   String? build() => StorageUtil.getString(AppKeys.projectPath);
@@ -48,7 +48,7 @@ class ProjectPath extends _$ProjectPath {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class ExportPath extends _$ExportPath {
   @override
   String? build() => StorageUtil.getString(AppKeys.exportPath);
@@ -59,7 +59,7 @@ class ExportPath extends _$ExportPath {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class ToolVersion extends _$ToolVersion {
   @override
   String? build() => StorageUtil.getString(AppKeys.toolVersion);
@@ -69,7 +69,7 @@ class ToolVersion extends _$ToolVersion {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class EarliestTime extends _$EarliestTime {
   @override
   String? build() => null;
@@ -83,14 +83,14 @@ class EarliestTime extends _$EarliestTime {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class SearchContent extends _$SearchContent {
   @override
   String build() => '';
   void update(String value) => state = value;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class CurrentTheme extends _$CurrentTheme {
   @override
   ThemeType build() => ThemeType.values[StorageUtil.getInt(AppKeys.theme) ?? 0];
@@ -100,14 +100,14 @@ class CurrentTheme extends _$CurrentTheme {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class CurrentLanguage extends _$CurrentLanguage {
   @override
   LanguageType? build() => null;
   void update(LanguageType value) => state = value;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class LoadingText extends _$LoadingText {
   @override
   String build() => tr(AppI10n.dialogProcessingWallpaper);
@@ -115,7 +115,7 @@ class LoadingText extends _$LoadingText {
   void update(String value) => state = value;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class CurrentExtractType extends _$CurrentExtractType {
   @override
   ExtractType build() =>
@@ -126,7 +126,7 @@ class CurrentExtractType extends _$CurrentExtractType {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class AcfPath extends _$AcfPath {
   @override
   String? build() => StorageUtil.getString(AppKeys.acfPath);

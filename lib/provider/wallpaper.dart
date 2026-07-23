@@ -11,7 +11,7 @@ import 'system.dart';
 
 part 'wallpaper.g.dart';
 
-@riverpod
+@Riverpod(keepAlive: true)
 class WallpaperList extends _$WallpaperList {
   @override
   List<WallpaperInfo> build() => [];
@@ -37,14 +37,14 @@ class WallpaperList extends _$WallpaperList {
       }).toList();
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class HoverWallpaper extends _$HoverWallpaper {
   @override
   WallpaperInfo? build() => null;
   void update(WallpaperInfo? value) => state = value;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class SelectedWallpaper extends _$SelectedWallpaper {
   @override
   WallpaperInfo? build() => null;
@@ -85,36 +85,30 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   final SortType sortType = ref.watch(wallpaperSortTypeProvider);
   final bool sortAscending = ref.watch(sortAscendingProvider);
 
-  switch (matureState) {
-    case MatureState.hide:
-      list = list.where((e) => e.contentRating != 'mature').toList();
-      break;
-    case MatureState.show:
-      break;
-    case MatureState.only:
-      list = list.where((e) => e.contentRating == 'mature').toList();
-  }
-  if (keyWord.isNotEmpty) {
-    list = list.where((e) => e.title.contains(keyWord)).toList();
-  }
-  if (!showAll) {
-    list = list.where((e) => e.target.isNotEmpty).toList();
-  }
-  if (hideScene) {
-    list = list.where((e) => e.type != 'scene').toList();
-  }
-  if (hideVideo) {
-    list = list.where((e) => e.type != 'video').toList();
-  }
-  if (hideWeb) {
-    list = list.where((e) => e.type != 'web').toList();
-  }
-  if (hideApp) {
-    list = list.where((e) => e.type != 'application').toList();
-  }
-  if (hideUnknown) {
-    list = list.where((e) => e.type != '').toList();
-  }
+  // Combine all filters into a single pass (was multiple .where calls, each
+  // allocating an intermediate list). All conditions are pure ANDs, so this is
+  // equivalent to the original; the .toList() always copies, preventing the
+  // later sort from mutating the provider's own stored list.
+  list = list.where((e) {
+    // mature content rating
+    if (matureState == MatureState.hide && e.contentRating == 'mature') {
+      return false;
+    }
+    if (matureState == MatureState.only && e.contentRating != 'mature') {
+      return false;
+    }
+    // search keyword
+    if (keyWord.isNotEmpty && !e.title.contains(keyWord)) return false;
+    // only show wallpapers with an extractable file
+    if (!showAll && e.target.isEmpty) return false;
+    // type filters
+    if (hideScene && e.type == 'scene') return false;
+    if (hideVideo && e.type == 'video') return false;
+    if (hideWeb && e.type == 'web') return false;
+    if (hideApp && e.type == 'application') return false;
+    if (hideUnknown && e.type == '') return false;
+    return true;
+  }).toList();
   switch (sortType) {
     case SortType.time:
       String earliestDate = StorageUtil.getString(AppKeys.earliestDate) ?? '';
@@ -145,7 +139,7 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   return list;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class ExtractList extends _$ExtractList {
   @override
   List<WallpaperInfo> build() => [];
@@ -153,7 +147,7 @@ class ExtractList extends _$ExtractList {
   void clear() => state = [];
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class CurrentIndex extends _$CurrentIndex {
   @override
   int build() => 0;

@@ -22,7 +22,14 @@ class ImageView extends StatelessWidget {
       child: Consumer(
         builder: (_, ref, child) {
           return AnimatedScale(
-            scale: ref.watch(hoverWallpaperProvider) == wallpaper ? 1.2 : 1,
+            // Only rebuild this tile when ITS OWN hover state flips, not on
+            // every hover change across the grid.
+            scale:
+                ref.watch(
+                  hoverWallpaperProvider.select((h) => h == wallpaper),
+                )
+                ? 1.2
+                : 1,
             duration: const Duration(milliseconds: 250), // 动画时长300ms
             curve: Curves.easeInOut,
             alignment: Alignment.center, // 缩放中心
@@ -33,6 +40,10 @@ class ImageView extends StatelessWidget {
           File(wallpaper.previews),
           width: size,
           height: size,
+          // Decode the preview at the tile's real on-screen pixel size
+          // (logical size × display density) instead of full resolution: big
+          // memory/decode win that also stays crisp on high-DPI displays.
+          cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded) return child;
