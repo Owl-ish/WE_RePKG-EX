@@ -68,6 +68,10 @@ You can switch between batch extracting files as wallpapers or projects via the 
 
 ![03](docs/03.png)
 
+## Credits
+
+This project is a fork of [WeRePKG](https://github.com/ilgnefz/we_repkg) by **ilgnefz**, which builds on [RePKG](https://github.com/notscuffed/repkg) by **notscuffed**.
+
 ## License
 
 [GPL-2.0](LICENSE)
