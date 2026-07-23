@@ -22,9 +22,15 @@ class AppConfig {
       shortcutPolicy: ShortcutPolicy.requireCreate,
     );
 
+    // Restore the saved window size, or fall back to a 16:9 default on first launch.
+    final int? savedWidth = StorageUtil.getInt(AppKeys.windowWidth);
+    final int? savedHeight = StorageUtil.getInt(AppKeys.windowHeight);
+    final Size windowSize = (savedWidth != null && savedHeight != null)
+        ? Size(savedWidth.toDouble(), savedHeight.toDouble())
+        : const Size(1280, 720);
     WindowOptions windowOptions = WindowOptions(
-      size: Size(1060, 720),
-      minimumSize: Size(1060, 720),
+      size: windowSize,
+      minimumSize: const Size(1060, 720),
       center: true,
       title: AppStrings.appName,
       backgroundColor: Colors.transparent,

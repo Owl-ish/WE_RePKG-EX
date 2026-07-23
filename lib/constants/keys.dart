@@ -32,4 +32,6 @@ class AppKeys {
   static const String updateProjectPath = 'updateProjectPath';
   static const String updateAcfPath = 'updateAcfPath';
   static const String maximizeOpen = 'maximizeOpen';
+  static const String windowWidth = 'windowWidth';
+  static const String windowHeight = 'windowHeight';
 }
