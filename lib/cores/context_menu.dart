@@ -42,11 +42,20 @@ Future<void> showRightMenu(
         label: tr(AppI10n.homeExtractSelected),
         onSelected: (_) => extractChecked(ref),
       ),
-    RightMenuItem(
-      label: tr(AppI10n.homeDeleteCurrent),
-      color: Colors.red,
-      onSelected: (_) async => await deleteCurrent(ref, wallpaper),
-    ),
+    // Right-clicking inside a multi-wallpaper selection acts on the whole
+    // selection. Right-clicking outside one acts on that wallpaper alone.
+    if (checkedList.length > 1 && checkedList.contains(wallpaper))
+      RightMenuItem(
+        label: tr(AppI10n.homeDeleteChecked),
+        color: Colors.red,
+        onSelected: (_) async => await deleteChecked(ref),
+      )
+    else
+      RightMenuItem(
+        label: tr(AppI10n.homeDeleteCurrent),
+        color: Colors.red,
+        onSelected: (_) async => await deleteCurrent(ref, wallpaper),
+      ),
   ];
 
   final ContextMenu<dynamic> menu = ContextMenu(
