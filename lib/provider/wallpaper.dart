@@ -60,15 +60,24 @@ class WallpaperList extends _$WallpaperList {
     ];
   }
 
-  /// Selects exactly one wallpaper, clearing every other selection.
+  /// Selects exactly one wallpaper, clearing every other selection, and clears
+  /// it when it was already the only one selected.
   ///
-  /// What a plain left click does: picking a single wallpaper after a range
-  /// selection should replace that range, not add to it.
+  /// What a plain left click does: picking a wallpaper after a range selection
+  /// replaces that range, and clicking the lone selected wallpaper again lets
+  /// you clear the selection without aiming at the checkbox.
   void setExclusiveChecked(String id) {
+    int checkedCount = 0;
+    bool targetChecked = false;
+    for (final e in state) {
+      if (e.checked) checkedCount++;
+      if (e.id == id) targetChecked = e.checked;
+    }
+    final bool select = !(targetChecked && checkedCount == 1);
     state = [
       for (final e in state)
         if (e.id == id)
-          (e.checked ? e : e.copyWith(checked: true))
+          (e.checked == select ? e : e.copyWith(checked: select))
         else
           (e.checked ? e.copyWith(checked: false) : e),
     ];

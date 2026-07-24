@@ -196,6 +196,81 @@ void main() {
     });
   });
 
+  group('setExclusiveChecked', () {
+    test('selects one and clears the rest', () async {
+      await boot();
+      final notifier = container.read(wallpaperListProvider.notifier);
+      notifier.addAll([
+        makeWallpaper('a', checked: true),
+        makeWallpaper('b', checked: true),
+        makeWallpaper('c'),
+      ]);
+
+      notifier.setExclusiveChecked('c');
+
+      final checked = container
+          .read(wallpaperListProvider)
+          .where((e) => e.checked)
+          .map((e) => e.id);
+      expect(checked, ['c']);
+    });
+
+    test('clicking the only selected wallpaper clears it', () async {
+      await boot();
+      final notifier = container.read(wallpaperListProvider.notifier);
+      notifier.addAll([makeWallpaper('a', checked: true), makeWallpaper('b')]);
+
+      notifier.setExclusiveChecked('a');
+
+      expect(
+        container.read(wallpaperListProvider).every((e) => !e.checked),
+        isTrue,
+      );
+    });
+
+    test('clicking one of several selected keeps just that one', () async {
+      await boot();
+      final notifier = container.read(wallpaperListProvider.notifier);
+      notifier.addAll([
+        makeWallpaper('a', checked: true),
+        makeWallpaper('b', checked: true),
+      ]);
+
+      notifier.setExclusiveChecked('a');
+
+      final checked = container
+          .read(wallpaperListProvider)
+          .where((e) => e.checked)
+          .map((e) => e.id);
+      expect(checked, ['a'], reason: 'replaces the range, does not clear');
+    });
+
+    test('clicking twice selects then clears', () async {
+      await boot();
+      final notifier = container.read(wallpaperListProvider.notifier);
+      notifier.addAll([makeWallpaper('a'), makeWallpaper('b')]);
+
+      notifier.setExclusiveChecked('a');
+      expect(container.read(wallpaperListProvider).first.checked, isTrue);
+      notifier.setExclusiveChecked('a');
+      expect(container.read(wallpaperListProvider).first.checked, isFalse);
+    });
+
+    test('costs one state write', () async {
+      await boot();
+      final notifier = container.read(wallpaperListProvider.notifier);
+      notifier.addAll([
+        for (int i = 0; i < 300; i++) makeWallpaper('$i', checked: true),
+      ]);
+
+      int emissions = 0;
+      container.listen(wallpaperListProvider, (_, _) => emissions++);
+      notifier.setExclusiveChecked('7');
+
+      expect(emissions, 1);
+    });
+  });
+
   group('WallpaperList stale-instance safety', () {
     // == compares ids only, so a stale WallpaperInfo looks
     // current. The mutators must read state, never the caller's copy.
