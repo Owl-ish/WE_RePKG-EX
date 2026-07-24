@@ -11,8 +11,6 @@ import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
-import 'dart:convert';
-
 import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
@@ -57,9 +55,13 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
   final process = await Process.start(rePKGPath, args);
   token.register(process);
   try {
+    // systemEncoding, not utf8: Process.run decoded child output with the
+    // system code page, and RePKG emits the console encoding (GBK on a Chinese
+    // Windows). Decoding that as UTF-8 throws FormatException on the first
+    // non-ASCII byte and failed the extraction.
     final streams = await Future.wait([
-      process.stdout.transform(utf8.decoder).join(),
-      process.stderr.transform(utf8.decoder).join(),
+      process.stdout.transform(systemEncoding.decoder).join(),
+      process.stderr.transform(systemEncoding.decoder).join(),
     ]);
     final exitCode = await process.exitCode;
     debugPrint('${tr(AppI10n.logExitCode)} $exitCode');
@@ -68,6 +70,24 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
     return (exitCode: exitCode, stdout: streams[0], stderr: streams[1]);
   } finally {
     token.unregister(process);
+  }
+}
+
+/// Copies the wallpaper's preview image into [destDir].
+///
+/// RePKG does not emit the preview, so an extracted scene had no thumbnail and
+/// nothing identifying it but the folder name. Failure here is logged and
+/// ignored: a missing preview must not fail an otherwise good extraction.
+Future<void> copyPreviewImage(WallpaperInfo wallpaper, String destDir) async {
+  final String src = wallpaper.previews;
+  if (src.isEmpty) return;
+  try {
+    final file = File(src);
+    if (!await file.exists()) return;
+    final dest = await claimFilePath(path.join(destDir, path.basename(src)));
+    await file.copy(dest);
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorExtractFailed)} (preview) $e');
   }
 }
 
@@ -218,6 +238,7 @@ Future<ErrorInfo?> _extractProjectOne({
         message: '${tr(AppI10n.errorExtractFailed)} ${result.stderr}',
       );
     }
+    await copyPreviewImage(wallpaper, outPath);
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
     return ErrorInfo(
@@ -339,7 +360,9 @@ Future<(String?, bool)> extractBranch(
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
-    return (await extractPKG(ref, target, outPath), true);
+    final err = await extractPKG(ref, target, outPath);
+    if (err == null) await copyPreviewImage(wallpaper, outPath);
+    return (err, true);
   } else if (targetLower.endsWith('.mp4')) {
     return (
       await extractVideo(
