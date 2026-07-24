@@ -12,14 +12,11 @@ class AppKeys {
   static const String replaceFile = 'replaceFile';
   static const String sortAscending = 'sortAscending';
   static const String wallpaperPath = 'wallpaperPath';
-  // static const String wallpaperPathBefore = 'wallpaperPathBefore';
   static const String toolPath = 'toolPath';
   static const String exportPath = 'exportPath';
   static const String toolVersion = 'toolVersion';
   static const String sortType = 'sortType';
   static const String earliestDate = 'earliestDate';
-  // static const String infoPath = 'infoPath';
-  // static const String hadPressedCtrl = 'hadPressedCtrl';
   static const String ctrlPressedIndex = 'ctrlPressedIndex';
   static const String theme = 'theme';
   static const String notificationType = 'notificationType';

@@ -33,8 +33,6 @@ String? getAcfPath([String? filePath]) {
   return File(acfPath).existsSync() ? acfPath : null;
 }
 
-// String? defaultFont() => Platform.isWindows ? 'Microsoft YaHei' : null;
-
 Future<int> getSize(String filePath) async {
   int size = 0;
   if (filePath.endsWith('customdirectory')) {
@@ -72,9 +70,6 @@ Future<bool> toolExist(String? toolPath) async {
   if (toolPath == null) return false;
   return await File(toolPath).exists();
 }
-
-// String getAcfPath(String filePath) =>
-//     path.join(path.dirname(path.dirname(filePath)), AppStrings.acfName);
 
 String projectDefaultPath(String filePath) {
   String workshopPath = path.dirname(path.dirname(filePath));

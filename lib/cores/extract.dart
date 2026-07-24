@@ -28,8 +28,14 @@ Future<void> extractProject(
   } else {
     if (!await checkExportPath(ref, true)) return;
   }
+  // Only scenes (.pkg) need RePKG; skip the check for a batch without any.
+  final needsRePKG = wallpapers.any(
+    (w) => w.target.toLowerCase().endsWith('pkg'),
+  );
   String? rePKGPath = ref.watch(toolPathProvider);
-  if (!await toolExist(rePKGPath)) return showToolNoExistToast();
+  if (needsRePKG && !await toolExist(rePKGPath)) {
+    return showToolNoExistToast();
+  }
   List<ErrorInfo> errList = [];
   List<String> skipList = [];
   String outPath = useProjectPath || extractType.isProject
@@ -44,13 +50,8 @@ Future<void> extractProject(
   final basePath = outPath;
   for (WallpaperInfo wallpaper in wallpapers) {
     ref.read(currentIndexProvider.notifier).update(index);
-    if (!wallpaper.target.toLowerCase().endsWith('pkg')) {
-      skipList.add(wallpaper.title);
-      continue;
-    }
     if (ref.watch(useTitleNameProvider)) {
-      String title = renameFolder(wallpaper.title);
-      outPath = path.join(basePath, title);
+      outPath = path.join(basePath, renameFolder(wallpaper.title));
     } else {
       outPath = path.join(basePath, wallpaper.id);
     }
@@ -64,6 +65,15 @@ Future<void> extractProject(
           message: '${tr(AppI10n.errorCreatedFolderFailed)} $e',
         ),
       );
+      index++;
+      continue;
+    }
+    // Non-scene wallpaper: copy the whole folder (re-importable) instead of RePKG.
+    if (!wallpaper.target.toLowerCase().endsWith('pkg')) {
+      String? err = await copyWallpaperFolder(ref, wallpaper, outPath);
+      if (err != null) {
+        errList.add(ErrorInfo(wallpaper: wallpaper, message: err));
+      }
       index++;
       continue;
     }
@@ -123,8 +133,14 @@ Future<void> extractWallpapers(
   List<WallpaperInfo> wallpapers,
 ) async {
   if (!await checkExportPath(ref, true)) return;
+  // Only scenes (.pkg) need RePKG; skip the check for a batch without any.
+  final needsRePKG = wallpapers.any(
+    (w) => w.target.toLowerCase().endsWith('pkg'),
+  );
   String? rePKGPath = ref.watch(toolPathProvider);
-  if (!await toolExist(rePKGPath)) return showToolNoExistToast();
+  if (needsRePKG && !await toolExist(rePKGPath)) {
+    return showToolNoExistToast();
+  }
   List<ErrorInfo> errList = [];
   String outPath = ref.watch(exportPathProvider)!;
   Directory outDir = Directory(outPath);
@@ -191,7 +207,51 @@ Future<(String?, bool)> extractBranch(
   } else if (targetLower.endsWith('customdirectory')) {
     return (await extractImages(ref, target, outPath), false);
   }
-  return (null, false);
+  // web / application / any other type RePKG does not handle: copy the whole
+  // folder into a per-wallpaper subfolder so it stays re-importable.
+  final name = ref.watch(useTitleNameProvider)
+      ? renameFolder(wallpaper.title)
+      : wallpaper.id;
+  final err = await copyWallpaperFolder(
+    ref,
+    wallpaper,
+    path.join(outPath, name),
+  );
+  return (err, false);
+}
+
+/// Copies the entire wallpaper folder into [destDir] (every file, so the output
+/// stays a valid, re-importable Wallpaper Engine wallpaper). Used for web,
+/// application, and any type RePKG does not unpack.
+Future<String?> copyWallpaperFolder(
+  WidgetRef ref,
+  WallpaperInfo wallpaper,
+  String destDir,
+) async {
+  final bool overwrite = ref.watch(replaceFileProvider);
+  changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
+  try {
+    final src = Directory(wallpaper.folder);
+    await Directory(destDir).create(recursive: true);
+    await for (final entity in src.list(recursive: true, followLinks: false)) {
+      final dest = path.join(
+        destDir,
+        path.relative(entity.path, from: src.path),
+      );
+      if (entity is Directory) {
+        await Directory(dest).create(recursive: true);
+      } else if (entity is File) {
+        // Respect the "replace existing" toggle: skip files already present.
+        if (!overwrite && await File(dest).exists()) continue;
+        await Directory(path.dirname(dest)).create(recursive: true);
+        await entity.copy(dest);
+      }
+    }
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
+    return '${tr(AppI10n.errorExtractFailed)} $e';
+  }
+  return null;
 }
 
 Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {

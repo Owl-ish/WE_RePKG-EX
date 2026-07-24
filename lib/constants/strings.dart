@@ -18,11 +18,6 @@ class AppStrings {
   static const String systemDiskWallpaperPath =
       r'\Program Files (x86)\Steam\steamapps\workshop\content\431960';
   static const String acfName = 'appworkshop_431960.acf';
-  // static const String baseAcfPath =
-  //     r'\SteamLibrary\steamapps\workshop\' + acfName;
-  // static const String diskCAcfPath =
-  //     r'C:\Program Files (x86)\Steam\steamapps\workshop\' + acfName;
-  // C:\SteamLibrary\steamapps\common\wallpaper_engine\projects\myprojects
   static const String baseProjectPath =
       r'common\wallpaper_engine\projects\myprojects';
 }

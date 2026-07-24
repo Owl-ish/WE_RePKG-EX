@@ -14,31 +14,17 @@ Future<Map<String, dynamic>> parseAcf(String acfPath) async {
 /// 解析ACF内容
 Map<String, dynamic> _parseAcfContent(String content) {
   final result = <String, dynamic>{};
-  int i = 0;
-
-  // 跳过文件开头的空白字符
-  while (i < content.length &&
-      (content[i] == ' ' || content[i] == '\t' || content[i] == '\n')) {
-    i++;
-  }
+  int i = _skipWhitespace(content, 0);
 
   // 解析顶层对象键
   if (i < content.length && content[i] == '"') {
-    final topLevelKey = _parseString(content, i);
-    i = _skipString(content, i);
-
-    // 跳过空白字符
-    while (i < content.length &&
-        (content[i] == ' ' || content[i] == '\t' || content[i] == '\n')) {
-      i++;
-    }
+    final key = _readString(content, i);
+    i = _skipWhitespace(content, key.endIndex);
 
     // 解析顶层对象的值
     if (i < content.length && content[i] == '{') {
-      i++; // 跳过 '{'
-      final objResult = _parseObject(content, i);
-      result[topLevelKey] = objResult.value;
-      // i = objResult.endIndex; // 这行可以省略，因为我们已经处理完所有内容
+      final objResult = _parseObject(content, i + 1);
+      result[key.value] = objResult.value;
     }
   }
 
@@ -58,11 +44,7 @@ ParseResult _parseObject(String content, int startIndex) {
   int i = startIndex;
 
   while (i < content.length) {
-    // 跳过空白字符
-    while (i < content.length &&
-        (content[i] == ' ' || content[i] == '\t' || content[i] == '\n')) {
-      i++;
-    }
+    i = _skipWhitespace(content, i);
 
     // 遇到 '}' 结束当前对象解析
     if (i < content.length && content[i] == '}') {
@@ -71,27 +53,20 @@ ParseResult _parseObject(String content, int startIndex) {
 
     // 解析键
     if (i < content.length && content[i] == '"') {
-      final key = _parseString(content, i);
-      i = _skipString(content, i);
-
-      // 跳过空白字符
-      while (i < content.length &&
-          (content[i] == ' ' || content[i] == '\t' || content[i] == '\n')) {
-        i++;
-      }
+      final key = _readString(content, i);
+      i = _skipWhitespace(content, key.endIndex);
 
       // 解析值
       if (i < content.length) {
         if (content[i] == '"') {
           // 字符串值
-          final value = _parseString(content, i);
-          map[key] = value;
-          i = _skipString(content, i);
+          final value = _readString(content, i);
+          map[key.value] = value.value;
+          i = value.endIndex;
         } else if (content[i] == '{') {
           // 对象值
-          i++; // 跳过 '{'
-          final objResult = _parseObject(content, i);
-          map[key] = objResult.value;
+          final objResult = _parseObject(content, i + 1);
+          map[key.value] = objResult.value;
           i = objResult.endIndex;
         } else {
           // 跳过其他字符直到找到值
@@ -114,55 +89,38 @@ ParseResult _parseObject(String content, int startIndex) {
   throw FormatException('Invalid ACF format: missing closing brace');
 }
 
-/// 解析字符串
-String _parseString(String content, int startIndex) {
-  int i = startIndex;
-  if (i >= content.length || content[i] != '"') return '';
-
-  i++; // 跳过开始引号
-  final start = i;
-
-  // 查找结束引号
-  while (i < content.length && content[i] != '"') {
-    // 检查是否有足够的字符用于转义
-    if (content[i] == '\\' && i + 1 < content.length) {
-      i += 2; // 跳过转义字符
-    } else {
-      i++;
-    }
+/// Skips spaces, tabs, and newlines from [i] and returns the next
+/// non-whitespace index. Replaces the three duplicated whitespace loops.
+int _skipWhitespace(String content, int i) {
+  while (i < content.length &&
+      (content[i] == ' ' || content[i] == '\t' || content[i] == '\n')) {
+    i++;
   }
-
-  // 检查是否找到了结束引号
-  if (i >= content.length || content[i] != '"') {
-    throw FormatException('Invalid string format: missing closing quote');
-  }
-
-  return content.substring(start, i);
+  return i;
 }
 
-/// 跳过字符串
-int _skipString(String content, int startIndex) {
-  int i = startIndex;
-  if (i >= content.length || content[i] != '"') return startIndex;
-
-  i++; // 跳过开始引号
-
-  // 查找结束引号
+/// Reads a quoted string starting at [start], returning its content and the
+/// index just past the closing quote. Returns an empty value at [start] when
+/// there is no opening quote, and throws FormatException on a missing closing
+/// quote. Replaces the near-identical _parseString and _skipString.
+({String value, int endIndex}) _readString(String content, int start) {
+  int i = start;
+  if (i >= content.length || content[i] != '"') {
+    return (value: '', endIndex: start);
+  }
+  i++; // opening quote
+  final contentStart = i;
   while (i < content.length && content[i] != '"') {
-    // 检查是否有足够的字符用于转义
     if (content[i] == '\\' && i + 1 < content.length) {
-      i += 2; // 跳过转义字符
+      i += 2; // escaped char
     } else {
       i++;
     }
   }
-
-  // 检查是否找到了结束引号
   if (i >= content.length || content[i] != '"') {
     throw FormatException('Invalid string format: missing closing quote');
   }
-
-  return i + 1; // 跳过结束引号
+  return (value: content.substring(contentStart, i), endIndex: i + 1);
 }
 
 /// 将解析后的ACF数据转换为AcfInfo对象列表
@@ -188,17 +146,6 @@ List<AcfInfo> convertToAcfInfoList(Map<String, dynamic> parsedData) {
       }
     });
   }
-
-  // 处理WorkshopItemDetails
-  // if (appWorkshop.containsKey('WorkshopItemDetails')) {
-  //   final workshopItemDetails =
-  //       appWorkshop['WorkshopItemDetails'] as Map<String, dynamic>;
-  //   workshopItemDetails.forEach((id, value) {
-  //     if (value is Map<String, dynamic>) {
-  //       result.add(AcfInfo.fromWorkshopDetails(id, value));
-  //     }
-  //   });
-  // }
 
   return result;
 }

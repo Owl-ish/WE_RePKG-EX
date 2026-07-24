@@ -1,10 +1,9 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/filter.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
-import 'package:we_repkg/utils/storage.dart';
 
 import 'filter.dart';
 import 'system.dart';
@@ -51,21 +50,6 @@ class SelectedWallpaper extends _$SelectedWallpaper {
   void update(WallpaperInfo? value) => state = value;
 }
 
-// @riverpod
-// class CheckedWallpaper extends _$CheckedWallpaper {
-//   @override
-//   List<WallpaperInfo> build() => [];
-//   void add(WallpaperInfo wallpaper) => state = [...state, wallpaper];
-//
-//   void addAll(List<WallpaperInfo> wallpapers) =>
-//       state = [...state, ...wallpapers];
-//
-//   void remove(WallpaperInfo wallpaper) =>
-//       state = state.where((e) => e != wallpaper).toList();
-//
-//   void clear() => state = [];
-// }
-
 @riverpod
 List<WallpaperInfo> checkedWallpaperList(Ref ref) =>
     ref.watch(filterWallpaperListProvider).where((e) => e.checked).toList();
@@ -106,20 +90,31 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
     // only show wallpapers with an extractable file
     if (!showAll && e.target.isEmpty) return false;
     // type filters
-    if (hideScene && e.type == 'scene') return false;
-    if (hideVideo && e.type == 'video') return false;
-    if (hideWeb && e.type == 'web') return false;
-    if (hideApp && e.type == 'application') return false;
-    if (hideUnknown && e.type == '') return false;
+    if (hideScene && e.type == WallpaperType.scene) return false;
+    if (hideVideo && e.type == WallpaperType.video) return false;
+    if (hideWeb && e.type == WallpaperType.web) return false;
+    if (hideApp && e.type == WallpaperType.application) return false;
+    if (hideUnknown && e.type == WallpaperType.unknown) return false;
     return true;
   }).toList();
   switch (sortType) {
     case SortType.time:
-      String earliestDate = StorageUtil.getString(AppKeys.earliestDate) ?? '';
+      // Group wallpapers created on the library's earliest day (the bulk first
+      // import) and push them to the end; newer additions show on top.
+      final String? earliest = ref.watch(earliestTimeProvider);
+      final DateTime? earliestDay = (earliest == null || earliest.isEmpty)
+          ? null
+          : DateTime.tryParse(earliest);
       List<WallpaperInfo> earliestList = [];
       List<WallpaperInfo> otherList = [];
       for (WallpaperInfo wallpaper in list) {
-        if (wallpaper.createTime.toString().startsWith(earliestDate)) {
+        final c = wallpaper.createTime;
+        final bool onEarliestDay =
+            earliestDay != null &&
+            c.year == earliestDay.year &&
+            c.month == earliestDay.month &&
+            c.day == earliestDay.day;
+        if (onEarliestDay) {
           earliestList.add(wallpaper);
         } else {
           otherList.add(wallpaper);
@@ -157,22 +152,3 @@ class CurrentIndex extends _$CurrentIndex {
   int build() => 0;
   void update(int value) => state = value;
 }
-
-// @riverpod
-// class TotalCount extends _$TotalCount {
-//   @override
-//   int build() => 0;
-//   void update(int index) => state = index;
-//   void clear() => state = 0;
-// }
-// @riverpod
-// class CurrentProgress extends _$CurrentProgress {
-//   @override
-//   double build() => 0;
-//
-//   void add(double value) {
-//     state = state + value;
-//   }
-//
-//   void update(double value) => state = value;
-// }

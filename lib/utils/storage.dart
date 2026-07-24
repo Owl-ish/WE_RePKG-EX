@@ -28,21 +28,7 @@ class StorageUtil {
       _prefs.setInt(key, value);
 
   static int? getInt(String key) => _prefs.getInt(key);
-  //
-  // static Future<bool> setDouble(String key, double value) =>
-  //     _prefs.setDouble(key, value);
-  //
-  // static double? getDouble(String key) => _prefs.getDouble(key);
-  //
-  // // 存储 List<String>
-  // static Future<bool> setStringList(String key, List<String> value) =>
-  //     _prefs.setStringList(key, value);
-  //
-  // static List<String> getStringList(String key) {
-  //   List<String>? value = _prefs.getStringList(key);
-  //   return value ?? [];
-  // }
-  //
+
   static Future<bool> remove(String key) => _prefs.remove(key);
   static Future<bool> clear() => _prefs.clear();
 }

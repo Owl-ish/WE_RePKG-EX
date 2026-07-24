@@ -197,7 +197,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
   Map<String, AcfInfo> acfInfoMap,
 ) async {
   String id = path.basename(folder.path);
-  File file = File('${folder.path}\\project.json');
+  File file = File(path.join(folder.path, 'project.json'));
   if (!await file.exists()) return null;
   try {
     String jsonString = await file.readAsString();
@@ -219,15 +219,15 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     // preview may be missing (e.g. a self-made wallpaper with no preview yet);
     // leave it empty and the UI shows a placeholder.
     String? imgName = jsonMap['preview'];
-    String previews = imgName == null ? '' : '${folder.path}\\$imgName';
+    String previews = imgName == null ? '' : path.join(folder.path, imgName);
     String? target = jsonMap['file'];
     if (target == null) {
-      String temp = '${folder.path}\\directories\\customdirectory';
+      String temp = path.join(folder.path, 'directories', 'customdirectory');
       target = await Directory(temp).exists() ? temp : '';
     } else {
       if (target.toLowerCase().endsWith('json')) target = 'scene.pkg';
       if (target == '') debugPrint('${tr(AppI10n.logEmptyFile)} ${folder.path}');
-      target = target == '' ? '' : '${folder.path}\\$target';
+      target = target == '' ? '' : path.join(folder.path, target);
     }
     int size = 0;
     int? updateTime;

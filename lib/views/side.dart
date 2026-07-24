@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/config/custom_theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
@@ -91,18 +92,16 @@ class SideView extends ConsumerWidget {
                       ),
                   ],
                   SizedBox(height: 4),
-                  if (wallpaper.type != 'application' ||
-                      wallpaper.type != 'web')
-                    CustomBtn(
-                      onPressed: () => extractCurrent(ref, wallpaper),
-                      label: tr(AppI10n.homeExtractCurrent),
-                    ),
-                  if (wallpaper.type == 'scene')
+                  CustomBtn(
+                    onPressed: () => extractCurrent(ref, wallpaper),
+                    label: tr(AppI10n.homeExtractCurrent),
+                  ),
+                  if (wallpaper.type == WallpaperType.scene)
                     CustomBtn(
                       onPressed: () => extractProject(ref, [wallpaper]),
                       label: tr(AppI10n.homeExtractForProject),
                     ),
-                  if (wallpaper.type == 'video')
+                  if (wallpaper.type == WallpaperType.video)
                     CustomBtn(
                       onPressed: () => playVideo(wallpaper),
                       label: tr(AppI10n.homePlayVideo),

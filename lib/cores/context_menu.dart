@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/widgets/right_menu_item.dart';
@@ -18,17 +19,16 @@ Future<void> showRightMenu(
 ) async {
   List<WallpaperInfo> checkedList = ref.watch(checkedWallpaperListProvider);
   final entries = <ContextMenuEntry>[
-    if (wallpaper.type != 'application' || wallpaper.type != 'web')
-      RightMenuItem(
-        label: tr(AppI10n.homeExtractCurrent),
-        onSelected: (_) => extractCurrent(ref, wallpaper),
-      ),
-    if (wallpaper.type == 'scene')
+    RightMenuItem(
+      label: tr(AppI10n.homeExtractCurrent),
+      onSelected: (_) => extractCurrent(ref, wallpaper),
+    ),
+    if (wallpaper.type == WallpaperType.scene)
       RightMenuItem(
         label: tr(AppI10n.homeExtractForProject),
         onSelected: (_) => extractProject(ref, [wallpaper]),
       ),
-    if (wallpaper.type == 'video')
+    if (wallpaper.type == WallpaperType.video)
       RightMenuItem(
         label: tr(AppI10n.homePlayVideo),
         onSelected: (_) => playVideo(wallpaper),

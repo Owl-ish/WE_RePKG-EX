@@ -36,9 +36,6 @@ Future<void> setToolPath(WidgetRef ref) async {
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
   if (file != null) {
     ProcessResult result = await Process.run(file.path, ['version']);
-    // print('out:${result.stdout}');
-    // print('err:${result.stderr}');
-    // print('pid:${result.pid} -- exitCode:${result.exitCode}');
     if (result.exitCode == 0) {
       String version = '';
       if (result.stdout != '') {

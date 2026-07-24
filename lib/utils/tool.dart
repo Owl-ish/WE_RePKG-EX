@@ -3,18 +3,19 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 
 String typeText(String type) {
   switch (type) {
-    case 'video':
+    case WallpaperType.video:
       return tr(AppI10n.homeVideo);
-    case 'scene':
+    case WallpaperType.scene:
       return tr(AppI10n.homeScene);
-    case 'web':
+    case WallpaperType.web:
       return tr(AppI10n.homeWeb);
-    case 'application':
+    case WallpaperType.application:
       return tr(AppI10n.homeApplication);
-    case '':
+    case WallpaperType.unknown:
       return tr(AppI10n.homeUnknown);
     default:
       return type;
