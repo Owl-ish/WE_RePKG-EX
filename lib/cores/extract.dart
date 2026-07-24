@@ -79,11 +79,9 @@ Future<void> extractProject(
       ].cast<String>().toList();
       String fullCommand = '$rePKGPath ${args.join(' ')}';
       debugPrint('执行完整命令: $fullCommand');
-      ProcessResult result = await Process.run(
-        rePKGPath!,
-        args,
-        runInShell: true,
-      );
+      // Invoke the exe directly (no shell): Dart quotes args correctly, which is
+      // more robust for tool/output paths containing spaces.
+      ProcessResult result = await Process.run(rePKGPath!, args);
       int exitCode = result.exitCode;
       String stdout = result.stdout;
       String stderr = result.stderr;
@@ -184,11 +182,13 @@ Future<(String?, bool)> extractBranch(
   String outPath,
 ) async {
   final target = wallpaper.target;
-  if (target.toLowerCase().endsWith('pkg')) {
+  // Match the file type case-insensitively (e.g. ".MP4" should still count).
+  final targetLower = target.toLowerCase();
+  if (targetLower.endsWith('pkg')) {
     return (await extractPKG(ref, target, outPath), true);
-  } else if (target.endsWith('.mp4')) {
+  } else if (targetLower.endsWith('.mp4')) {
     return (await extractVideo(ref, wallpaper, outPath), false);
-  } else if (target.endsWith('customdirectory')) {
+  } else if (targetLower.endsWith('customdirectory')) {
     return (await extractImages(ref, target, outPath), false);
   }
   return (null, false);
@@ -214,7 +214,8 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
     if (excludeTexture) args = ['extract', '-o', outPath, file];
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('执行完整命令: $fullCommand');
-    ProcessResult result = await Process.run(rePKGPath, args, runInShell: true);
+    // Invoke the exe directly (no shell) for space-safe argument handling.
+    ProcessResult result = await Process.run(rePKGPath, args);
     int exitCode = result.exitCode; // 退出码
     String stdout = result.stdout; // 标准输出
     String stderr = result.stderr;
@@ -310,17 +311,21 @@ Future<String?> extractImages(
     List<FileSystemEntity> files = await folder.list().toList();
     String loadingText = '';
     int count = files.length;
+    // Track the index directly instead of files.indexOf(file), which is O(n^2)
+    // inside this loop.
+    int index = 0;
     for (var file in files) {
       if (file is File) {
         loadingText = tr(
           AppI10n.dialogExtractImageInfo,
-          namedArgs: {'index': '${files.indexOf(file)}', 'count': '$count'},
+          namedArgs: {'index': '$index', 'count': '$count'},
         );
         changeLoadingText(ref, loadingText);
         String fileName = path.basename(file.path);
         String targetPath = renameFile(path.join(outPath, fileName));
         await file.copy(targetPath);
       }
+      index++;
     }
   } catch (e) {
     debugPrint('导出图片失败: $e');
