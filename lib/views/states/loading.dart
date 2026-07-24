@@ -98,15 +98,18 @@ class _LoadingViewState extends ConsumerState<LoadingView>
       color: theme.scaffoldBackgroundColor,
       child: Container(
         width: 520,
-        // minHeight, not a fixed height: the cancel button pushed the
-        // column past 360 and clipped it.
+        // minHeight, not a fixed height: the cancel button pushed the column
+        // past 360 and clipped it.
         constraints: const BoxConstraints(minHeight: 360),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           // color: Colors.white,
           borderRadius: BorderRadius.circular(8),
         ),
-        alignment: Alignment.center,
+        // No `alignment` here. A Container with one set expands to fill its
+        // parent, which with the fixed height gone stretched the panel down the
+        // whole window. Without it the box hugs the column and honours
+        // minHeight.
         child: Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 16,
