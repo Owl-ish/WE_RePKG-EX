@@ -20,23 +20,19 @@ import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/storage.dart';
 
 Future<List<String>> getWindowsDisks() async {
+  // Probe drive letters A-Z instead of the deprecated `wmic`; returns e.g.
+  // ['C:', 'D:'] using no external process (the system drive is first in
+  // practice, matching the previous behavior).
+  final List<String> disks = [];
   try {
-    // 执行wmic命令获取磁盘信息
-    final result = await Process.run('wmic', ['logicaldisk', 'get', 'name']);
-    // 解析输出（注意不同系统语言可能需要调整分隔符）
-    String output = result.stdout.toString();
-    List<String> disks = output
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty && line.contains(':'))
-        .toList();
-    // 移除标题行（第一行通常是"Name"）
-    if (disks.isNotEmpty && disks.first == 'Name') disks.removeAt(0);
-    return disks;
+    for (int code = 'A'.codeUnitAt(0); code <= 'Z'.codeUnitAt(0); code++) {
+      final letter = String.fromCharCode(code);
+      if (await Directory('$letter:\\').exists()) disks.add('$letter:');
+    }
   } catch (e) {
     debugPrint('${tr(AppI10n.logGetDisksFailed)} $e');
-    return [];
   }
+  return disks;
 }
 
 Future<String?> getWallpaperPath() async {
