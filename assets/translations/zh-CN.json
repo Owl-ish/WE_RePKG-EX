@@ -11,7 +11,6 @@
     "browseFolder": "浏览文件夹",
     "extractAll": "提取全部",
     "extractChecked": "提取选中",
-    "cancelChecked": "取消选中",
     "deleteChecked": "删除选中",
     "scene": "场景",
     "video": "视频",
@@ -45,7 +44,10 @@
     "playVideoFailed": "播放视频失败",
     "fileNoExist": "文件不存在",
     "deleteFailed": "删除失败:",
-    "extractProject": "操作完成，已跳过 {count} 个不支持提取为项目的壁纸"
+    "extractProject": "操作完成，已跳过 {count} 个不支持提取为项目的壁纸",
+    "deleteConfirmTitle": "确认删除壁纸？",
+    "deleteConfirmOne": "“{title}” 将被移至回收站。",
+    "deleteConfirmMany": "{count} 个壁纸将被移至回收站。"
   },
   "setting": {
     "title": "设置",
@@ -149,5 +151,6 @@
   "loading": "正在加载",
   "extractFolderToast": "选择提取壁纸后输出的文件夹，可在底部重新配置",
   "projectFolderToast": "选择提取项目后的输出文件夹，可在设置中重新配置",
-  "cancel": "取消"
+  "cancel": "取消",
+  "confirm": "删除"
 }

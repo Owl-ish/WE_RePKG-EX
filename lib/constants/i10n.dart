@@ -11,7 +11,6 @@ class AppI10n {
   static const String homeBrowseFolder = 'home.browseFolder';
   static const String homeExtractAll = 'home.extractAll';
   static const String homeExtractChecked = 'home.extractChecked';
-  static const String homeCancelChecked = 'home.cancelChecked';
   static const String homeDeleteChecked = 'home.deleteChecked';
   static const String homeScene = 'home.scene';
   static const String homeVideo = 'home.video';
@@ -41,6 +40,10 @@ class AppI10n {
   static const String dialogDeleteSuccess = 'dialog.deleteSuccess';
   static const String dialogCancelled = 'dialog.cancelled';
   static const String cancel = 'cancel';
+  static const String confirm = 'confirm';
+  static const String dialogDeleteConfirmTitle = 'dialog.deleteConfirmTitle';
+  static const String dialogDeleteConfirmOne = 'dialog.deleteConfirmOne';
+  static const String dialogDeleteConfirmMany = 'dialog.deleteConfirmMany';
   static const String dialogOpenFolderFailed = 'dialog.openFolderFailed';
   static const String dialogFolderNoExist = 'dialog.folderNoExist';
   static const String dialogPlayVideoFailed = 'dialog.playVideoFailed';

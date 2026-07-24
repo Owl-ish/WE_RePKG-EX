@@ -17,6 +17,7 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/src/rust/api/simple.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/widgets/confirm_dialog.dart';
 
 import 'toast.dart';
 import 'wallpaper.dart';
@@ -175,15 +176,6 @@ Future<bool> checkProjectPath(WidgetRef ref, [bool show = false]) async {
   return true;
 }
 
-/// Clears every selected wallpaper in one state write.
-///
-/// Behaviour change worth knowing: the loop this replaces walked
-/// checkedWallpaperList, which is filtered, so a wallpaper selected before the
-/// filter changed stayed selected but invisible. This clears those too.
-void clearChecked(WidgetRef ref) {
-  ref.read(wallpaperListProvider.notifier).clearAllChecked();
-}
-
 /// Ids of the wallpapers whose folder is no longer on disk.
 ///
 /// `trash::delete_all` can fail partway through a batch, leaving some folders
@@ -206,6 +198,21 @@ Future<String?> deleteChecked(WidgetRef ref) async {
   String? err;
   List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
   if (wallpapers.isEmpty) return null;
+  // Confirm first: the delete button sits beside the extract buttons and the
+  // selection can be large.
+  final bool confirmed = await showConfirmDialog(
+    title: tr(AppI10n.dialogDeleteConfirmTitle),
+    message: wallpapers.length == 1
+        ? tr(
+            AppI10n.dialogDeleteConfirmOne,
+            namedArgs: {'title': wallpapers.first.title},
+          )
+        : tr(
+            AppI10n.dialogDeleteConfirmMany,
+            namedArgs: {'count': '${wallpapers.length}'},
+          ),
+  );
+  if (!confirmed) return null;
   List<String> paths = wallpapers.map((e) => e.folder).toList();
   try {
     final String? trashErr = await deleteAllToTrash(filePaths: paths);
@@ -251,6 +258,14 @@ Future<void> browserCurrent(WallpaperInfo wallpaper) async {
 }
 
 Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
+  final bool confirmed = await showConfirmDialog(
+    title: tr(AppI10n.dialogDeleteConfirmTitle),
+    message: tr(
+      AppI10n.dialogDeleteConfirmOne,
+      namedArgs: {'title': wallpaper.title},
+    ),
+  );
+  if (!confirmed) return;
   try {
     // deleteToTrash reports failure through its return value, not by throwing.
     // Awaiting it and discarding the result dropped the row from the list while

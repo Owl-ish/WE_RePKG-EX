@@ -11,7 +11,6 @@
     "browseFolder": "Browse folder",
     "extractAll": "Extract all",
     "extractChecked": "Extract selected",
-    "cancelChecked": "Deselect all",
     "deleteChecked": "Delete selected",
     "scene": "Scene",
     "video": "Video",
@@ -45,7 +44,10 @@
     "playVideoFailed": "Play video failed",
     "fileNoExist": "File does not exist",
     "deleteFailed": "Delete failed:",
-    "extractProject": "Operation completed, skipped {count} unsupported wallpapers for project extraction"
+    "extractProject": "Operation completed, skipped {count} unsupported wallpapers for project extraction",
+    "deleteConfirmTitle": "Delete wallpaper?",
+    "deleteConfirmOne": "\"{title}\" will be moved to the Recycle Bin.",
+    "deleteConfirmMany": "{count} wallpapers will be moved to the Recycle Bin."
   },
   "setting": {
     "title": "Settings",
@@ -149,5 +151,6 @@
   "loading": "Loading",
   "extractFolderToast": "Select the output folder for extracted wallpapers; reconfigure at the bottom",
   "projectFolderToast": "Select the output folder for extracted projects; reconfigure in settings",
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "confirm": "Delete"
 }
