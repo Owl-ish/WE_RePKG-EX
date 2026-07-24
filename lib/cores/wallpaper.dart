@@ -245,8 +245,17 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     if (target == null) {
       String temp = path.join(folder.path, 'directories', 'customdirectory');
       target = await Directory(temp).exists() ? temp : '';
+    } else if (target.toLowerCase().endsWith('json')) {
+      // project.json names scene.json whether the scene is still packed or has
+      // already been unpacked. Claiming scene.pkg either way meant RePKG ran
+      // against a file that was not there, and the wallpaper silently produced
+      // nothing. With no pkg present, target the folder so extraction copies
+      // the unpacked files instead.
+      final bool packed = await File(
+        path.join(folder.path, 'scene.pkg'),
+      ).exists();
+      target = packed ? path.join(folder.path, 'scene.pkg') : folder.path;
     } else {
-      if (target.toLowerCase().endsWith('json')) target = 'scene.pkg';
       if (target == '') {
         if (kDebugMode) {
           debugPrint('${tr(AppI10n.logEmptyFile)} ${folder.path}');

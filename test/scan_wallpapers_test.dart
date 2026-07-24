@@ -82,6 +82,53 @@ void main() {
       expect(r.wallpapers.map((w) => w.id), ['good']);
     });
 
+    test('a packed scene targets scene.pkg', () async {
+      final dir = makeWallpaper(
+        'packed',
+        projectJson: project(file: 'scene.json'),
+      );
+      File(p.join(dir.path, 'scene.pkg')).writeAsStringSync('pkg bytes');
+
+      final r = await scanWallpapers(tmp.path);
+
+      expect(r.wallpapers.single.target, p.join(dir.path, 'scene.pkg'));
+    });
+
+    test('an already unpacked scene targets its folder', () async {
+      // project.json names scene.json either way. Claiming scene.pkg when there
+      // is none sent RePKG after a file that did not exist, and the wallpaper
+      // silently produced nothing instead of being copied.
+      final dir = makeWallpaper(
+        'unpacked',
+        projectJson: project(file: 'scene.json'),
+      );
+      File(p.join(dir.path, 'scene.json')).writeAsStringSync('{}');
+      Directory(p.join(dir.path, 'materials')).createSync();
+
+      final r = await scanWallpapers(tmp.path);
+
+      expect(r.wallpapers.single.target, dir.path);
+      expect(
+        r.wallpapers.single.target,
+        isNot(endsWith('scene.pkg')),
+        reason: 'must not point at a file that is not there',
+      );
+    });
+
+    test('an unpacked scene is not filtered out as unextractable', () async {
+      // A non-empty target is what keeps it visible when "show all" is off.
+      final dir = makeWallpaper(
+        'unpacked',
+        projectJson: project(file: 'scene.json'),
+      );
+      File(p.join(dir.path, 'scene.json')).writeAsStringSync('{}');
+
+      final r = await scanWallpapers(tmp.path);
+
+      expect(r.wallpapers.single.target, isNotEmpty);
+      expect(Directory(r.wallpapers.single.target).existsSync(), isTrue);
+    });
+
     test(
       'missing title falls back to folder id; missing preview is empty',
       () async {
