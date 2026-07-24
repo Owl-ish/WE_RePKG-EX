@@ -2,7 +2,7 @@
 
 <div align="center"><h2>Wallpaper Engine 壁纸提取工具，基于开源项目 <a href="https://github.com/notscuffed/repkg">RePKG</a> 开发</h2></div>
 
-简体中文 | [English](README-EN.md)
+简体中文 | [English](README.md)
 
 ## 语言支持
 * 中文
