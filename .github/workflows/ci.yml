@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    # These are remote branch names. Pushing with `git push fork publish:master`
+    # lands on master, which is what GitHub matches against; publish is listed
+    # too in case the branch ever gets pushed under its own name.
+    branches: [master, publish]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dart:
+    name: Analyze & test (Dart)
+    # windows-latest, not ubuntu: test/info_test.dart asserts on a Windows path
+    # with backslashes, which package:path only parses as separators on Windows.
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.7
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Test
+        run: flutter test --no-pub --reporter=expanded
+
+  rust:
+    name: Test (Rust)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
