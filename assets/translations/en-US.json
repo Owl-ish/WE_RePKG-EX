@@ -114,7 +114,8 @@
     "exportVideoFailed": "Video export failed:",
     "exportImageFailed": "Image export failed:",
     "createdFolderFailed": "Folder creation failed:",
-    "getWallpaperFailed": "Failed to get wallpaper:"
+    "getWallpaperFailed": "Failed to get wallpaper:",
+    "parseAcfFailed": "Failed to parse ACF file, ignoring extra info:"
   },
   "close": "Close",
   "emptyTip": "No data available\nPlease manually select a new wallpaper library folder\nPath as: ...\\steamapps\\workshop\\content\\431960",

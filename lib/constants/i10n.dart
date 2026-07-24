@@ -136,6 +136,7 @@ class AppI10n {
   static const String errorExportImageFailed = 'error.exportImageFailed';
   static const String errorCreatedFolderFailed = 'error.createdFolderFailed';
   static const String errorGetWallpaperFailed = 'error.getWallpaperFailed';
+  static const String errorParseAcfFailed = 'error.parseAcfFailed';
 
   // 其他
   static const String close = 'close';

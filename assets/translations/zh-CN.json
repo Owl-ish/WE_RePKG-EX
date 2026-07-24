@@ -114,7 +114,8 @@
     "exportVideoFailed": "导出视频失败:",
     "exportImageFailed": "导出图片失败:",
     "createdFolderFailed": "创建文件夹失败:",
-    "getWallpaperFailed": "获取壁纸失败:"
+    "getWallpaperFailed": "获取壁纸失败:",
+    "parseAcfFailed": "解析 ACF 失败，已忽略附加信息:"
   },
   "close": "关闭",
   "emptyTip": "未识别到任何数据\n请手动选择一个新的壁纸库文件夹\n路径为：...\\steamapps\\workshop\\content\\431960",

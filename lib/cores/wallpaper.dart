@@ -128,9 +128,15 @@ Future<List<AcfInfo>> getAcfInfo() async {
   String? acfPath = StorageUtil.getString(AppKeys.acfPath);
   if (acfPath == null) return acfInfoList;
   if (!(await File(acfPath).exists())) return acfInfoList;
-  Map<String, dynamic> content = await parseAcf(acfPath);
-  if (content.isEmpty) return acfInfoList;
-  acfInfoList = convertToAcfInfoList(content); // 转换为AcfInfo对象列表
+  try {
+    Map<String, dynamic> content = await parseAcf(acfPath);
+    if (content.isEmpty) return acfInfoList;
+    acfInfoList = convertToAcfInfoList(content); // 转换为AcfInfo对象列表
+  } catch (e) {
+    // ACF only supplies extra info (size / update time); a parse failure must
+    // be ignored rather than aborting the whole scan.
+    debugPrint('${tr(AppI10n.errorParseAcfFailed)} $e');
+  }
   return acfInfoList;
 }
 
@@ -220,7 +226,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       String temp = '${folder.path}\\directories\\customdirectory';
       target = await Directory(temp).exists() ? temp : '';
     } else {
-      if (target.endsWith('json')) target = 'scene.pkg';
+      if (target.toLowerCase().endsWith('json')) target = 'scene.pkg';
       if (target == '') debugPrint('空文件：${folder.path}');
       target = target == '' ? '' : '${folder.path}\\$target';
     }
