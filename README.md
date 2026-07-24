@@ -2,7 +2,7 @@
 
 <div align="center"><h2>Wallpaper Engine Wallpaper Extraction Tool, Developed Based on the Open-Source Project <a href="https://github.com/notscuffed/repkg">RePKG</a></h2></div>
 
-[简体中文](README.md) | English
+[简体中文](README-CN.md) | English
 
 ## Language Support
 * Chinese (Simplified)
