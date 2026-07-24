@@ -53,10 +53,16 @@ class ImageItem extends ConsumerWidget {
           }
         }
         await StorageUtil.remove(AppKeys.ctrlPressedIndex);
-        List<WallpaperInfo> newList = list.sublist(beginIndex, endIndex + 1);
-        for (WallpaperInfo e in newList) {
-          ref.read(wallpaperListProvider.notifier).updateChecked(e, true);
-        }
+        // The stored anchor index can outlive the list it referred to (changing
+        // the filter or the search term reshuffles it), so clamp before slicing
+        // rather than letting sublist throw RangeError.
+        beginIndex = beginIndex.clamp(0, list.length - 1);
+        endIndex = endIndex.clamp(beginIndex, list.length - 1);
+        final ids = list
+            .sublist(beginIndex, endIndex + 1)
+            .map((e) => e.id)
+            .toSet();
+        ref.read(wallpaperListProvider.notifier).setCheckedByIds(ids, true);
       } else {
         ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
       }

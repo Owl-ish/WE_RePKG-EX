@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bot_toast/bot_toast.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +38,10 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> with WindowListener {
+  /// Coalesces the resize events that arrive continuously while the user drags
+  /// a window edge. Without it, every event pair wrote twice to disk.
+  Timer? _resizeDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -44,14 +50,21 @@ class _MyAppState extends ConsumerState<MyApp> with WindowListener {
 
   @override
   void dispose() {
+    _resizeDebounce?.cancel();
     windowManager.removeListener(this);
     super.dispose();
   }
 
   @override
-  void onWindowResized() async {
+  void onWindowResized() {
+    _resizeDebounce?.cancel();
+    _resizeDebounce = Timer(const Duration(milliseconds: 300), _persistSize);
+  }
+
+  Future<void> _persistSize() async {
     // Persist the window size so it's restored next launch. Skip while maximized
     // so we store the real restored size, not the maximized bounds.
+    if (!mounted) return;
     if (await windowManager.isMaximized()) return;
     final Size size = await windowManager.getSize();
     await StorageUtil.setInt(AppKeys.windowWidth, size.width.round());

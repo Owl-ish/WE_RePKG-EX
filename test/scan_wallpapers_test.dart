@@ -55,7 +55,10 @@ void main() {
 
     test('parses valid wallpaper folders', () async {
       makeWallpaper('111', projectJson: project(title: 'Alpha'));
-      makeWallpaper('222', projectJson: project(title: 'Beta', type: 'video'));
+      makeWallpaper(
+        '222',
+        projectJson: project(title: 'Beta', type: 'video'),
+      );
       final r = await scanWallpapers(tmp.path);
       expect(r.wallpapers.length, 2);
       final byId = {for (final w in r.wallpapers) w.id: w};
@@ -79,13 +82,15 @@ void main() {
       expect(r.wallpapers.map((w) => w.id), ['good']);
     });
 
-    test('missing title falls back to folder id; missing preview is empty',
-        () async {
-      makeWallpaper('333', projectJson: project()); // no title, no preview
-      final r = await scanWallpapers(tmp.path);
-      expect(r.wallpapers.length, 1);
-      expect(r.wallpapers.first.title, '333');
-      expect(r.wallpapers.first.previews, '');
-    });
+    test(
+      'missing title falls back to folder id; missing preview is empty',
+      () async {
+        makeWallpaper('333', projectJson: project()); // no title, no preview
+        final r = await scanWallpapers(tmp.path);
+        expect(r.wallpapers.length, 1);
+        expect(r.wallpapers.first.title, '333');
+        expect(r.wallpapers.first.previews, '');
+      },
+    );
   });
 }

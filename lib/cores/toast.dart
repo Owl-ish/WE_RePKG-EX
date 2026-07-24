@@ -24,6 +24,19 @@ void showSelectFolderToast(String message) {
   );
 }
 
+void showDeleteToast() {
+  BotToast.showCustomText(
+    duration: Duration(seconds: 3),
+    toastBuilder: (void Function() cancelFunc) {
+      return ToastView(
+        icon: Icons.check_circle,
+        iconColor: Colors.green,
+        text: tr(AppI10n.dialogDeleteSuccess),
+      );
+    },
+  );
+}
+
 void showCopyToast() {
   BotToast.showCustomText(
     duration: Duration(seconds: 3),

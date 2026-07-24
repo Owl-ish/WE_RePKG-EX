@@ -11,18 +11,40 @@ import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/tool.dart';
+import 'package:we_repkg/utils/work_pool.dart';
 
 import 'base.dart';
 import 'toast.dart';
+
+/// How many wallpapers extract at once.
+///
+/// Four rather than the core count on purpose. RePKG is as much disk-bound as
+/// CPU-bound, and on a spinning disk more parallelism makes a batch slower
+/// rather than faster, so this trades a little peak throughput on fast NVMe for
+/// not regressing on slow drives.
+const int extractConcurrency = 4;
+
+/// Resets batch progress before a run. Completion count starts at zero and the
+/// preview clears, so a second batch never briefly shows the previous one.
+void startBatch(WidgetRef ref) {
+  ref.read(currentIndexProvider.notifier).reset();
+  ref.read(processingWallpaperProvider.notifier).update(null);
+}
+
+/// Clears the preview once a run finishes.
+void endBatch(WidgetRef ref) {
+  ref.read(processingWallpaperProvider.notifier).update(null);
+}
 
 Future<void> extractProject(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
 ) async {
-  bool useProjectPath = ref.watch(useProjectPathProvider);
-  ExtractType extractType = ref.watch(currentExtractTypeProvider);
+  bool useProjectPath = ref.read(useProjectPathProvider);
+  ExtractType extractType = ref.read(currentExtractTypeProvider);
   if (useProjectPath || extractType.isProject) {
     if (!await checkProjectPath(ref, true)) return;
   } else {
@@ -32,92 +54,144 @@ Future<void> extractProject(
   final needsRePKG = wallpapers.any(
     (w) => w.target.toLowerCase().endsWith('pkg'),
   );
-  String? rePKGPath = ref.watch(toolPathProvider);
+  String? rePKGPath = ref.read(toolPathProvider);
   if (needsRePKG && !await toolExist(rePKGPath)) {
     return showToolNoExistToast();
   }
   List<ErrorInfo> errList = [];
   List<String> skipList = [];
   String outPath = useProjectPath || extractType.isProject
-      ? ref.watch(projectPathProvider)!
-      : ref.watch(exportPathProvider)!;
+      ? ref.read(projectPathProvider)!
+      : ref.read(exportPathProvider)!;
   if (!await Directory(outPath).exists()) {
     return projectNoExistToast(outPath);
   }
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
-  int index = 0;
   final basePath = outPath;
-  for (WallpaperInfo wallpaper in wallpapers) {
-    ref.read(currentIndexProvider.notifier).update(index);
-    if (ref.watch(useTitleNameProvider)) {
-      outPath = path.join(basePath, renameFolder(wallpaper.title));
-    } else {
-      outPath = path.join(basePath, wallpaper.id);
-    }
-    try {
-      await Directory(outPath).create();
-    } catch (e) {
-      debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
-      errList.add(
-        ErrorInfo(
-          wallpaper: wallpaper,
-          message: '${tr(AppI10n.errorCreatedFolderFailed)} $e',
-        ),
-      );
-      index++;
-      continue;
-    }
-    // Non-scene wallpaper: copy the whole folder (re-importable) instead of RePKG.
-    if (!wallpaper.target.toLowerCase().endsWith('pkg')) {
-      String? err = await copyWallpaperFolder(ref, wallpaper, outPath);
-      if (err != null) {
-        errList.add(ErrorInfo(wallpaper: wallpaper, message: err));
-      }
-      index++;
-      continue;
-    }
-    try {
-      String? overwrite = ref.watch(replaceFileProvider) ? '--overwrite' : null;
-      final args = [
-        'extract',
-        '-c',
-        ?overwrite,
-        '-o',
-        outPath,
-        wallpaper.target,
-      ].cast<String>().toList();
-      String fullCommand = '$rePKGPath ${args.join(' ')}';
-      debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
-      // Invoke the exe directly (no shell): Dart quotes args correctly, which is
-      // more robust for tool/output paths containing spaces.
-      ProcessResult result = await Process.run(rePKGPath!, args);
-      int exitCode = result.exitCode;
-      String stdout = result.stdout;
-      String stderr = result.stderr;
-      debugPrint('${tr(AppI10n.logStdout)} $stdout');
-      debugPrint('${tr(AppI10n.logStderr)} $stderr');
-      if (exitCode != 0) {
-        errList.add(
-          ErrorInfo(
-            wallpaper: wallpaper,
-            message: '${tr(AppI10n.errorExtractFailed)} $stderr',
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
-      errList.add(
-        ErrorInfo(
-          wallpaper: wallpaper,
-          message: '${tr(AppI10n.errorExtractFailed)} $e',
-        ),
-      );
-    }
-    index++;
-  }
+  // Hoisted out of the worker: these never change mid-batch, and reading a
+  // provider once beats reading it per wallpaper.
+  final bool useTitleName = ref.read(useTitleNameProvider);
+  final bool overwrite = ref.read(replaceFileProvider);
+  // Resolved before any worker starts, so the folder assignment is decided
+  // single-threaded and cannot race.
+  final Map<String, String> outDirs = resolveProjectFolders(
+    wallpapers,
+    basePath,
+    useTitleName: useTitleName,
+  );
+  startBatch(ref);
+
+  // Safe to run in parallel: resolveProjectFolders guarantees every wallpaper
+  // owns a distinct subfolder, so workers share no output directory.
+  final results = await runBounded<WallpaperInfo, ErrorInfo?>(
+    wallpapers,
+    (wallpaper) => _extractProjectOne(
+      wallpaper: wallpaper,
+      outPath: outDirs[wallpaper.id]!,
+      rePKGPath: rePKGPath,
+      overwrite: overwrite,
+    ),
+    concurrency: extractConcurrency,
+    onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
+    onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+  );
+  errList.addAll(results.whereType<ErrorInfo>());
+
+  endBatch(ref);
   cancel.call();
   errList.isNotEmpty ? showErrorView(errList) : showProjectToast(skipList);
+}
+
+/// Assigns each wallpaper a distinct output folder under [basePath].
+///
+/// Two wallpapers can share a title, and sanitising illegal characters can make
+/// two different titles collide as well. Serially that merged both into one
+/// folder; in parallel it would have two workers writing into the same directory
+/// at once. Suffixing duplicates here, before the pool starts, keeps the
+/// decision deterministic and off the filesystem.
+Map<String, String> resolveProjectFolders(
+  List<WallpaperInfo> wallpapers,
+  String basePath, {
+  required bool useTitleName,
+}) {
+  final Map<String, String> assigned = {};
+  final Set<String> taken = {};
+  for (final wallpaper in wallpapers) {
+    final String base = useTitleName
+        ? renameFolder(wallpaper.title)
+        : wallpaper.id;
+    String name = base;
+    int suffix = 1;
+    while (!taken.add(name.toLowerCase())) {
+      // Windows paths are case-insensitive, so compare that way too.
+      name = '$base-$suffix';
+      suffix++;
+    }
+    assigned[wallpaper.id] = path.join(basePath, name);
+  }
+  return assigned;
+}
+
+/// Extracts one wallpaper into [outPath]. Returns the failure, or null on
+/// success, so a bad item never aborts the batch.
+Future<ErrorInfo?> _extractProjectOne({
+  required WallpaperInfo wallpaper,
+  required String outPath,
+  required String? rePKGPath,
+  required bool overwrite,
+}) async {
+  try {
+    // recursive+existing-tolerant: two workers can be creating sibling folders
+    // under the same parent at the same time.
+    await Directory(outPath).create(recursive: true);
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
+    return ErrorInfo(
+      wallpaper: wallpaper,
+      message: '${tr(AppI10n.errorCreatedFolderFailed)} $e',
+    );
+  }
+
+  // Non-scene wallpaper: copy the whole folder (re-importable) instead of RePKG.
+  if (!wallpaper.target.toLowerCase().endsWith('pkg')) {
+    final String? err = await copyWallpaperFolderTo(
+      wallpaper,
+      outPath,
+      overwrite: overwrite,
+    );
+    return err == null ? null : ErrorInfo(wallpaper: wallpaper, message: err);
+  }
+
+  try {
+    final args = [
+      'extract',
+      '-c',
+      ?(overwrite ? '--overwrite' : null),
+      '-o',
+      outPath,
+      wallpaper.target,
+    ].cast<String>().toList();
+    debugPrint('${tr(AppI10n.logRunCommand)} $rePKGPath ${args.join(' ')}');
+    // Invoke the exe directly (no shell): Dart quotes args correctly, which is
+    // more robust for tool/output paths containing spaces.
+    final ProcessResult result = await Process.run(rePKGPath!, args);
+    debugPrint('${tr(AppI10n.logStdout)} ${result.stdout}');
+    debugPrint('${tr(AppI10n.logStderr)} ${result.stderr}');
+    if (result.exitCode != 0) {
+      return ErrorInfo(
+        wallpaper: wallpaper,
+        message: '${tr(AppI10n.errorExtractFailed)} ${result.stderr}',
+      );
+    }
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
+    return ErrorInfo(
+      wallpaper: wallpaper,
+      message: '${tr(AppI10n.errorExtractFailed)} $e',
+    );
+  }
+  return null;
 }
 
 Future<void> exportCurrentProject(
@@ -137,26 +211,45 @@ Future<void> extractWallpapers(
   final needsRePKG = wallpapers.any(
     (w) => w.target.toLowerCase().endsWith('pkg'),
   );
-  String? rePKGPath = ref.watch(toolPathProvider);
+  String? rePKGPath = ref.read(toolPathProvider);
   if (needsRePKG && !await toolExist(rePKGPath)) {
     return showToolNoExistToast();
   }
   List<ErrorInfo> errList = [];
-  String outPath = ref.watch(exportPathProvider)!;
+  String outPath = ref.read(exportPathProvider)!;
   Directory outDir = Directory(outPath);
   if (!await outDir.exists()) await outDir.create();
   List<FileSystemEntity> oldFiles = await outDir.list().toList();
-  int index = 0;
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
+  startBatch(ref);
+
+  // Every wallpaper here writes into the SAME export folder, unlike
+  // extractProject. That is safe only because claimFilePath reserves output
+  // names atomically; without it two workers could be handed the same filename.
+  final results = await runBounded<WallpaperInfo, (String?, bool)>(
+    wallpapers,
+    (wallpaper) => extractBranch(
+      ref,
+      wallpaper,
+      outPath,
+      // Only a single-wallpaper run can own the progress line.
+      detailedProgress: wallpapers.length == 1,
+    ),
+    concurrency: extractConcurrency,
+    onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
+    onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+  );
+
+  // OR, not assignment: the previous version kept only the last item's flag, so
+  // a batch ending in a video skipped the cleanup a .pkg earlier had asked for.
   bool needClear = false;
-  for (WallpaperInfo wallpaper in wallpapers) {
-    ref.read(currentIndexProvider.notifier).update(index);
-    (String?, bool) res = await extractBranch(ref, wallpaper, outPath);
-    String? err = res.$1;
-    needClear = res.$2;
-    if (err != null) errList.add(ErrorInfo(wallpaper: wallpaper, message: err));
-    index++;
+  for (int i = 0; i < results.length; i++) {
+    final (err, wantsClear) = results[i];
+    needClear = needClear || wantsClear;
+    if (err != null) {
+      errList.add(ErrorInfo(wallpaper: wallpapers[i], message: err));
+    }
   }
 
   if (needClear) {
@@ -164,6 +257,7 @@ Future<void> extractWallpapers(
     String? err2 = await deleteUselessFiles(ref, outPath, oldFiles);
     if (err2 != null) errList.add(ErrorInfo(wallpaper: null, message: err2));
   }
+  endBatch(ref);
   cancel.call();
   errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
 }
@@ -173,8 +267,8 @@ Future<void> extractCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
 }
 
 Future<void> extractChecked(WidgetRef ref) async {
-  List<WallpaperInfo> wallpapers = ref.watch(checkedWallpaperListProvider);
-  ExtractType extractType = ref.watch(currentExtractTypeProvider);
+  List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
+  ExtractType extractType = ref.read(currentExtractTypeProvider);
   if (extractType.isWallpaper) {
     await extractWallpapers(ref, wallpapers);
   } else {
@@ -183,8 +277,8 @@ Future<void> extractChecked(WidgetRef ref) async {
 }
 
 Future<void> extractAll(WidgetRef ref) async {
-  List<WallpaperInfo> wallpapers = ref.watch(filterWallpaperListProvider);
-  ExtractType extractType = ref.watch(currentExtractTypeProvider);
+  List<WallpaperInfo> wallpapers = ref.read(filterWallpaperListProvider);
+  ExtractType extractType = ref.read(currentExtractTypeProvider);
   if (extractType.isWallpaper) {
     await extractWallpapers(ref, wallpapers);
   } else {
@@ -192,30 +286,51 @@ Future<void> extractAll(WidgetRef ref) async {
   }
 }
 
+/// [detailedProgress] enables the per-file byte counter. It is off whenever a
+/// batch runs more than one wallpaper at a time: with four workers each writing
+/// its own progress line into a single provider, the text flickers between
+/// unrelated wallpapers instead of reading as progress.
 Future<(String?, bool)> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath,
-) async {
+  String outPath, {
+  bool detailedProgress = false,
+}) async {
   final target = wallpaper.target;
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
     return (await extractPKG(ref, target, outPath), true);
   } else if (targetLower.endsWith('.mp4')) {
-    return (await extractVideo(ref, wallpaper, outPath), false);
+    return (
+      await extractVideo(
+        ref,
+        wallpaper,
+        outPath,
+        detailedProgress: detailedProgress,
+      ),
+      false,
+    );
   } else if (targetLower.endsWith('customdirectory')) {
-    return (await extractImages(ref, target, outPath), false);
+    return (
+      await extractImages(
+        ref,
+        target,
+        outPath,
+        detailedProgress: detailedProgress,
+      ),
+      false,
+    );
   }
   // web / application / any other type RePKG does not handle: copy the whole
   // folder into a per-wallpaper subfolder so it stays re-importable.
-  final name = ref.watch(useTitleNameProvider)
+  final name = ref.read(useTitleNameProvider)
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
-  final err = await copyWallpaperFolder(
-    ref,
+  final err = await copyWallpaperFolderTo(
     wallpaper,
     path.join(outPath, name),
+    overwrite: ref.read(replaceFileProvider),
   );
   return (err, false);
 }
@@ -223,27 +338,39 @@ Future<(String?, bool)> extractBranch(
 /// Copies the entire wallpaper folder into [destDir] (every file, so the output
 /// stays a valid, re-importable Wallpaper Engine wallpaper). Used for web,
 /// application, and any type RePKG does not unpack.
-Future<String?> copyWallpaperFolder(
-  WidgetRef ref,
+/// Takes [overwrite] directly rather than reading a provider, so it can run
+/// inside a worker without touching a WidgetRef.
+Future<String?> copyWallpaperFolderTo(
   WallpaperInfo wallpaper,
-  String destDir,
-) async {
-  final bool overwrite = ref.watch(replaceFileProvider);
-  changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
+  String destDir, {
+  required bool overwrite,
+}) async {
   try {
     final src = Directory(wallpaper.folder);
     await Directory(destDir).create(recursive: true);
+    // Directories already created during this copy. The previous version issued
+    // a recursive create for every single file's parent, even though the
+    // directory walk had just created it, which is one redundant syscall per
+    // file across the whole tree.
+    final Set<String> createdDirs = {destDir};
     await for (final entity in src.list(recursive: true, followLinks: false)) {
       final dest = path.join(
         destDir,
         path.relative(entity.path, from: src.path),
       );
       if (entity is Directory) {
-        await Directory(dest).create(recursive: true);
+        if (createdDirs.add(dest)) {
+          await Directory(dest).create(recursive: true);
+        }
       } else if (entity is File) {
         // Respect the "replace existing" toggle: skip files already present.
         if (!overwrite && await File(dest).exists()) continue;
-        await Directory(path.dirname(dest)).create(recursive: true);
+        final parent = path.dirname(dest);
+        // list() does not guarantee a parent arrives before its children, so
+        // this still creates on demand, just once per directory.
+        if (createdDirs.add(parent)) {
+          await Directory(parent).create(recursive: true);
+        }
         await entity.copy(dest);
       }
     }
@@ -255,11 +382,12 @@ Future<String?> copyWallpaperFolder(
 }
 
 Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
-  changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
-  String rePKGPath = ref.watch(toolPathProvider)!;
-  bool excludeTexture = ref.watch(excludeTextureProvider);
+  // No text write here: it set the same string the batch already set, and with
+  // several workers running it just fought the others for the provider.
+  String rePKGPath = ref.read(toolPathProvider)!;
+  bool excludeTexture = ref.read(excludeTextureProvider);
   try {
-    String? overwrite = ref.watch(replaceFileProvider) ? '--overwrite' : null;
+    String? overwrite = ref.read(replaceFileProvider) ? '--overwrite' : null;
     List<String> args = [
       'extract',
       '-e',
@@ -295,8 +423,9 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
 Future<String?> extractVideo(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath,
-) async {
+  String outPath, {
+  bool detailedProgress = false,
+}) async {
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
   try {
@@ -310,44 +439,28 @@ Future<String?> extractVideo(
         ? path.basenameWithoutExtension(filePath)
         : title;
     final fileName = '$baseName$extension';
-    final targetPath = renameFile(path.join(outPath, fileName));
+    // Atomic claim: several workers may be writing into this same folder.
+    final targetPath = await claimFilePath(path.join(outPath, fileName));
     final sourceFile = File(filePath);
     final destinationFile = File(targetPath);
-    final totalSize = await sourceFile.length();
-    await destinationFile.parent.create(recursive: true);
-    // 使用流方式复制文件并显示进度
-    // final int chunkSize = 1024 * 1024; // 1MB chunks
-    int copiedSize = 0;
-    final readStream = sourceFile.openRead();
-    final writeStream = destinationFile.openWrite();
-    try {
-      await readStream
-          .listen(
-            (List<int> data) async {
-              writeStream.add(data);
-              copiedSize += data.length;
-              String loadingText = tr(
-                AppI10n.dialogExtractVideoInfo,
-                namedArgs: {
-                  "copied": formatSize(copiedSize),
-                  "total": formatSize(totalSize),
-                },
-              );
-              changeLoadingText(ref, loadingText);
+    // 使用流方式复制文件并显示进度，带背压和节流的进度回调
+    await copyFileWithProgress(
+      sourceFile,
+      destinationFile,
+      onProgress: (copied, total) {
+        if (!detailedProgress) return;
+        changeLoadingText(
+          ref,
+          tr(
+            AppI10n.dialogExtractVideoInfo,
+            namedArgs: {
+              "copied": formatSize(copied),
+              "total": formatSize(total),
             },
-            onError: (error) {
-              throw Exception('读取文件时出错: $error');
-            },
-            onDone: () async {
-              await writeStream.close();
-            },
-            cancelOnError: true,
-          )
-          .asFuture<void>();
-    } finally {
-      await writeStream.close();
-    }
-    await writeStream.done;
+          ),
+        );
+      },
+    );
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExportVideoFailed)} $e');
     return '${tr(AppI10n.errorExportVideoFailed)} $e';
@@ -362,8 +475,9 @@ Future<String?> extractVideo(
 Future<String?> extractImages(
   WidgetRef ref,
   String filePath,
-  String outPath,
-) async {
+  String outPath, {
+  bool detailedProgress = false,
+}) async {
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
   try {
@@ -380,9 +494,9 @@ Future<String?> extractImages(
           AppI10n.dialogExtractImageInfo,
           namedArgs: {'index': '$index', 'count': '$count'},
         );
-        changeLoadingText(ref, loadingText);
+        if (detailedProgress) changeLoadingText(ref, loadingText);
         String fileName = path.basename(file.path);
-        String targetPath = renameFile(path.join(outPath, fileName));
+        String targetPath = await claimFilePath(path.join(outPath, fileName));
         await file.copy(targetPath);
       }
       index++;

@@ -15,7 +15,8 @@ class EllipsisAnimationText extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<EllipsisAnimationText> createState() => _EllipsisAnimationTextState();
+  ConsumerState<EllipsisAnimationText> createState() =>
+      _EllipsisAnimationTextState();
 }
 
 class _EllipsisAnimationTextState extends ConsumerState<EllipsisAnimationText>

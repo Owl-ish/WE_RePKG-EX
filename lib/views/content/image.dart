@@ -25,9 +25,7 @@ class ImageView extends StatelessWidget {
             // Only rebuild this tile when ITS OWN hover state flips, not on
             // every hover change across the grid.
             scale:
-                ref.watch(
-                  hoverWallpaperProvider.select((h) => h == wallpaper),
-                )
+                ref.watch(hoverWallpaperProvider.select((h) => h == wallpaper))
                 ? 1.2
                 : 1,
             duration: const Duration(milliseconds: 250), // 动画时长300ms

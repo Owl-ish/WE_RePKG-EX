@@ -100,12 +100,12 @@ Future<void> refreshWallpaperPath(WidgetRef ref) async {
 void updateOtherFolder(WidgetRef ref, String wallpaperPath) {
   String? projectPath = StorageUtil.getString(AppKeys.projectPath);
   String? acfPath = StorageUtil.getString(AppKeys.acfPath);
-  if (ref.watch(updateProjectPathProvider) || projectPath == null) {
+  if (ref.read(updateProjectPathProvider) || projectPath == null) {
     ref
         .read(projectPathProvider.notifier)
         .update(projectDefaultPath(wallpaperPath));
   }
-  if (ref.watch(updateAcfPathProvider) || acfPath == null) {
+  if (ref.read(updateAcfPathProvider) || acfPath == null) {
     if (acfPath != null) {
       StorageUtil.remove(AppKeys.acfPath);
     }
@@ -133,10 +133,10 @@ Future<void> refreshAcfPath(WidgetRef ref) async {
 }
 
 Future<void> browseFolder(WidgetRef ref) async {
-  ExtractType type = ref.watch(currentExtractTypeProvider);
+  ExtractType type = ref.read(currentExtractTypeProvider);
   String? folderPath = type.isWallpaper
-      ? ref.watch(exportPathProvider)
-      : ref.watch(projectPathProvider);
+      ? ref.read(exportPathProvider)
+      : ref.read(projectPathProvider);
   if (folderPath == null) return;
   folderPath = folderPath.replaceAll('\\', '/');
   final uri = Uri.parse('file:///$folderPath');
@@ -164,41 +164,74 @@ Future<void> playVideo(WallpaperInfo wallpaper) async {
 }
 
 Future<bool> checkExportPath(WidgetRef ref, [bool show = false]) async {
-  String? exportPath = ref.watch(exportPathProvider);
+  String? exportPath = ref.read(exportPathProvider);
   if (exportPath == null) return await setExportPath(ref, show);
   return true;
 }
 
 Future<bool> checkProjectPath(WidgetRef ref, [bool show = false]) async {
-  String? projectPath = ref.watch(projectPathProvider);
+  String? projectPath = ref.read(projectPathProvider);
   if (projectPath == null) return await setProjectPath(ref, show);
   return true;
 }
 
+/// Clears every selected wallpaper in one state write.
+///
+/// Behaviour change worth knowing: the loop this replaces walked
+/// checkedWallpaperList, which is filtered, so a wallpaper selected before the
+/// filter changed stayed selected but invisible. This clears those too.
 void clearChecked(WidgetRef ref) {
-  List<WallpaperInfo> checkedList = ref.watch(checkedWallpaperListProvider);
-  for (var wallpaper in checkedList) {
-    ref.read(wallpaperListProvider.notifier).toggleChecked(wallpaper);
-  }
+  ref.read(wallpaperListProvider.notifier).clearAllChecked();
+}
+
+/// Ids of the wallpapers whose folder is no longer on disk.
+///
+/// `trash::delete_all` can fail partway through a batch, leaving some folders
+/// deleted and others intact, and its error value says nothing about which is
+/// which. Asking the filesystem is the only way to know what to drop from the
+/// list. Probes run concurrently; [probe] is injectable for tests.
+Future<Set<String>> findDeletedWallpapers(
+  List<WallpaperInfo> wallpapers, {
+  DirectoryProbe probe = directoryExists,
+}) async {
+  if (wallpapers.isEmpty) return <String>{};
+  final survives = await Future.wait(wallpapers.map((w) => probe(w.folder)));
+  return <String>{
+    for (int i = 0; i < wallpapers.length; i++)
+      if (!survives[i]) wallpapers[i].id,
+  };
 }
 
 Future<String?> deleteChecked(WidgetRef ref) async {
   String? err;
-  List<WallpaperInfo> wallpapers = ref.watch(checkedWallpaperListProvider);
+  List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
+  if (wallpapers.isEmpty) return null;
   List<String> paths = wallpapers.map((e) => e.folder).toList();
   try {
-    err = await deleteAllToTrash(filePaths: paths);
-    WallpaperInfo? selectedWallpaper = ref.watch(selectedWallpaperProvider);
-    if (wallpapers.contains(selectedWallpaper)) {
-      ref.read(selectedWallpaperProvider.notifier).update(null);
+    final String? trashErr = await deleteAllToTrash(filePaths: paths);
+    if (trashErr != null) {
+      err = '${tr(AppI10n.dialogDeleteFailed)} $trashErr';
     }
-    for (var wallpaper in wallpapers) {
-      ref.read(wallpaperListProvider.notifier).remove(wallpaper);
+    // Remove exactly what actually went away. The previous version dropped
+    // every selected wallpaper regardless of the result, so a failed delete
+    // showed a success toast and hid folders that were still on disk.
+    final Set<String> gone = await findDeletedWallpapers(wallpapers);
+    if (gone.isNotEmpty) {
+      WallpaperInfo? selectedWallpaper = ref.read(selectedWallpaperProvider);
+      if (selectedWallpaper != null && gone.contains(selectedWallpaper.id)) {
+        ref.read(selectedWallpaperProvider.notifier).update(null);
+      }
+      ref.read(wallpaperListProvider.notifier).removeAll(gone);
     }
-    showCopyToast();
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteCheckedFailed)} $e');
     err = '${tr(AppI10n.dialogDeleteFailed)} $e';
+  }
+  // The only caller discards this return value, so report the outcome here.
+  if (err == null) {
+    showDeleteToast();
+  } else {
+    showErrorToast(err);
   }
   return err;
 }
@@ -219,10 +252,17 @@ Future<void> browserCurrent(WallpaperInfo wallpaper) async {
 
 Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
   try {
-    await deleteToTrash(filePath: wallpaper.folder);
+    // deleteToTrash reports failure through its return value, not by throwing.
+    // Awaiting it and discarding the result dropped the row from the list while
+    // the folder was still on disk.
+    final String? trashErr = await deleteToTrash(filePath: wallpaper.folder);
+    if (trashErr != null) {
+      debugPrint('${tr(AppI10n.logDeleteFileFailed)} $trashErr');
+      return showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $trashErr');
+    }
     ref.read(wallpaperListProvider.notifier).remove(wallpaper);
     ref.read(selectedWallpaperProvider.notifier).update(null);
-    // showSuccessToast('删除成功！文件夹已被移至回收站');
+    showDeleteToast();
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteFileFailed)} $e');
     showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $e');
@@ -234,9 +274,9 @@ Future<String?> deleteUselessFiles(
   String outPath,
   List<FileSystemEntity> oldFiles,
 ) async {
-  bool onlySaveImage = ref.watch(onlySaveImageProvider);
-  bool excludeTexture = ref.watch(excludeTextureProvider);
-  bool deleteTransparency = ref.watch(deleteTransparencyProvider);
+  bool onlySaveImage = ref.read(onlySaveImageProvider);
+  bool excludeTexture = ref.read(excludeTextureProvider);
+  bool deleteTransparency = ref.read(deleteTransparencyProvider);
   String? err;
   if (onlySaveImage && !excludeTexture) {
     err = await deleteOther(outPath, oldFiles);

@@ -40,23 +40,57 @@ List<String> splitOnFirstColon(String message) {
   return [beforeColon, afterColon];
 }
 
+/// Highest suffix index already claimed, keyed by directory + stem + extension.
+/// Lets [claimFilePath] resume probing instead of restarting at 1.
+final Map<String, int> _claimIndexCache = {};
+
+/// Clears the suffix cache. For tests, and for any caller that deletes output
+/// files behind [claimFilePath]'s back and wants low indices reconsidered.
+void resetClaimCache() => _claimIndexCache.clear();
+
 // 写一个重命名文件名的方法，先检测文件是否已存在，存在就在文件名后面加“-1”，如果“-1”也存在，就加“-2”，以此类推
-String renameFile(String filePath) {
-  String dirPath = path.dirname(filePath);
-  String fileName = path.basename(filePath);
+/// Atomically reserves a free filename near [filePath] and returns it.
+///
+/// Creates a zero-byte placeholder with `exclusive: true`, so testing the name
+/// and taking it are a single filesystem operation. The previous version probed
+/// for a free name and returned it without creating anything, which is a
+/// time-of-check to time-of-use race: once extraction runs several wallpapers at
+/// once into one shared export folder, two workers can both be handed
+/// "cover.png" and one silently overwrites the other.
+///
+/// The suffix cache resumes where the last claim for this name stopped, so
+/// exporting N colliding files costs N attempts rather than N^2.
+Future<String> claimFilePath(String filePath) async {
+  final String dirPath = path.dirname(filePath);
+  final String fileName = path.basename(filePath);
   // Split off only the last extension so multi-dot names ("a.b.c.mp4") and
-  // extension-less names are handled correctly (the old split('.')[0/1] mangled
-  // the former and threw on the latter).
-  String stem = path.basenameWithoutExtension(fileName);
-  String ext = path.extension(fileName); // includes leading '.', or '' if none
-  String newFilePath = path.join(dirPath, fileName);
-  int index = 1;
-  while (FileSystemEntity.typeSync(newFilePath) !=
-      FileSystemEntityType.notFound) {
-    newFilePath = path.join(dirPath, '$stem-$index$ext');
-    index++;
+  // extension-less names are handled correctly.
+  final String stem = path.basenameWithoutExtension(fileName);
+  final String ext = path.extension(fileName);
+  // The key joins on |, which Windows forbids in a path, so a directory ending
+  // in a space cannot collide with a stem that starts with one.
+  final String cacheKey = '$dirPath|$stem|$ext';
+
+  int index = _claimIndexCache[cacheKey] ?? 0;
+  while (true) {
+    final String candidate = index == 0
+        ? path.join(dirPath, fileName)
+        : path.join(dirPath, '$stem-$index$ext');
+    try {
+      await File(candidate).create(exclusive: true);
+      _claimIndexCache[cacheKey] = index;
+      return candidate;
+    } on FileSystemException {
+      // Distinguish "name already taken" from a real failure such as a missing
+      // parent or a read-only directory. Advancing the suffix on a genuine
+      // error would spin instead of surfacing it.
+      if (FileSystemEntity.typeSync(candidate) ==
+          FileSystemEntityType.notFound) {
+        rethrow;
+      }
+      index++;
+    }
   }
-  return newFilePath;
 }
 
 String renameFolder(String folderName) {

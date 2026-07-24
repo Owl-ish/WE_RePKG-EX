@@ -17,7 +17,7 @@ Future<void> showRightMenu(
   WidgetRef ref,
   WallpaperInfo wallpaper,
 ) async {
-  List<WallpaperInfo> checkedList = ref.watch(checkedWallpaperListProvider);
+  List<WallpaperInfo> checkedList = ref.read(checkedWallpaperListProvider);
   final entries = <ContextMenuEntry>[
     RightMenuItem(
       label: tr(AppI10n.homeExtractCurrent),

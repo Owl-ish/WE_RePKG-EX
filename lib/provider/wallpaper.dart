@@ -18,22 +18,56 @@ class WallpaperList extends _$WallpaperList {
 
   void addAll(List<WallpaperInfo> value) => state = [...state, ...value];
 
-  void remove(WallpaperInfo value) {
-    state = state.where((e) => e.id != value.id).toList();
+  void remove(WallpaperInfo value) => removeAll({value.id});
+
+  /// Drops every wallpaper whose id is in [ids] in a single state write, rather
+  /// than one full-list rebuild per id.
+  void removeAll(Set<String> ids) {
+    if (ids.isEmpty) return;
+    state = state.where((e) => !ids.contains(e.id)).toList();
   }
 
   void clear() => state = [];
 
-  void toggleChecked(WallpaperInfo value) => state = state.map((e) {
-    if (e.id == value.id) return value.copyWith(checked: !value.checked);
-    return e;
-  }).toList();
+  /// Flips the stored element's selection.
+  ///
+  /// Reads `checked` off the element held in state, not off [value]. Callers can
+  /// hand back a stale instance (a captured closure, a list snapshot taken
+  /// before the last rebuild), and `==` compares ids only, so a stale copy looks
+  /// current. Trusting it would both flip the wrong way and overwrite the stored
+  /// element's other fields with stale values.
+  void toggleChecked(WallpaperInfo value) => state = [
+    for (final e in state)
+      e.id == value.id ? e.copyWith(checked: !e.checked) : e,
+  ];
 
   void updateChecked(WallpaperInfo value, bool checked) =>
-      state = state.map((e) {
-        if (e.id == value.id) return value.copyWith(checked: checked);
-        return e;
-      }).toList();
+      setCheckedByIds({value.id}, checked);
+
+  /// Sets selection for every id in [ids] in one state write.
+  ///
+  /// The loop that this replaces called a single-item mutator per wallpaper, so
+  /// selecting a range of M items over a library of N rebuilt the whole list M
+  /// times and drove M filter-and-sort passes through filterWallpaperList. This
+  /// is one O(N) pass regardless of M.
+  void setCheckedByIds(Set<String> ids, bool checked) {
+    if (ids.isEmpty) return;
+    state = [
+      for (final e in state)
+        ids.contains(e.id) && e.checked != checked
+            ? e.copyWith(checked: checked)
+            : e,
+    ];
+  }
+
+  /// Clears selection across the entire library, including wallpapers the
+  /// current filter hides.
+  void clearAllChecked() {
+    // Skip the state write when nothing is selected: an identical new list would
+    // still invalidate filterWallpaperList and rebuild the grid for no reason.
+    if (!state.any((e) => e.checked)) return;
+    state = [for (final e in state) e.checked ? e.copyWith(checked: false) : e];
+  }
 }
 
 @Riverpod(keepAlive: true)
@@ -146,9 +180,28 @@ class ExtractList extends _$ExtractList {
   void clear() => state = [];
 }
 
+/// How many wallpapers in the current batch have finished. Ranges 0..total.
+///
+/// This used to be the index of the item being worked on, which only made sense
+/// while extraction was sequential. With several wallpapers in flight there is
+/// no single current index, and completions arrive out of order, so the loading
+/// view counts finishes instead of tracking a cursor.
 @Riverpod(keepAlive: true)
 class CurrentIndex extends _$CurrentIndex {
   @override
   int build() => 0;
   void update(int value) => state = value;
+  void reset() => state = 0;
+  void increment() => state = state + 1;
+}
+
+/// The wallpaper a worker most recently picked up, for the loading preview.
+///
+/// Separate from [CurrentIndex] on purpose: driving the preview off the progress
+/// count would index past the end of the list as the final item completes.
+@Riverpod(keepAlive: true)
+class ProcessingWallpaper extends _$ProcessingWallpaper {
+  @override
+  WallpaperInfo? build() => null;
+  void update(WallpaperInfo? value) => state = value;
 }

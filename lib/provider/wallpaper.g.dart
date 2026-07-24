@@ -41,7 +41,7 @@ final class WallpaperListProvider
   }
 }
 
-String _$wallpaperListHash() => r'20948ed9ba76cea499a0fdcd58bed099f9cdb90b';
+String _$wallpaperListHash() => r'dfa51eed28608e5273c8ce7134ab094b2980639c';
 
 abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -259,7 +259,7 @@ final class FilterWallpaperListProvider
 }
 
 String _$filterWallpaperListHash() =>
-    r'59bdc449246056d5536d7a3d08c728b009cc435c';
+    r'a5319dc29fd38c4731624ebf49ccb1bcaf00f24f';
 
 @ProviderFor(ExtractList)
 final extractListProvider = ExtractListProvider._();
@@ -313,10 +313,29 @@ abstract class _$ExtractList extends $Notifier<List<WallpaperInfo>> {
   }
 }
 
+/// How many wallpapers in the current batch have finished. Ranges 0..total.
+///
+/// This used to be the index of the item being worked on, which only made sense
+/// while extraction was sequential. With several wallpapers in flight there is
+/// no single current index, and completions arrive out of order, so the loading
+/// view counts finishes instead of tracking a cursor.
+
 @ProviderFor(CurrentIndex)
 final currentIndexProvider = CurrentIndexProvider._();
 
+/// How many wallpapers in the current batch have finished. Ranges 0..total.
+///
+/// This used to be the index of the item being worked on, which only made sense
+/// while extraction was sequential. With several wallpapers in flight there is
+/// no single current index, and completions arrive out of order, so the loading
+/// view counts finishes instead of tracking a cursor.
 final class CurrentIndexProvider extends $NotifierProvider<CurrentIndex, int> {
+  /// How many wallpapers in the current batch have finished. Ranges 0..total.
+  ///
+  /// This used to be the index of the item being worked on, which only made sense
+  /// while extraction was sequential. With several wallpapers in flight there is
+  /// no single current index, and completions arrive out of order, so the loading
+  /// view counts finishes instead of tracking a cursor.
   CurrentIndexProvider._()
     : super(
         from: null,
@@ -344,7 +363,14 @@ final class CurrentIndexProvider extends $NotifierProvider<CurrentIndex, int> {
   }
 }
 
-String _$currentIndexHash() => r'ccbb7f2f4cab3ae7874d0120beaf604a2cf89edf';
+String _$currentIndexHash() => r'67cf7267bd4b3f62e23625c6b2a7f56de369077c';
+
+/// How many wallpapers in the current batch have finished. Ranges 0..total.
+///
+/// This used to be the index of the item being worked on, which only made sense
+/// while extraction was sequential. With several wallpapers in flight there is
+/// no single current index, and completions arrive out of order, so the loading
+/// view counts finishes instead of tracking a cursor.
 
 abstract class _$CurrentIndex extends $Notifier<int> {
   int build();
@@ -357,6 +383,77 @@ abstract class _$CurrentIndex extends $Notifier<int> {
             as $ClassProviderElement<
               AnyNotifier<int, int>,
               int,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+/// The wallpaper a worker most recently picked up, for the loading preview.
+///
+/// Separate from [CurrentIndex] on purpose: driving the preview off the progress
+/// count would index past the end of the list as the final item completes.
+
+@ProviderFor(ProcessingWallpaper)
+final processingWallpaperProvider = ProcessingWallpaperProvider._();
+
+/// The wallpaper a worker most recently picked up, for the loading preview.
+///
+/// Separate from [CurrentIndex] on purpose: driving the preview off the progress
+/// count would index past the end of the list as the final item completes.
+final class ProcessingWallpaperProvider
+    extends $NotifierProvider<ProcessingWallpaper, WallpaperInfo?> {
+  /// The wallpaper a worker most recently picked up, for the loading preview.
+  ///
+  /// Separate from [CurrentIndex] on purpose: driving the preview off the progress
+  /// count would index past the end of the list as the final item completes.
+  ProcessingWallpaperProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'processingWallpaperProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$processingWallpaperHash();
+
+  @$internal
+  @override
+  ProcessingWallpaper create() => ProcessingWallpaper();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(WallpaperInfo? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<WallpaperInfo?>(value),
+    );
+  }
+}
+
+String _$processingWallpaperHash() =>
+    r'709a2a363e6790849947435fe8ddf3260b6d52e5';
+
+/// The wallpaper a worker most recently picked up, for the loading preview.
+///
+/// Separate from [CurrentIndex] on purpose: driving the preview off the progress
+/// count would index past the end of the list as the final item completes.
+
+abstract class _$ProcessingWallpaper extends $Notifier<WallpaperInfo?> {
+  WallpaperInfo? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<WallpaperInfo?, WallpaperInfo?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<WallpaperInfo?, WallpaperInfo?>,
+              WallpaperInfo?,
               Object?,
               Object?
             >;

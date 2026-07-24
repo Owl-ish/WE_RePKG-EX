@@ -38,6 +38,7 @@ class AppI10n {
   static const String dialogExtractImageInfo = 'dialog.extractImageInfo';
   static const String dialogExtractVideoInfo = 'dialog.extractVideoInfo';
   static const String dialogCopySuccess = 'dialog.copySuccess';
+  static const String dialogDeleteSuccess = 'dialog.deleteSuccess';
   static const String dialogOpenFolderFailed = 'dialog.openFolderFailed';
   static const String dialogFolderNoExist = 'dialog.folderNoExist';
   static const String dialogPlayVideoFailed = 'dialog.playVideoFailed';

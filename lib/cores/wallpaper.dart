@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
@@ -19,20 +19,37 @@ import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/storage.dart';
 
-Future<List<String>> getWindowsDisks() async {
+/// Tests whether a directory exists. Injectable so the drive scan can be tested
+/// without touching real hardware.
+typedef DirectoryProbe = Future<bool> Function(String path);
+
+Future<bool> directoryExists(String path) => Directory(path).exists();
+
+Future<List<String>> getWindowsDisks({
+  DirectoryProbe probe = directoryExists,
+}) async {
   // Probe drive letters A-Z instead of the deprecated `wmic`; returns e.g.
-  // ['C:', 'D:'] using no external process (the system drive is first in
-  // practice, matching the previous behavior).
-  final List<String> disks = [];
+  // ['C:', 'D:'] using no external process.
+  //
+  // All 26 probes go out at once rather than awaiting each in turn. An absent
+  // A: or B: floppy letter can block for seconds on some machines, and serially
+  // that cost lands on every startup scan. Future.wait keeps input order, so
+  // the result stays alphabetical and the system drive stays first, which
+  // _generateWallpaperPaths relies on.
   try {
-    for (int code = 'A'.codeUnitAt(0); code <= 'Z'.codeUnitAt(0); code++) {
-      final letter = String.fromCharCode(code);
-      if (await Directory('$letter:\\').exists()) disks.add('$letter:');
-    }
+    final letters = [
+      for (int code = 'A'.codeUnitAt(0); code <= 'Z'.codeUnitAt(0); code++)
+        String.fromCharCode(code),
+    ];
+    final found = await Future.wait(letters.map((l) => probe('$l:\\')));
+    return [
+      for (int i = 0; i < letters.length; i++)
+        if (found[i]) '${letters[i]}:',
+    ];
   } catch (e) {
     debugPrint('${tr(AppI10n.logGetDisksFailed)} $e');
+    return [];
   }
-  return disks;
 }
 
 Future<String?> getWallpaperPath() async {
@@ -207,13 +224,17 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     String title = jsonMap['title'] ?? id;
     String? contentRating = jsonMap['contentrating'];
     if (contentRating == null) {
-      debugPrint('${tr(AppI10n.logNoContentRating)} ${folder.path}');
+      if (kDebugMode) {
+        debugPrint('${tr(AppI10n.logNoContentRating)} ${folder.path}');
+      }
       contentRating = '';
     }
     List<String> tags = List<String>.from(jsonMap['tags'] ?? []);
     String? type = jsonMap['type'];
     if (type == null) {
-      debugPrint('${tr(AppI10n.logNoType)} ${folder.path}');
+      if (kDebugMode) {
+        debugPrint('${tr(AppI10n.logNoType)} ${folder.path}');
+      }
       type = '';
     }
     // preview may be missing (e.g. a self-made wallpaper with no preview yet);
@@ -226,7 +247,11 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       target = await Directory(temp).exists() ? temp : '';
     } else {
       if (target.toLowerCase().endsWith('json')) target = 'scene.pkg';
-      if (target == '') debugPrint('${tr(AppI10n.logEmptyFile)} ${folder.path}');
+      if (target == '') {
+        if (kDebugMode) {
+          debugPrint('${tr(AppI10n.logEmptyFile)} ${folder.path}');
+        }
+      }
       target = target == '' ? '' : path.join(folder.path, target);
     }
     int size = 0;
@@ -237,7 +262,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       size = acfInfoMap[id]!.size;
       updateTime = acfInfoMap[id]!.time;
     } else {
-      debugPrint('$id ${tr(AppI10n.logNoInfo)}');
+      if (kDebugMode) debugPrint('$id ${tr(AppI10n.logNoInfo)}');
       size = await getSize(target);
       updateTime = null;
     }
@@ -256,7 +281,9 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     );
   } catch (e) {
     // A single failed parse shouldn't abort the whole scan; skip and log it.
-    debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path}: $e');
+    if (kDebugMode) {
+      debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path}: $e');
+    }
     return null;
   }
 }

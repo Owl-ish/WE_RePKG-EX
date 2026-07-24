@@ -1,7 +1,7 @@
 {
   "home": {
-    "topTitle": "{count} wallpapers found",
-    "searchTip": "Please enter keywords",
+    "topTitle": "{count} Wallpapers Found",
+    "searchTip": "Search a wallpaper..",
     "setting": "Settings",
     "sortDate": "Sort by date",
     "sortSize": "Sort by size",
@@ -38,6 +38,7 @@
     "extractImageInfo": "Copying image {index}/{count}",
     "extractVideoInfo": "Copying video {copied} / {total}",
     "copySuccess": "Copy successful",
+    "deleteSuccess": "Deleted. Moved to the Recycle Bin",
     "openFolderFailed": "Open folder failed",
     "folderNoExist": "Folder does not exist",
     "playVideoFailed": "Play video failed",

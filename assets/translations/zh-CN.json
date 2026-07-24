@@ -38,6 +38,7 @@
     "extractImageInfo": "正在复制第 {index}/{count} 张图片",
     "extractVideoInfo": "正在复制视频 {copied} / {total}",
     "copySuccess": "复制成功",
+    "deleteSuccess": "删除成功！文件夹已被移至回收站",
     "openFolderFailed": "打开文件夹失败",
     "folderNoExist": "文件夹不存在",
     "playVideoFailed": "播放视频失败",

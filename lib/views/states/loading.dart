@@ -24,7 +24,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
   late Animation<double> _textAnimation;
   late AnimationController _progressController;
   late Animation<double> _progressAnimation;
-  int _previousIndex = -1;
+  String? _previousId;
 
   @override
   void initState() {
@@ -68,25 +68,28 @@ class _LoadingViewState extends ConsumerState<LoadingView>
   @override
   Widget build(BuildContext context) {
     ThemeData theme = Theme.of(context);
-    // List<WallpaperInfo> list = ref.watch(extractListProvider);
+    if (widget.list.isEmpty) return const SizedBox.shrink();
     int total = widget.list.length;
-    int currentIndex = ref.watch(currentIndexProvider);
-    double newProgress = total > 0 ? (currentIndex + 1) / total : 0;
+    // Completed count, not a cursor. Extraction runs several wallpapers at once
+    // now, so this reaches total and indexing widget.list with it would throw.
+    int completed = ref.watch(currentIndexProvider);
+    double newProgress = total > 0 ? completed / total : 0;
+    // Preview follows whichever wallpaper a worker picked up most recently, and
+    // falls back to the first entry before the batch starts.
+    final WallpaperInfo current =
+        ref.watch(processingWallpaperProvider) ?? widget.list.first;
 
-    // 当索引或进度改变时触发动画
-    if (_previousIndex != currentIndex) {
-      _previousIndex = currentIndex;
+    // 当处理的壁纸或进度改变时触发动画
+    if (_previousId != current.id) {
+      _previousId = current.id;
       _imageController.forward(from: 0);
       _textController.forward(from: 0);
-
       // 为进度条添加动画
       _progressController.animateTo(
         newProgress,
         duration: const Duration(milliseconds: 500),
       );
     }
-
-    if (widget.list.isEmpty) return const SizedBox.shrink();
     return Material(
       elevation: 2,
       borderRadius: BorderRadius.circular(8),
@@ -112,8 +115,8 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.file(
-                    File(widget.list[currentIndex].previews),
-                    key: ValueKey(widget.list[currentIndex].id),
+                    File(current.previews),
+                    key: ValueKey(current.id),
                     width: 160,
                     height: 160,
                     fit: BoxFit.cover,
@@ -128,7 +131,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
               child: FadeTransition(
                 opacity: _textAnimation,
                 child: Text(
-                  widget.list[currentIndex].title,
+                  current.title,
                   style: TextStyle(
                     color: Colors.blue,
                     fontSize: 14,
@@ -160,7 +163,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
               child: FadeTransition(
                 opacity: _textAnimation,
                 child: Text(
-                  '${currentIndex + 1} / $total',
+                  '$completed / $total',
                   style: theme.textTheme.bodyMedium,
                 ),
               ),

@@ -10,7 +10,12 @@ class WallpaperInfo {
   final String target;
   final String folder;
   final int size;
-  bool checked;
+
+  /// Selection state. Final like every other field: the list provider replaces
+  /// elements through copyWith rather than mutating them in place, and `==`
+  /// deliberately ignores this field (identity is the id alone), so a mutable
+  /// copy would let two instances compare equal while disagreeing on selection.
+  final bool checked;
 
   WallpaperInfo({
     required this.id,

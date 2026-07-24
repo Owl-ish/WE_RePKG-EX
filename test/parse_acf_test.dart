@@ -37,8 +37,7 @@ void main() {
   group('parseAcf', () {
     test('parses a valid workshop ACF into a nested map', () async {
       final result = await parseContent(_validAcf);
-      final installed =
-          result['AppWorkshop']['WorkshopItemsInstalled'] as Map;
+      final installed = result['AppWorkshop']['WorkshopItemsInstalled'] as Map;
       expect(installed.keys, containsAll(['111', '222']));
       expect(installed['111']['size'], '2048');
       expect(installed['111']['timeupdated'], '1700000000');

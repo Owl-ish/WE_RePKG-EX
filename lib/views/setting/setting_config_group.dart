@@ -65,7 +65,7 @@ class SettingConfigGroup extends ConsumerWidget {
           value: ref.watch(useAcfInfoProvider),
           onChanged: (value) {
             ref.read(useAcfInfoProvider.notifier).update(value!);
-            if (!value && ref.watch(wallpaperSortTypeProvider).isUpdate) {
+            if (!value && ref.read(wallpaperSortTypeProvider).isUpdate) {
               ref
                   .read(wallpaperSortTypeProvider.notifier)
                   .update(SortType.time);
