@@ -94,11 +94,12 @@ Future<void> _handleStorageLogic(String? wallpaperPath) async {
 }
 
 Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
-  // Capture notifiers synchronously up front: switching folders triggers a
-  // state change that unmounts the widget owning `ref`, and touching `ref`
-  // after the scan (await) would throw "Using ref when widget is unmounted".
+  // Read providers up front (before any await): switching folders unmounts the
+  // widget owning `ref`, so the scan writes its result back through these
+  // captured notifiers, and the scan itself (scanWallpapers) never touches ref.
   final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
   final CurrentState currentState = ref.read(currentStateProvider.notifier);
+  final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
   String? wallpaperPath = ref.read(wallpaperPathProvider);
   if (wallpaperPath == null) {
     wallpaperPath = await getWallpaperPath();
@@ -107,7 +108,12 @@ Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
   currentState.update(RunState.initial);
   List<WallpaperInfo> wallpapers = [];
   try {
-    wallpapers = await getAllWallpaper(ref, wallpaperPath);
+    final result = await scanWallpapers(wallpaperPath);
+    wallpapers = result.wallpapers;
+    final earliest = result.earliestDate;
+    if (earliest != null) {
+      earliestTimeNotifier.update(earliest.toString().substring(0, 10));
+    }
     currentState.update(RunState.complete);
   } catch (e) {
     showErrorView([
@@ -140,17 +146,18 @@ Future<List<AcfInfo>> getAcfInfo() async {
   return acfInfoList;
 }
 
-Future<List<WallpaperInfo>> getAllWallpaper(
-  WidgetRef ref,
-  String? folderPath,
-) async {
-  if (folderPath == null) return [];
-  // Capture the notifier synchronously; the scan (workshop folders can be slow)
-  // may finish after the widget that owns `ref` has been unmounted.
-  final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
-  List<WallpaperInfo> wallpapers = [];
+/// Pure scan of a wallpaper library folder: reads each folder's project.json in
+/// bounded parallel batches and returns the wallpapers (in directory order) plus
+/// the earliest create time. Holds no WidgetRef; the caller writes the results
+/// into providers.
+Future<({List<WallpaperInfo> wallpapers, DateTime? earliestDate})>
+scanWallpapers(String? folderPath) async {
+  final List<WallpaperInfo> wallpapers = [];
+  if (folderPath == null) return (wallpapers: wallpapers, earliestDate: null);
   Directory dir = Directory(folderPath);
-  if (!(await dir.exists())) return [];
+  if (!(await dir.exists())) {
+    return (wallpapers: wallpapers, earliestDate: null);
+  }
   final (
     dirList,
     acfInfoList,
@@ -183,11 +190,7 @@ Future<List<WallpaperInfo>> getAllWallpaper(
       }
     }
   }
-  if (earliestDate != null) {
-    String earliestDateStr = earliestDate.toString().substring(0, 10);
-    earliestTimeNotifier.update(earliestDateStr);
-  }
-  return wallpapers;
+  return (wallpapers: wallpapers, earliestDate: earliestDate);
 }
 
 /// Parses a single wallpaper folder's project.json into a [WallpaperInfo].
