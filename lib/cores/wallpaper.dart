@@ -34,7 +34,7 @@ Future<List<String>> getWindowsDisks() async {
     if (disks.isNotEmpty && disks.first == 'Name') disks.removeAt(0);
     return disks;
   } catch (e) {
-    debugPrint('获取磁盘失败: $e');
+    debugPrint('${tr(AppI10n.logGetDisksFailed)} $e');
     return [];
   }
 }
@@ -211,13 +211,13 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     String title = jsonMap['title'] ?? id;
     String? contentRating = jsonMap['contentrating'];
     if (contentRating == null) {
-      debugPrint('没有分级: ${folder.path}');
+      debugPrint('${tr(AppI10n.logNoContentRating)} ${folder.path}');
       contentRating = '';
     }
     List<String> tags = List<String>.from(jsonMap['tags'] ?? []);
     String? type = jsonMap['type'];
     if (type == null) {
-      debugPrint('没有类型: ${folder.path}');
+      debugPrint('${tr(AppI10n.logNoType)} ${folder.path}');
       type = '';
     }
     // preview may be missing (e.g. a self-made wallpaper with no preview yet);
@@ -230,7 +230,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       target = await Directory(temp).exists() ? temp : '';
     } else {
       if (target.toLowerCase().endsWith('json')) target = 'scene.pkg';
-      if (target == '') debugPrint('空文件：${folder.path}');
+      if (target == '') debugPrint('${tr(AppI10n.logEmptyFile)} ${folder.path}');
       target = target == '' ? '' : '${folder.path}\\$target';
     }
     int size = 0;
@@ -241,7 +241,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       size = acfInfoMap[id]!.size;
       updateTime = acfInfoMap[id]!.time;
     } else {
-      debugPrint('$id 没有获取到信息');
+      debugPrint('$id ${tr(AppI10n.logNoInfo)}');
       size = await getSize(target);
       updateTime = null;
     }
@@ -260,7 +260,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     );
   } catch (e) {
     // A single failed parse shouldn't abort the whole scan; skip and log it.
-    debugPrint('解析壁纸失败，已跳过 ${folder.path}: $e');
+    debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path}: $e');
     return null;
   }
 }

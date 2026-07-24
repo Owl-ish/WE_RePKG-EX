@@ -57,7 +57,7 @@ Future<void> extractProject(
     try {
       await Directory(outPath).create();
     } catch (e) {
-      debugPrint('创建目录失败: $e');
+      debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
       errList.add(
         ErrorInfo(
           wallpaper: wallpaper,
@@ -78,15 +78,15 @@ Future<void> extractProject(
         wallpaper.target,
       ].cast<String>().toList();
       String fullCommand = '$rePKGPath ${args.join(' ')}';
-      debugPrint('执行完整命令: $fullCommand');
+      debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
       // Invoke the exe directly (no shell): Dart quotes args correctly, which is
       // more robust for tool/output paths containing spaces.
       ProcessResult result = await Process.run(rePKGPath!, args);
       int exitCode = result.exitCode;
       String stdout = result.stdout;
       String stderr = result.stderr;
-      debugPrint('标准输出: $stdout');
-      debugPrint('标准错误: $stderr');
+      debugPrint('${tr(AppI10n.logStdout)} $stdout');
+      debugPrint('${tr(AppI10n.logStderr)} $stderr');
       if (exitCode != 0) {
         errList.add(
           ErrorInfo(
@@ -96,7 +96,7 @@ Future<void> extractProject(
         );
       }
     } catch (e) {
-      debugPrint('提取失败: $e');
+      debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
       errList.add(
         ErrorInfo(
           wallpaper: wallpaper,
@@ -213,20 +213,20 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
     // 提取项目，移动materials一级目录的文件到外面
     if (excludeTexture) args = ['extract', '-o', outPath, file];
     String fullCommand = '$rePKGPath ${args.join(' ')}';
-    debugPrint('执行完整命令: $fullCommand');
+    debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
     // Invoke the exe directly (no shell) for space-safe argument handling.
     ProcessResult result = await Process.run(rePKGPath, args);
     int exitCode = result.exitCode; // 退出码
     String stdout = result.stdout; // 标准输出
     String stderr = result.stderr;
-    debugPrint('退出代码: $exitCode');
-    debugPrint('标准输出: $stdout');
-    debugPrint('标准错误: $stderr');
+    debugPrint('${tr(AppI10n.logExitCode)} $exitCode');
+    debugPrint('${tr(AppI10n.logStdout)} $stdout');
+    debugPrint('${tr(AppI10n.logStderr)} $stderr');
     if (exitCode != 0) {
       return '${tr(AppI10n.errorExtractFailed)} (Exit code: $exitCode)\n$stderr';
     }
   } catch (e) {
-    debugPrint('提取失败: $e');
+    debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
     return '${tr(AppI10n.errorExtractFailed)} $e';
   }
   return null;
@@ -289,12 +289,12 @@ Future<String?> extractVideo(
     }
     await writeStream.done;
   } catch (e) {
-    debugPrint('导出视频失败: $e');
+    debugPrint('${tr(AppI10n.errorExportVideoFailed)} $e');
     return '${tr(AppI10n.errorExportVideoFailed)} $e';
   } finally {
     stopwatch.stop();
     double seconds = stopwatch.elapsedMilliseconds / 1000;
-    debugPrint('提取视频耗时: $seconds 秒');
+    debugPrint('${tr(AppI10n.logExtractVideoTime)} $seconds');
   }
   return null;
 }
@@ -328,12 +328,12 @@ Future<String?> extractImages(
       index++;
     }
   } catch (e) {
-    debugPrint('导出图片失败: $e');
+    debugPrint('${tr(AppI10n.errorExportImageFailed)} $e');
     return '${tr(AppI10n.errorExportImageFailed)} $e';
   }
   stopwatch.stop();
   double seconds = stopwatch.elapsedMilliseconds / 1000;
-  debugPrint('提取图片耗时: $seconds 秒');
+  debugPrint('${tr(AppI10n.logExtractImageTime)} $seconds');
   return null;
 }
 

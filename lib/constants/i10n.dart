@@ -138,6 +138,27 @@ class AppI10n {
   static const String errorGetWallpaperFailed = 'error.getWallpaperFailed';
   static const String errorParseAcfFailed = 'error.parseAcfFailed';
 
+  // 日志 / 调试输出 (log / debug output)
+  static const String logRunCommand = 'log.runCommand';
+  static const String logStdout = 'log.stdout';
+  static const String logStderr = 'log.stderr';
+  static const String logExitCode = 'log.exitCode';
+  static const String logExtractVideoTime = 'log.extractVideoTime';
+  static const String logExtractImageTime = 'log.extractImageTime';
+  static const String logGetDisksFailed = 'log.getDisksFailed';
+  static const String logNoContentRating = 'log.noContentRating';
+  static const String logNoType = 'log.noType';
+  static const String logEmptyFile = 'log.emptyFile';
+  static const String logNoInfo = 'log.noInfo';
+  static const String logParseWallpaperSkipped = 'log.parseWallpaperSkipped';
+  static const String logVersion = 'log.version';
+  static const String logDeleteCheckedFailed = 'log.deleteCheckedFailed';
+  static const String logDeleteFileFailed = 'log.deleteFileFailed';
+  static const String logDeletingFile = 'log.deletingFile';
+  static const String logMoveFileFailed = 'log.moveFileFailed';
+  static const String logDeleteFolderFailed = 'log.deleteFolderFailed';
+  static const String logDeleteSceneJsonFailed = 'log.deleteSceneJsonFailed';
+
   // 其他
   static const String close = 'close';
   static const String emptyTip = 'emptyTip';

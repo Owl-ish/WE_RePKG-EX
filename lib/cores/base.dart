@@ -48,7 +48,7 @@ Future<void> setToolPath(WidgetRef ref) async {
       }
       version = version.substring(6);
       ref.read(toolVersionProvider.notifier).update(version);
-      debugPrint('版本: $version');
+      debugPrint('${tr(AppI10n.logVersion)} $version');
     }
     ref.read(toolPathProvider.notifier).update(file.path);
     await StorageUtil.setString(AppKeys.toolPath, file.path);
@@ -200,7 +200,7 @@ Future<String?> deleteChecked(WidgetRef ref) async {
     }
     showCopyToast();
   } catch (e) {
-    debugPrint('删除选中失败: $e');
+    debugPrint('${tr(AppI10n.logDeleteCheckedFailed)} $e');
     err = '${tr(AppI10n.dialogDeleteFailed)} $e';
   }
   return err;
@@ -227,7 +227,7 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
     ref.read(selectedWallpaperProvider.notifier).update(null);
     // showSuccessToast('删除成功！文件夹已被移至回收站');
   } catch (e) {
-    debugPrint('删除文件失败: $e');
+    debugPrint('${tr(AppI10n.logDeleteFileFailed)} $e');
     showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $e');
   }
 }
@@ -279,10 +279,10 @@ Future<String?> deleteOther(
           })
           .map((file) async {
             try {
-              debugPrint('删除文件: ${file.path}');
+              debugPrint('${tr(AppI10n.logDeletingFile)} ${file.path}');
               await file.delete();
             } catch (e) {
-              debugPrint('删除文件失败 ${file.path}: $e');
+              debugPrint('${tr(AppI10n.logDeleteFileFailed)} ${file.path}: $e');
               return '${file.path} ${tr(AppI10n.dialogDeleteFailed)} $e';
             }
             return null;
@@ -305,7 +305,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
         try {
           await file.rename('$outPath/${path.basename(file.path)}');
         } catch (e) {
-          debugPrint('移动文件失败: $e');
+          debugPrint('${tr(AppI10n.logMoveFileFailed)} $e');
           return e.toString();
         }
       }
@@ -329,7 +329,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
     if (await Directory(tempPath).exists()) {
       folderDeletionFutures.add(
         Directory(tempPath).delete(recursive: true).catchError((e) {
-          debugPrint('删除文件夹失败: $e，如有需要请手动删除。');
+          debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
           throw 'tempPath ${tr(AppI10n.dialogDeleteFailed)} $e';
         }),
       );
@@ -337,7 +337,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
   }
   folderDeletionFutures.add(
     File(path.join(outPath, 'scene.json')).delete().catchError((e) {
-      debugPrint('删除scene.json失败: $e');
+      debugPrint('${tr(AppI10n.logDeleteSceneJsonFailed)} $e');
       throw 'scene.json ${tr(AppI10n.dialogDeleteFailed)} $e';
     }),
   );
