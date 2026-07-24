@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
 void main() {
@@ -146,4 +147,116 @@ void main() {
       expect(results[1], 'failed 1');
     },
   );
+
+  group('cancellation', () {
+    test('stops claiming new items once cancelled', () async {
+      final token = CancelToken();
+      final done = <int>[];
+      await runBounded<int, int>(
+        List<int>.generate(100, (i) => i),
+        (i) async {
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+          done.add(i);
+          if (done.length == 10) token.cancel();
+          return i;
+        },
+        concurrency: 2,
+        cancelToken: token,
+      );
+      expect(done.length, lessThan(100), reason: 'the rest was abandoned');
+      expect(done.length, greaterThanOrEqualTo(10));
+    });
+
+    test('items never started come back null', () async {
+      final token = CancelToken();
+      final results = await runBounded<int, String>(
+        List<int>.generate(50, (i) => i),
+        (i) async {
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+          if (i == 3) token.cancel();
+          return 'done$i';
+        },
+        concurrency: 1,
+        cancelToken: token,
+      );
+      expect(results.length, 50);
+      expect(results[0], 'done0');
+      expect(results.last, isNull);
+    });
+
+    test('cancelling before the run starts does no work', () async {
+      final token = CancelToken()..cancel();
+      var called = false;
+      final results = await runBounded<int, int>(
+        [1, 2, 3],
+        (i) async {
+          called = true;
+          return i;
+        },
+        concurrency: 2,
+        cancelToken: token,
+      );
+      expect(called, isFalse);
+      expect(results, [null, null, null]);
+    });
+
+    test('work already in flight still finishes', () async {
+      final token = CancelToken();
+      var finished = 0;
+      // All four workers claim their item synchronously before the first await
+      // resolves, so cancelling after that must not abandon them mid-flight.
+      final run = runBounded<int, int>(
+        [0, 1, 2, 3],
+        (i) async {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          finished++;
+          return i;
+        },
+        concurrency: 4,
+        cancelToken: token,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      token.cancel();
+      final results = await run;
+
+      expect(finished, 4);
+      expect(results, [0, 1, 2, 3]);
+    });
+
+    test('cancelling inside the first item stops the rest immediately', () async {
+      final token = CancelToken();
+      final done = <int>[];
+      final results = await runBounded<int, int>(
+        [0, 1, 2, 3],
+        (i) async {
+          // Runs before this worker yields, so no other worker has claimed yet.
+          if (i == 0) token.cancel();
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          done.add(i);
+          return i;
+        },
+        concurrency: 4,
+        cancelToken: token,
+      );
+      expect(done, [0]);
+      expect(results, [0, null, null, null]);
+    });
+
+    test('an uncancelled token behaves as if absent', () async {
+      final results = await runBounded<int, int>(
+        [1, 2, 3],
+        (i) async => i * 2,
+        concurrency: 2,
+        cancelToken: CancelToken(),
+      );
+      expect(results, [2, 4, 6]);
+    });
+
+    test('cancel is idempotent', () {
+      final token = CancelToken();
+      token.cancel();
+      token.cancel();
+      expect(token.isCancelled, isTrue);
+    });
+  });
 }

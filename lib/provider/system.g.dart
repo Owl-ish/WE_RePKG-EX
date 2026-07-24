@@ -681,3 +681,65 @@ abstract class _$AcfPath extends $Notifier<String?> {
     element.handleCreate(ref, build);
   }
 }
+
+/// The cancel token for the batch currently running, or null when idle. The
+/// loading overlay's cancel button reaches the workers through this.
+
+@ProviderFor(ActiveCancelToken)
+final activeCancelTokenProvider = ActiveCancelTokenProvider._();
+
+/// The cancel token for the batch currently running, or null when idle. The
+/// loading overlay's cancel button reaches the workers through this.
+final class ActiveCancelTokenProvider
+    extends $NotifierProvider<ActiveCancelToken, CancelToken?> {
+  /// The cancel token for the batch currently running, or null when idle. The
+  /// loading overlay's cancel button reaches the workers through this.
+  ActiveCancelTokenProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'activeCancelTokenProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$activeCancelTokenHash();
+
+  @$internal
+  @override
+  ActiveCancelToken create() => ActiveCancelToken();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(CancelToken? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<CancelToken?>(value),
+    );
+  }
+}
+
+String _$activeCancelTokenHash() => r'da0f7d4cad6496d49163e33ed651f4c8883fecec';
+
+/// The cancel token for the batch currently running, or null when idle. The
+/// loading overlay's cancel button reaches the workers through this.
+
+abstract class _$ActiveCancelToken extends $Notifier<CancelToken?> {
+  CancelToken? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<CancelToken?, CancelToken?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<CancelToken?, CancelToken?>,
+              CancelToken?,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

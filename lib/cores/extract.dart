@@ -11,6 +11,9 @@ import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'dart:convert';
+
+import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/tool.dart';
@@ -19,24 +22,53 @@ import 'package:we_repkg/utils/work_pool.dart';
 import 'base.dart';
 import 'toast.dart';
 
-/// How many wallpapers extract at once.
-///
-/// Four rather than the core count on purpose. RePKG is as much disk-bound as
-/// CPU-bound, and on a spinning disk more parallelism makes a batch slower
-/// rather than faster, so this trades a little peak throughput on fast NVMe for
-/// not regressing on slow drives.
-const int extractConcurrency = 4;
-
-/// Resets batch progress before a run. Completion count starts at zero and the
-/// preview clears, so a second batch never briefly shows the previous one.
-void startBatch(WidgetRef ref) {
+/// Resets batch progress and publishes a fresh cancel token, which the loading
+/// overlay's cancel button reaches through activeCancelTokenProvider.
+CancelToken startBatch(WidgetRef ref) {
   ref.read(currentIndexProvider.notifier).reset();
   ref.read(processingWallpaperProvider.notifier).update(null);
+  final token = CancelToken();
+  ref.read(activeCancelTokenProvider.notifier).update(token);
+  return token;
 }
 
-/// Clears the preview once a run finishes.
+/// Clears the preview and retires the token once a run finishes.
 void endBatch(WidgetRef ref) {
   ref.read(processingWallpaperProvider.notifier).update(null);
+  ref.read(activeCancelTokenProvider.notifier).update(null);
+}
+
+/// Runs RePKG so a batch can kill it mid-extract.
+///
+/// Process.run cannot be cancelled: it returns only once the child exits, so a
+/// cancelled batch used to sit waiting for a large scene to finish unpacking.
+/// Process.start hands back a handle the token can kill.
+///
+/// stdout and stderr drain concurrently. Reading one to completion before the
+/// other deadlocks as soon as the child fills the pipe nobody is reading, which
+/// RePKG does on a verbose extract.
+Future<({int exitCode, String stdout, String stderr})> runRePKG(
+  String rePKGPath,
+  List<String> args,
+  CancelToken token,
+) async {
+  // Invoke the exe directly (no shell): Dart quotes args correctly, which is
+  // more robust for tool/output paths containing spaces.
+  final process = await Process.start(rePKGPath, args);
+  token.register(process);
+  try {
+    final streams = await Future.wait([
+      process.stdout.transform(utf8.decoder).join(),
+      process.stderr.transform(utf8.decoder).join(),
+    ]);
+    final exitCode = await process.exitCode;
+    debugPrint('${tr(AppI10n.logExitCode)} $exitCode');
+    debugPrint('${tr(AppI10n.logStdout)} ${streams[0]}');
+    debugPrint('${tr(AppI10n.logStderr)} ${streams[1]}');
+    return (exitCode: exitCode, stdout: streams[0], stderr: streams[1]);
+  } finally {
+    token.unregister(process);
+  }
 }
 
 Future<void> extractProject(
@@ -80,7 +112,7 @@ Future<void> extractProject(
     basePath,
     useTitleName: useTitleName,
   );
-  startBatch(ref);
+  final token = startBatch(ref);
 
   // Safe to run in parallel: resolveProjectFolders guarantees every wallpaper
   // owns a distinct subfolder, so workers share no output directory.
@@ -91,15 +123,19 @@ Future<void> extractProject(
       outPath: outDirs[wallpaper.id]!,
       rePKGPath: rePKGPath,
       overwrite: overwrite,
+      token: token,
     ),
-    concurrency: extractConcurrency,
+    concurrency: ref.read(extractConcurrencyProvider),
+    cancelToken: token,
     onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
     onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
   );
   errList.addAll(results.whereType<ErrorInfo>());
+  final bool cancelled = token.isCancelled;
 
   endBatch(ref);
   cancel.call();
+  if (cancelled) return showCancelledToast();
   errList.isNotEmpty ? showErrorView(errList) : showProjectToast(skipList);
 }
 
@@ -140,6 +176,7 @@ Future<ErrorInfo?> _extractProjectOne({
   required String outPath,
   required String? rePKGPath,
   required bool overwrite,
+  required CancelToken token,
 }) async {
   try {
     // recursive+existing-tolerant: two workers can be creating sibling folders
@@ -173,11 +210,8 @@ Future<ErrorInfo?> _extractProjectOne({
       wallpaper.target,
     ].cast<String>().toList();
     debugPrint('${tr(AppI10n.logRunCommand)} $rePKGPath ${args.join(' ')}');
-    // Invoke the exe directly (no shell): Dart quotes args correctly, which is
-    // more robust for tool/output paths containing spaces.
-    final ProcessResult result = await Process.run(rePKGPath!, args);
-    debugPrint('${tr(AppI10n.logStdout)} ${result.stdout}');
-    debugPrint('${tr(AppI10n.logStderr)} ${result.stderr}');
+    final result = await runRePKG(rePKGPath!, args, token);
+    if (token.isCancelled) return null;
     if (result.exitCode != 0) {
       return ErrorInfo(
         wallpaper: wallpaper,
@@ -222,7 +256,7 @@ Future<void> extractWallpapers(
   List<FileSystemEntity> oldFiles = await outDir.list().toList();
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
-  startBatch(ref);
+  final token = startBatch(ref);
 
   // Every wallpaper here writes into the SAME export folder, unlike
   // extractProject. That is safe only because claimFilePath reserves output
@@ -236,7 +270,8 @@ Future<void> extractWallpapers(
       // Only a single-wallpaper run can own the progress line.
       detailedProgress: wallpapers.length == 1,
     ),
-    concurrency: extractConcurrency,
+    concurrency: ref.read(extractConcurrencyProvider),
+    cancelToken: token,
     onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
     onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
   );
@@ -245,20 +280,24 @@ Future<void> extractWallpapers(
   // a batch ending in a video skipped the cleanup a .pkg earlier had asked for.
   bool needClear = false;
   for (int i = 0; i < results.length; i++) {
-    final (err, wantsClear) = results[i];
+    final result = results[i];
+    if (result == null) continue; // never started: the batch was cancelled
+    final (err, wantsClear) = result;
     needClear = needClear || wantsClear;
     if (err != null) {
       errList.add(ErrorInfo(wallpaper: wallpapers[i], message: err));
     }
   }
 
-  if (needClear) {
+  if (needClear && !token.isCancelled) {
     changeLoadingText(ref, tr(AppI10n.dialogProcessingDelete));
     String? err2 = await deleteUselessFiles(ref, outPath, oldFiles);
     if (err2 != null) errList.add(ErrorInfo(wallpaper: null, message: err2));
   }
+  final bool wasCancelled = token.isCancelled;
   endBatch(ref);
   cancel.call();
+  if (wasCancelled) return showCancelledToast();
   errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
 }
 
@@ -402,16 +441,11 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
     if (excludeTexture) args = ['extract', '-o', outPath, file];
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
-    // Invoke the exe directly (no shell) for space-safe argument handling.
-    ProcessResult result = await Process.run(rePKGPath, args);
-    int exitCode = result.exitCode; // 退出码
-    String stdout = result.stdout; // 标准输出
-    String stderr = result.stderr;
-    debugPrint('${tr(AppI10n.logExitCode)} $exitCode');
-    debugPrint('${tr(AppI10n.logStdout)} $stdout');
-    debugPrint('${tr(AppI10n.logStderr)} $stderr');
-    if (exitCode != 0) {
-      return '${tr(AppI10n.errorExtractFailed)} (Exit code: $exitCode)\n$stderr';
+    final token = ref.read(activeCancelTokenProvider) ?? CancelToken();
+    final result = await runRePKG(rePKGPath, args, token);
+    if (token.isCancelled) return null;
+    if (result.exitCode != 0) {
+      return '${tr(AppI10n.errorExtractFailed)} (Exit code: ${result.exitCode})\n${result.stderr}';
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');

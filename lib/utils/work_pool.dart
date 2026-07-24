@@ -1,3 +1,5 @@
+import 'package:we_repkg/utils/cancel_token.dart';
+
 /// Runs [work] over [items] with at most [concurrency] in flight, returning the
 /// results in input order.
 ///
@@ -14,14 +16,18 @@
 /// one bad item cannot leave orphaned futures running. Callers that must finish
 /// the whole batch regardless should return errors rather than throwing, which
 /// is what the extract functions do.
-Future<List<R>> runBounded<T, R>(
+/// When [cancelToken] is cancelled, workers stop claiming new items. Whatever is
+/// already in flight still finishes, so results stay consistent; entries never
+/// reached come back as null, which is why the return type is nullable.
+Future<List<R?>> runBounded<T, R>(
   List<T> items,
   Future<R> Function(T item) work, {
   int concurrency = 4,
   void Function(T item)? onStart,
   void Function(T item)? onComplete,
+  CancelToken? cancelToken,
 }) async {
-  if (items.isEmpty) return <R>[];
+  if (items.isEmpty) return <R?>[];
 
   int workers = concurrency < 1 ? 1 : concurrency;
   if (workers > items.length) workers = items.length;
@@ -31,6 +37,7 @@ Future<List<R>> runBounded<T, R>(
 
   Future<void> runWorker() async {
     while (true) {
+      if (cancelToken?.isCancelled ?? false) return;
       // Dart runs this synchronously between awaits, so the claim needs no lock.
       final int index = next;
       if (index >= items.length) return;
@@ -44,5 +51,5 @@ Future<List<R>> runBounded<T, R>(
   }
 
   await Future.wait([for (int i = 0; i < workers; i++) runWorker()]);
-  return results.cast<R>();
+  return results;
 }

@@ -4,6 +4,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/utils/info.dart';
+import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/storage.dart';
 
 part 'system.g.dart';
@@ -135,4 +136,13 @@ class AcfPath extends _$AcfPath {
     if (value == null) return;
     await StorageUtil.setString(AppKeys.acfPath, value);
   }
+}
+
+/// The cancel token for the batch currently running, or null when idle. The
+/// loading overlay's cancel button reaches the workers through this.
+@Riverpod(keepAlive: true)
+class ActiveCancelToken extends _$ActiveCancelToken {
+  @override
+  CancelToken? build() => null;
+  void update(CancelToken? value) => state = value;
 }

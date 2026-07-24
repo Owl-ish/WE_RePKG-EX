@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
 
 class LoadingView extends ConsumerStatefulWidget {
@@ -167,6 +169,29 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
+            ),
+            // Cancelling stops workers claiming new wallpapers and kills the
+            // RePKG process currently running. Disabled once it has been hit,
+            // since whatever is already in flight still has to finish.
+            Builder(
+              builder: (context) {
+                final token = ref.watch(activeCancelTokenProvider);
+                final bool cancelled = token?.isCancelled ?? false;
+                return TextButton.icon(
+                  onPressed: token == null || cancelled
+                      ? null
+                      : () {
+                          token.cancel();
+                          setState(() {});
+                        },
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: Text(
+                    cancelled
+                        ? tr(AppI10n.dialogCancelled)
+                        : tr(AppI10n.cancel),
+                  ),
+                );
+              },
             ),
           ],
         ),

@@ -24,6 +24,19 @@ void showSelectFolderToast(String message) {
   );
 }
 
+void showCancelledToast() {
+  BotToast.showCustomText(
+    duration: Duration(seconds: 3),
+    toastBuilder: (void Function() cancelFunc) {
+      return ToastView(
+        icon: Icons.cancel,
+        iconColor: Colors.orange,
+        text: tr(AppI10n.dialogCancelled),
+      );
+    },
+  );
+}
+
 void showDeleteToast() {
   BotToast.showCustomText(
     duration: Duration(seconds: 3),
