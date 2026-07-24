@@ -43,10 +43,6 @@ class BottomView extends ConsumerWidget {
               label: tr(AppI10n.homeExtractChecked),
             ),
             CustomBtn(
-              onPressed: () => clearChecked(ref),
-              label: tr(AppI10n.homeCancelChecked),
-            ),
-            CustomBtn(
               onPressed: () => deleteChecked(ref),
               label: tr(AppI10n.homeDeleteChecked),
               backgroundColor: Colors.red,

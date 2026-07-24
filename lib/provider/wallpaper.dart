@@ -60,6 +60,20 @@ class WallpaperList extends _$WallpaperList {
     ];
   }
 
+  /// Selects exactly one wallpaper, clearing every other selection.
+  ///
+  /// What a plain left click does: picking a single wallpaper after a range
+  /// selection should replace that range, not add to it.
+  void setExclusiveChecked(String id) {
+    state = [
+      for (final e in state)
+        if (e.id == id)
+          (e.checked ? e : e.copyWith(checked: true))
+        else
+          (e.checked ? e.copyWith(checked: false) : e),
+    ];
+  }
+
   /// Clears selection across the entire library, including wallpapers the
   /// current filter hides.
   void clearAllChecked() {

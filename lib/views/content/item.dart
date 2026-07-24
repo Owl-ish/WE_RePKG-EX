@@ -64,6 +64,10 @@ class ImageItem extends ConsumerWidget {
             .toSet();
         ref.read(wallpaperListProvider.notifier).setCheckedByIds(ids, true);
       } else {
+        // Plain click: this one only. Ctrl adds, Shift extends.
+        ref
+            .read(wallpaperListProvider.notifier)
+            .setExclusiveChecked(wallpaper.id);
         ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
       }
     }
