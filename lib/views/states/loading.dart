@@ -98,7 +98,9 @@ class _LoadingViewState extends ConsumerState<LoadingView>
       color: theme.scaffoldBackgroundColor,
       child: Container(
         width: 520,
-        height: 360,
+        // minHeight, not a fixed height: the cancel button pushed the
+        // column past 360 and clipped it.
+        constraints: const BoxConstraints(minHeight: 360),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           // color: Colors.white,
@@ -106,6 +108,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
         ),
         alignment: Alignment.center,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           spacing: 16,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
