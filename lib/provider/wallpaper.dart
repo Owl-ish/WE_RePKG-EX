@@ -89,6 +89,7 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   // allocating an intermediate list). All conditions are pure ANDs, so this is
   // equivalent to the original; the .toList() always copies, preventing the
   // later sort from mutating the provider's own stored list.
+  final String keyWordLower = keyWord.toLowerCase();
   list = list.where((e) {
     // mature content rating
     if (matureState == MatureState.hide && e.contentRating == 'mature') {
@@ -97,8 +98,11 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
     if (matureState == MatureState.only && e.contentRating != 'mature') {
       return false;
     }
-    // search keyword
-    if (keyWord.isNotEmpty && !e.title.contains(keyWord)) return false;
+    // search keyword (case-insensitive)
+    if (keyWordLower.isNotEmpty &&
+        !e.title.toLowerCase().contains(keyWordLower)) {
+      return false;
+    }
     // only show wallpapers with an extractable file
     if (!showAll && e.target.isEmpty) return false;
     // type filters
