@@ -137,3 +137,26 @@ class MaximizeOpen extends _$MaximizeOpen {
     await StorageUtil.setBool(AppKeys.maximizeOpen, state);
   }
 }
+
+/// How many wallpapers extract at once.
+///
+/// Four by default rather than the core count: RePKG is as much disk-bound as
+/// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
+/// Users on fast NVMe can raise it.
+@riverpod
+class ExtractConcurrency extends _$ExtractConcurrency {
+  static const int min = 1;
+  static const int max = 16;
+  static const int defaultValue = 4;
+
+  @override
+  int build() {
+    final stored = StorageUtil.getInt(AppKeys.extractConcurrency);
+    return (stored ?? defaultValue).clamp(min, max);
+  }
+
+  void update(int value) async {
+    state = value.clamp(min, max);
+    await StorageUtil.setInt(AppKeys.extractConcurrency, state);
+  }
+}

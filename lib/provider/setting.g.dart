@@ -682,3 +682,78 @@ abstract class _$MaximizeOpen extends $Notifier<bool> {
     element.handleCreate(ref, build);
   }
 }
+
+/// How many wallpapers extract at once.
+///
+/// Four by default rather than the core count: RePKG is as much disk-bound as
+/// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
+/// Users on fast NVMe can raise it.
+
+@ProviderFor(ExtractConcurrency)
+final extractConcurrencyProvider = ExtractConcurrencyProvider._();
+
+/// How many wallpapers extract at once.
+///
+/// Four by default rather than the core count: RePKG is as much disk-bound as
+/// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
+/// Users on fast NVMe can raise it.
+final class ExtractConcurrencyProvider
+    extends $NotifierProvider<ExtractConcurrency, int> {
+  /// How many wallpapers extract at once.
+  ///
+  /// Four by default rather than the core count: RePKG is as much disk-bound as
+  /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
+  /// Users on fast NVMe can raise it.
+  ExtractConcurrencyProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'extractConcurrencyProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$extractConcurrencyHash();
+
+  @$internal
+  @override
+  ExtractConcurrency create() => ExtractConcurrency();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(int value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<int>(value),
+    );
+  }
+}
+
+String _$extractConcurrencyHash() =>
+    r'cc93bc7511d6048f76b2209ebb641706d429f36d';
+
+/// How many wallpapers extract at once.
+///
+/// Four by default rather than the core count: RePKG is as much disk-bound as
+/// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
+/// Users on fast NVMe can raise it.
+
+abstract class _$ExtractConcurrency extends $Notifier<int> {
+  int build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<int, int>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<int, int>,
+              int,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

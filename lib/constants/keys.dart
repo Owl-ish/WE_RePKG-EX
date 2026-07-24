@@ -31,4 +31,5 @@ class AppKeys {
   static const String maximizeOpen = 'maximizeOpen';
   static const String windowWidth = 'windowWidth';
   static const String windowHeight = 'windowHeight';
+  static const String extractConcurrency = 'extractConcurrency';
 }

@@ -6,6 +6,7 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/views/setting/acf_path_input.dart';
+import 'package:we_repkg/views/setting/concurrency_slider.dart';
 import 'package:we_repkg/views/setting/project_path_input.dart';
 import 'package:we_repkg/widgets/double_title_checked.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
@@ -96,6 +97,7 @@ class SettingConfigGroup extends ConsumerWidget {
           title: tr(AppI10n.settingConfigAutoUpdateAcfPath),
           subTitle: tr(AppI10n.settingConfigAutoUpdateAcfPathTip),
         ),
+        ConcurrencySlider(),
         SizedBox(height: 8),
         ToolPathInput(),
         SizedBox(height: 4),
