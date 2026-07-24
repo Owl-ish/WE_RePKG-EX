@@ -39,6 +39,7 @@
     "extractVideoInfo": "正在复制视频 {copied} / {total}",
     "copySuccess": "复制成功",
     "deleteSuccess": "删除成功！文件夹已被移至回收站",
+    "cancelled": "已取消",
     "openFolderFailed": "打开文件夹失败",
     "folderNoExist": "文件夹不存在",
     "playVideoFailed": "播放视频失败",
@@ -108,7 +109,9 @@
       "weRepkgVersion": "WeRePKG-EX 版本",
       "weRepkgAuthor": "WeRePKG 作者",
       "weRepkgUrl": "WeRePKG-EX 主页"
-    }
+    },
+    "configConcurrency": "同时提取数量",
+    "configConcurrencyTip": "同时解包的壁纸数量。机械硬盘建议调低，固态硬盘可调高。"
   },
   "error": {
     "extractFailed": "提取失败:",
@@ -145,5 +148,6 @@
   "projectNoExist": "项目文件夹不存在，请手动创建或更改",
   "loading": "正在加载",
   "extractFolderToast": "选择提取壁纸后输出的文件夹，可在底部重新配置",
-  "projectFolderToast": "选择提取项目后的输出文件夹，可在设置中重新配置"
+  "projectFolderToast": "选择提取项目后的输出文件夹，可在设置中重新配置",
+  "cancel": "取消"
 }

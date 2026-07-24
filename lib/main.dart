@@ -18,6 +18,14 @@ import 'config/app.dart';
 
 Future<void> main() async {
   await AppConfig.init([]);
+  // Raise the preview cache above Flutter's 100MB default.
+  //
+  // A 180pt square tile on a 1.5x display decodes a landscape preview to about
+  // 480x270 RGBA, roughly 520KB. The default therefore holds about 190 previews,
+  // while a maximised window plus the grid's 500px cache extent already keeps
+  // 100 to 200 alive, so scrolling back a screen or two re-decoded from disk.
+  // 256MB holds around 500, which covers normal back-and-forth browsing.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 256 * 1024 * 1024;
   runApp(
     ProviderScope(
       child: EasyLocalization(

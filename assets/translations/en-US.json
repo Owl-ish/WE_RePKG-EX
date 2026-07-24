@@ -39,6 +39,7 @@
     "extractVideoInfo": "Copying video {copied} / {total}",
     "copySuccess": "Copy successful",
     "deleteSuccess": "Deleted. Moved to the Recycle Bin",
+    "cancelled": "Cancelled",
     "openFolderFailed": "Open folder failed",
     "folderNoExist": "Folder does not exist",
     "playVideoFailed": "Play video failed",
@@ -108,7 +109,9 @@
       "weRepkgVersion": "WeRePKG-EX Version",
       "weRepkgAuthor": "WeRePKG Author",
       "weRepkgUrl": "WeRePKG-EX Homepage"
-    }
+    },
+    "configConcurrency": "Simultaneous extractions",
+    "configConcurrencyTip": "How many wallpapers unpack at once. Lower this on a hard drive, raise it on an SSD."
   },
   "error": {
     "extractFailed": "Extraction failed:",
@@ -145,5 +148,6 @@
   "projectNoExist": "Project folder does not exist. Create manually or change it",
   "loading": "Loading",
   "extractFolderToast": "Select the output folder for extracted wallpapers; reconfigure at the bottom",
-  "projectFolderToast": "Select the output folder for extracted projects; reconfigure in settings"
+  "projectFolderToast": "Select the output folder for extracted projects; reconfigure in settings",
+  "cancel": "Cancel"
 }

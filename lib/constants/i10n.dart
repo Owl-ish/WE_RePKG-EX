@@ -39,6 +39,8 @@ class AppI10n {
   static const String dialogExtractVideoInfo = 'dialog.extractVideoInfo';
   static const String dialogCopySuccess = 'dialog.copySuccess';
   static const String dialogDeleteSuccess = 'dialog.deleteSuccess';
+  static const String dialogCancelled = 'dialog.cancelled';
+  static const String cancel = 'cancel';
   static const String dialogOpenFolderFailed = 'dialog.openFolderFailed';
   static const String dialogFolderNoExist = 'dialog.folderNoExist';
   static const String dialogPlayVideoFailed = 'dialog.playVideoFailed';
@@ -104,6 +106,9 @@ class AppI10n {
       'setting.config.autoUpdateProjectPathTip';
   static const String settingConfigAutoUpdateAcfPath =
       'setting.config.autoUpdateAcfPath';
+  static const String settingConfigConcurrency = 'setting.configConcurrency';
+  static const String settingConfigConcurrencyTip =
+      'setting.configConcurrencyTip';
   static const String settingConfigAutoUpdateAcfPathTip =
       'setting.config.autoUpdateAcfPathTip';
   static const String settingConfigMaximizeOpen = 'setting.config.maximizeOpen';
