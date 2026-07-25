@@ -21,6 +21,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The tag names the release; pubspec's version is what the About screen
+      # shows, via PackInfo.getVersion(). Tagging without bumping pubspec ships
+      # a build that misreports itself, and nothing at runtime would notice.
+      #
+      # Both sides are padded to three parts, so a v1.6 tag matches 1.6.0 and
+      # the tag style stays a free choice. Runs before anything expensive.
+      - name: Check the tag matches pubspec
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          function Normalise([string]$v) {
+            $parts = @((($v -split '\+')[0]) -split '\.')
+            while ($parts.Count -lt 3) { $parts += '0' }
+            ($parts[0..2]) -join '.'
+          }
+          $tag = Normalise ($env:GITHUB_REF -replace '^refs/tags/v?', '')
+          $pubspec = Normalise ((Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)').Matches[0].Groups[1].Value)
+          Write-Host "tag: $tag / pubspec: $pubspec"
+          if ($tag -ne $pubspec) {
+            throw "Tag $tag does not match pubspec version $pubspec. The About screen shows pubspec's version, so bump pubspec.yaml and re-tag."
+          }
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.44.7
