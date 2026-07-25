@@ -25,8 +25,12 @@ class FilterState extends _$FilterState {
     return WallpaperFilter(
       hideScene: StorageUtil.getBool(AppKeys.hideScene),
       hideVideo: StorageUtil.getBool(AppKeys.hideVideo),
-      hideWeb: StorageUtil.getNullBool(AppKeys.hideWeb) ?? true,
-      hideApp: StorageUtil.getNullBool(AppKeys.hideApp) ?? true,
+      // Every type shows by default. These two defaulted to hidden from the
+      // original project, when web and application wallpapers could not be
+      // extracted at all; v1.5 made them extract as a folder copy, so hiding
+      // them now conceals types the app supports.
+      hideWeb: StorageUtil.getBool(AppKeys.hideWeb),
+      hideApp: StorageUtil.getBool(AppKeys.hideApp),
       hideUnknown: StorageUtil.getBool(AppKeys.hideUnknown),
       hideEveryone: everyone,
       hideQuestionable: questionable,

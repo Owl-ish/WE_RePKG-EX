@@ -468,15 +468,11 @@ void main() {
       expect(reread.read(filterStateProvider).nothingHidden, isTrue);
     });
 
-    test('reset turns on the two types that default to hidden', () async {
-      // hideWeb and hideApp default to true on a fresh install, so a reset that
-      // only cleared what the user touched would leave them hidden.
+    test('a fresh install hides nothing', () async {
+      // hideWeb and hideApp used to default to true, from when those types
+      // could not be extracted. Every type is visible until the user says
+      // otherwise.
       await boot({AppKeys.sortType: SortType.time.index});
-      final before = container.read(filterStateProvider);
-      expect(before.hideWeb, isTrue);
-      expect(before.hideApp, isTrue);
-
-      container.read(filterStateProvider.notifier).reset();
 
       expect(container.read(filterStateProvider).nothingHidden, isTrue);
     });
