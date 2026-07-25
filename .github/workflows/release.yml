@@ -53,13 +53,21 @@ jobs:
       - name: Fetch RePKG
         shell: pwsh
         env:
-          REPKG_TAG: v0.4.0-alpha
+          REPKG_TAG: v0.5.0-ex
+          # A GitHub release asset is mutable: the tag can be deleted and
+          # re-pushed with a different binary behind the same URL. Pinning the
+          # hash turns that into a failed build instead of a silently different
+          # RePKG.exe going out to users. Update it in the same commit as
+          # REPKG_TAG, never on its own.
+          REPKG_SHA256: 70E21597E3F7335761CCA2BAEDACE29EE404FD0328AF14A1653CEA7EDBC763CD
         run: |
-          $url = "https://github.com/notscuffed/repkg/releases/download/$env:REPKG_TAG/RePKG.zip"
+          $url = "https://github.com/Owl-ish/repkg/releases/download/$env:REPKG_TAG/RePKG.zip"
           Invoke-WebRequest -Uri $url -OutFile RePKG.zip
-          # Printed so the hash can be pinned here once it has been eyeballed
-          # once; an upstream asset swap would then fail the build loudly.
-          Write-Host "RePKG.zip SHA256: $((Get-FileHash RePKG.zip -Algorithm SHA256).Hash)"
+          $actual = (Get-FileHash RePKG.zip -Algorithm SHA256).Hash
+          if ($actual -ne $env:REPKG_SHA256) {
+            throw "RePKG.zip does not match the pinned hash.`nExpected: $env:REPKG_SHA256`nActual:   $actual`nUpstream changed the asset for $env:REPKG_TAG. Check what changed before updating REPKG_SHA256."
+          }
+          Write-Host "RePKG.zip SHA256 verified: $actual"
           Expand-Archive RePKG.zip -DestinationPath repkg-extracted
           # Searched for rather than assumed: the archive's internal layout is
           # upstream's business and has no reason to stay put across versions.
