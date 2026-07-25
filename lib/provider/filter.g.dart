@@ -41,7 +41,7 @@ final class FilterStateProvider
   }
 }
 
-String _$filterStateHash() => r'1191d2bbc41815163a2da978fcd37b1f2a895bdf';
+String _$filterStateHash() => r'ada05918e1c538aefb877c2f3462b671ce6a6178';
 
 abstract class _$FilterState extends $Notifier<WallpaperFilter> {
   WallpaperFilter build();

@@ -1,6 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/keys.dart';
-import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/filter.dart';
 import 'package:we_repkg/utils/storage.dart';
 
@@ -8,103 +7,131 @@ part 'filter.g.dart';
 
 @riverpod
 class FilterState extends _$FilterState {
+  /// Every box the reset action clears, in menu order.
+  static const List<String> _hideKeys = [
+    AppKeys.hideScene,
+    AppKeys.hideVideo,
+    AppKeys.hideWeb,
+    AppKeys.hideApp,
+    AppKeys.hideUnknown,
+    AppKeys.hideEveryone,
+    AppKeys.hideQuestionable,
+    AppKeys.hideMature,
+  ];
+
   @override
-  WallpaperFilter build() => WallpaperFilter(
-    showAll: StorageUtil.getBool(AppKeys.showAll),
-    hideScene: StorageUtil.getBool(AppKeys.hideScene),
-    hideVideo: StorageUtil.getBool(AppKeys.hideVideo),
-    hideWeb: StorageUtil.getNullBool(AppKeys.hideWeb) ?? true,
-    hideApp: StorageUtil.getNullBool(AppKeys.hideApp) ?? true,
-    hideUnknown: StorageUtil.getBool(AppKeys.hideUnknown),
-    matureState:
-        MatureState.values[StorageUtil.getInt(AppKeys.matureState) ?? 0],
+  WallpaperFilter build() {
+    final (bool everyone, bool questionable, bool mature) = _ratingFlags();
+    return WallpaperFilter(
+      hideScene: StorageUtil.getBool(AppKeys.hideScene),
+      hideVideo: StorageUtil.getBool(AppKeys.hideVideo),
+      hideWeb: StorageUtil.getNullBool(AppKeys.hideWeb) ?? true,
+      hideApp: StorageUtil.getNullBool(AppKeys.hideApp) ?? true,
+      hideUnknown: StorageUtil.getBool(AppKeys.hideUnknown),
+      hideEveryone: everyone,
+      hideQuestionable: questionable,
+      hideMature: mature,
+    );
+  }
+
+  /// Reads the three age-rating flags, seeding them from the pre-1.6 three-way
+  /// [AppKeys.matureState] the first time so an upgrade keeps the user's choice.
+  ///
+  /// The seeded values are written back immediately. Deriving them on every load
+  /// instead would break as soon as the user touched one box: writing a single
+  /// key would make this look migrated while the other two silently reset.
+  static (bool, bool, bool) _ratingFlags() {
+    final bool migrated =
+        StorageUtil.getNullBool(AppKeys.hideEveryone) != null ||
+        StorageUtil.getNullBool(AppKeys.hideQuestionable) != null ||
+        StorageUtil.getNullBool(AppKeys.hideMature) != null;
+    if (migrated) {
+      return (
+        StorageUtil.getBool(AppKeys.hideEveryone),
+        StorageUtil.getBool(AppKeys.hideQuestionable),
+        StorageUtil.getBool(AppKeys.hideMature),
+      );
+    }
+    final (bool, bool, bool) seed = switch (StorageUtil.getInt(
+      AppKeys.matureState,
+    )) {
+      1 => (false, false, true), // hide mature
+      2 => (true, true, false), // only mature
+      _ => (false, false, false), // show everything
+    };
+    StorageUtil.setBool(AppKeys.hideEveryone, seed.$1);
+    StorageUtil.setBool(AppKeys.hideQuestionable, seed.$2);
+    StorageUtil.setBool(AppKeys.hideMature, seed.$3);
+    return seed;
+  }
+
+  /// Shows every type and every age rating again.
+  void reset() async {
+    state = WallpaperFilter(
+      hideScene: false,
+      hideVideo: false,
+      hideWeb: false,
+      hideApp: false,
+      hideUnknown: false,
+      hideEveryone: false,
+      hideQuestionable: false,
+      hideMature: false,
+    );
+    for (final String key in _hideKeys) {
+      await StorageUtil.setBool(key, false);
+    }
+  }
+
+  void updateHideScene(bool hidden) async => await _setHidden(
+    AppKeys.hideScene,
+    hidden,
+    state.copyWith(hideScene: hidden),
   );
 
-  void updateShowAll(bool showAll) async {
-    state = WallpaperFilter(
-      showAll: showAll,
-      hideScene: showAll ? false : state.hideScene,
-      hideVideo: showAll ? false : state.hideVideo,
-      hideWeb: showAll ? false : state.hideWeb,
-      hideApp: showAll ? false : state.hideApp,
-      hideUnknown: showAll ? false : state.hideUnknown,
-      matureState: showAll ? MatureState.show : state.matureState,
-    );
+  void updateHideVideo(bool hidden) async => await _setHidden(
+    AppKeys.hideVideo,
+    hidden,
+    state.copyWith(hideVideo: hidden),
+  );
 
-    await StorageUtil.setBool(AppKeys.showAll, showAll);
-    if (showAll) {
-      await StorageUtil.setBool(AppKeys.hideScene, false);
-      await StorageUtil.setBool(AppKeys.hideVideo, false);
-      await StorageUtil.setBool(AppKeys.hideWeb, false);
-      await StorageUtil.setBool(AppKeys.hideApp, false);
-      await StorageUtil.setBool(AppKeys.hideUnknown, false);
-      await StorageUtil.setInt(AppKeys.matureState, 0);
-    }
-  }
+  void updateHideWeb(bool hidden) async => await _setHidden(
+    AppKeys.hideWeb,
+    hidden,
+    state.copyWith(hideWeb: hidden),
+  );
 
-  void updateHideScene(bool hideScene) async {
-    state = state.copyWith(
-      showAll: state.showAll && !hideScene,
-      hideScene: hideScene,
-    );
-    await StorageUtil.setBool(AppKeys.hideScene, hideScene);
-    if (hideScene) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
-  }
+  void updateHideApp(bool hidden) async => await _setHidden(
+    AppKeys.hideApp,
+    hidden,
+    state.copyWith(hideApp: hidden),
+  );
 
-  void updateHideVideo(bool hideVideo) async {
-    state = state.copyWith(
-      showAll: state.showAll && !hideVideo,
-      hideVideo: hideVideo,
-    );
-    await StorageUtil.setBool(AppKeys.hideVideo, hideVideo);
-    if (hideVideo) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
-  }
+  void updateHideUnknown(bool hidden) async => await _setHidden(
+    AppKeys.hideUnknown,
+    hidden,
+    state.copyWith(hideUnknown: hidden),
+  );
 
-  void updateHideWeb(bool hideWeb) async {
-    state = state.copyWith(
-      showAll: state.showAll && !hideWeb,
-      hideWeb: hideWeb,
-    );
-    await StorageUtil.setBool(AppKeys.hideWeb, hideWeb);
-    if (hideWeb) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
-  }
+  void updateHideEveryone(bool hidden) async => await _setHidden(
+    AppKeys.hideEveryone,
+    hidden,
+    state.copyWith(hideEveryone: hidden),
+  );
 
-  void updateHideApp(bool hideApp) async {
-    state = state.copyWith(
-      showAll: state.showAll && !hideApp,
-      hideApp: hideApp,
-    );
-    await StorageUtil.setBool(AppKeys.hideApp, hideApp);
-    if (hideApp) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
-  }
+  void updateHideQuestionable(bool hidden) async => await _setHidden(
+    AppKeys.hideQuestionable,
+    hidden,
+    state.copyWith(hideQuestionable: hidden),
+  );
 
-  void updateHideUnknown(bool hideUnknown) async {
-    state = state.copyWith(
-      showAll: state.showAll && !hideUnknown,
-      hideUnknown: hideUnknown,
-    );
-    await StorageUtil.setBool(AppKeys.hideUnknown, hideUnknown);
-    if (hideUnknown) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
-  }
+  void updateHideMature(bool hidden) async => await _setHidden(
+    AppKeys.hideMature,
+    hidden,
+    state.copyWith(hideMature: hidden),
+  );
 
-  void updateMatureState(MatureState matureState) async {
-    state = state.copyWith(
-      showAll: state.showAll && matureState.isShow,
-      matureState: matureState,
-    );
-    await StorageUtil.setInt(AppKeys.matureState, matureState.index);
-    if (!matureState.isShow) {
-      await StorageUtil.setBool(AppKeys.showAll, false);
-    }
+  Future<void> _setHidden(String key, bool hidden, WallpaperFilter next) async {
+    state = next;
+    await StorageUtil.setBool(key, hidden);
   }
 }

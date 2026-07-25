@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/widgets/icon_btn.dart';
 
@@ -13,6 +14,8 @@ class SortToggle extends ConsumerWidget {
       icon: ref.watch(sortAscendingProvider)
           ? Icons.arrow_upward_rounded
           : Icons.arrow_downward_rounded,
+      size: TopBarNums.buttonSize,
+      iconSize: TopBarNums.iconSize,
     );
   }
 }

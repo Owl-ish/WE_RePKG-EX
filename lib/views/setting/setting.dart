@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/views/setting/setting_about_group.dart';
 import 'package:we_repkg/views/setting/setting_config_group.dart';
-import 'package:we_repkg/views/setting/setting_filter_group.dart';
 import 'package:we_repkg/views/setting/setting_system_group.dart';
 import 'package:we_repkg/widgets/dialog.dart';
 
@@ -19,7 +18,6 @@ class SettingView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SettingFilterGroup(),
             SettingConfigGroup(),
             SettingSystemGroup(),
             SettingAboutGroup(),

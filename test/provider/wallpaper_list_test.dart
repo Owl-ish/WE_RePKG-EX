@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/constants/content_rating.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/enums.dart';
@@ -39,13 +40,14 @@ WallpaperInfo makeWallpaper(
 /// Prefs that switch every filter off, so filterWallpaperList tests only see the
 /// dimension each test sets. Without these, hideWeb and hideApp default to true.
 Map<String, Object> permissivePrefs() => {
-  AppKeys.showAll: true,
   AppKeys.hideScene: false,
   AppKeys.hideVideo: false,
   AppKeys.hideWeb: false,
   AppKeys.hideApp: false,
   AppKeys.hideUnknown: false,
-  AppKeys.matureState: MatureState.show.index,
+  AppKeys.hideEveryone: false,
+  AppKeys.hideQuestionable: false,
+  AppKeys.hideMature: false,
   AppKeys.sortType: SortType.time.index,
   AppKeys.sortAscending: false,
 };
@@ -321,32 +323,49 @@ void main() {
   });
 
   group('filterWallpaperList filtering', () {
-    test('hides mature content when matureState is hide', () async {
-      await boot({
-        ...permissivePrefs(),
-        AppKeys.matureState: MatureState.hide.index,
-      });
-      container.read(wallpaperListProvider.notifier).addAll([
-        makeWallpaper('clean', contentRating: 'everyone'),
-        makeWallpaper('spicy', contentRating: 'mature'),
-      ]);
+    test('each rating toggle hides only its own level', () async {
+      final cases = <String, String>{
+        AppKeys.hideEveryone: ContentRating.everyone,
+        AppKeys.hideQuestionable: ContentRating.questionable,
+        AppKeys.hideMature: ContentRating.mature,
+      };
+      for (final entry in cases.entries) {
+        await boot({...permissivePrefs(), entry.key: true});
+        container.read(wallpaperListProvider.notifier).addAll([
+          for (final rating in cases.values)
+            makeWallpaper(rating, contentRating: rating),
+        ]);
 
-      final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
-      expect(ids, ['clean']);
+        final ratings = container
+            .read(filterWallpaperListProvider)
+            .map((e) => e.contentRating)
+            .toSet();
+        expect(
+          ratings.contains(entry.value),
+          isFalse,
+          reason: '${entry.key} should hide ${entry.value}',
+        );
+        expect(ratings.length, cases.length - 1, reason: entry.key);
+      }
     });
 
-    test('shows only mature content when matureState is only', () async {
-      await boot({
-        ...permissivePrefs(),
-        AppKeys.matureState: MatureState.only.index,
-      });
+    test('an unrecognised rating counts as all ages', () async {
+      // A project.json can carry a rating the app doesn't know, or none at all.
+      // Those must follow the all-ages box, otherwise they'd be unreachable
+      // with every box ticked.
+      await boot();
       container.read(wallpaperListProvider.notifier).addAll([
-        makeWallpaper('clean', contentRating: 'everyone'),
-        makeWallpaper('spicy', contentRating: 'mature'),
+        makeWallpaper('blank', contentRating: ''),
+        makeWallpaper('odd', contentRating: 'pg13'),
       ]);
+      expect(container.read(filterWallpaperListProvider).length, 2);
 
-      final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
-      expect(ids, ['spicy']);
+      await boot({...permissivePrefs(), AppKeys.hideEveryone: true});
+      container.read(wallpaperListProvider.notifier).addAll([
+        makeWallpaper('blank', contentRating: ''),
+        makeWallpaper('odd', contentRating: 'pg13'),
+      ]);
+      expect(container.read(filterWallpaperListProvider), isEmpty);
     });
 
     test('search matches titles case-insensitively', () async {
@@ -361,16 +380,24 @@ void main() {
       expect(ids, ['1']);
     });
 
-    test('showAll false drops wallpapers with no extractable target', () async {
-      await boot({...permissivePrefs(), AppKeys.showAll: false});
-      container.read(wallpaperListProvider.notifier).addAll([
-        makeWallpaper('has', target: 'scene.pkg'),
-        makeWallpaper('none', target: ''),
-      ]);
+    test(
+      'wallpapers with no extractable file are never filtered out',
+      () async {
+        // They used to hide behind the "Show all wallpapers" box. That box is
+        // gone: extractBranch copies the whole folder for them, so there is
+        // nothing for the user to opt into.
+        await boot();
+        container.read(wallpaperListProvider.notifier).addAll([
+          makeWallpaper('has', target: 'scene.pkg'),
+          makeWallpaper('none', target: ''),
+        ]);
 
-      final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
-      expect(ids, ['has']);
-    });
+        final ids = container
+            .read(filterWallpaperListProvider)
+            .map((e) => e.id);
+        expect(ids, ['has', 'none']);
+      },
+    );
 
     test('each type toggle hides only its own type', () async {
       final cases = <String, String>{
@@ -403,17 +430,107 @@ void main() {
       await boot({
         ...permissivePrefs(),
         AppKeys.hideVideo: true,
-        AppKeys.matureState: MatureState.hide.index,
+        AppKeys.hideMature: true,
       });
       container.read(wallpaperListProvider.notifier).addAll([
         makeWallpaper('keep', type: WallpaperType.scene),
         makeWallpaper('byType', type: WallpaperType.video),
-        makeWallpaper('byRating', contentRating: 'mature'),
+        makeWallpaper('byRating', contentRating: ContentRating.mature),
       ]);
 
       final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
       expect(ids, ['keep']);
     });
+  });
+
+  group('reset filters', () {
+    test('clears every type and rating box in one go', () async {
+      await boot();
+      final notifier = container.read(filterStateProvider.notifier);
+      notifier.updateHideScene(true);
+      notifier.updateHideWeb(true);
+      notifier.updateHideMature(true);
+      expect(container.read(filterStateProvider).nothingHidden, isFalse);
+
+      notifier.reset();
+
+      expect(container.read(filterStateProvider).nothingHidden, isTrue);
+    });
+
+    test('persists, so the boxes stay on after a restart', () async {
+      await boot();
+      container.read(filterStateProvider.notifier).updateHideVideo(true);
+      container.read(filterStateProvider.notifier).reset();
+      await Future<void>.delayed(Duration.zero);
+
+      final reread = ProviderContainer();
+      addTearDown(reread.dispose);
+      expect(reread.read(filterStateProvider).nothingHidden, isTrue);
+    });
+
+    test('reset turns on the two types that default to hidden', () async {
+      // hideWeb and hideApp default to true on a fresh install, so a reset that
+      // only cleared what the user touched would leave them hidden.
+      await boot({AppKeys.sortType: SortType.time.index});
+      final before = container.read(filterStateProvider);
+      expect(before.hideWeb, isTrue);
+      expect(before.hideApp, isTrue);
+
+      container.read(filterStateProvider.notifier).reset();
+
+      expect(container.read(filterStateProvider).nothingHidden, isTrue);
+    });
+  });
+
+  group('age rating migration from the pre-1.6 matureState', () {
+    /// Prefs as they looked before the three rating flags existed.
+    Map<String, Object> legacyPrefs(int matureState) => {
+      // 'showAll' was also stored back then. Nothing reads it any more, so the
+      // orphaned pref is left alone rather than migrated.
+      'showAll': true,
+      AppKeys.hideScene: false,
+      AppKeys.hideVideo: false,
+      AppKeys.hideWeb: false,
+      AppKeys.hideApp: false,
+      AppKeys.hideUnknown: false,
+      AppKeys.matureState: matureState,
+      AppKeys.sortType: SortType.time.index,
+      AppKeys.sortAscending: false,
+    };
+
+    test('matureState 1 (hide) seeds hideMature alone', () async {
+      await boot(legacyPrefs(1));
+      final filter = container.read(filterStateProvider);
+      expect(filter.hideMature, isTrue);
+      expect(filter.hideQuestionable, isFalse);
+      expect(filter.hideEveryone, isFalse);
+    });
+
+    test('matureState 2 (only) seeds the two milder levels', () async {
+      await boot(legacyPrefs(2));
+      final filter = container.read(filterStateProvider);
+      expect(filter.hideMature, isFalse);
+      expect(filter.hideQuestionable, isTrue);
+      expect(filter.hideEveryone, isTrue);
+    });
+
+    test(
+      'the seed is persisted, so a later single write cannot reset it',
+      () async {
+        // Deriving the flags on every load instead would break here: writing
+        // hideEveryone alone would make the next launch look migrated while
+        // hideMature silently fell back to false.
+        await boot(legacyPrefs(1));
+        container.read(filterStateProvider.notifier).updateHideEveryone(true);
+        await Future<void>.delayed(Duration.zero);
+
+        final reread = ProviderContainer();
+        addTearDown(reread.dispose);
+        final filter = reread.read(filterStateProvider);
+        expect(filter.hideMature, isTrue);
+        expect(filter.hideEveryone, isTrue);
+      },
+    );
   });
 
   group('filterWallpaperList sorting', () {

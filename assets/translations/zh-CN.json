@@ -26,7 +26,16 @@
     "openFileLocation": "打开文件位置",
     "deleteCurrent": "删除当前壁纸",
     "wallpaper": "壁纸",
-    "project": "项目"
+    "project": "项目",
+    "filter": {
+      "tip": "过滤",
+      "reset": "重置过滤",
+      "type": "类型",
+      "rating": "年龄分级",
+      "ratingEveryone": "全年龄",
+      "ratingQuestionable": "存在争议",
+      "ratingMature": "限制级"
+    }
   },
   "dialog": {
     "operationCompleted": "操作完成",
@@ -51,19 +60,6 @@
   },
   "setting": {
     "title": "设置",
-    "filter": {
-      "label": "过滤",
-      "showAll": "显示所有壁纸",
-      "hideScene": "隐藏场景壁纸",
-      "hideVideo": "隐藏视频壁纸",
-      "hideWeb": "隐藏网页壁纸",
-      "hideApplication": "隐藏程序壁纸",
-      "hideUnknown": "隐藏未知壁纸",
-      "hideMature": "限制级壁纸",
-      "only": "仅显示",
-      "show": "显示",
-      "hide": "隐藏"
-    },
     "config": {
       "label": "配置",
       "maximizeOpen": "启动时最大化",

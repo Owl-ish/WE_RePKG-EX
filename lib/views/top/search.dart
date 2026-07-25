@@ -42,25 +42,24 @@ class _SearchState extends ConsumerState<Search> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 280,
-      child: CustomInput(
-        controller: controller,
-        hintText: tr(AppI10n.homeSearchTip),
-        padding: EdgeInsets.only(left: 8, right: 8),
-        leading: Icon(Icons.search_rounded, size: 20, color: Colors.grey),
-        extraIcon: controller.text.isEmpty
-            ? null
-            : IconButton(
-                onPressed: () => setState(() => controller.clear()),
-                icon: Icon(Icons.close_rounded),
-                iconSize: 16,
-                color: Colors.grey,
-                padding: EdgeInsets.all(4),
-                constraints: BoxConstraints(maxWidth: 36, maxHeight: 36),
-              ),
-        onChanged: (value) {},
-      ),
+    // No width of its own: TopView stretches the field into the gap between the
+    // wallpaper count and the view controls, up to a cap.
+    return CustomInput(
+      controller: controller,
+      hintText: tr(AppI10n.homeSearchTip),
+      padding: EdgeInsets.only(left: 8, right: 8),
+      leading: Icon(Icons.search_rounded, size: 20, color: Colors.grey),
+      extraIcon: controller.text.isEmpty
+          ? null
+          : IconButton(
+              onPressed: () => setState(() => controller.clear()),
+              icon: Icon(Icons.close_rounded),
+              iconSize: 16,
+              color: Colors.grey,
+              padding: EdgeInsets.all(4),
+              constraints: BoxConstraints(maxWidth: 36, maxHeight: 36),
+            ),
+      onChanged: (value) {},
     );
   }
 }

@@ -41,7 +41,7 @@ final class WallpaperListProvider
   }
 }
 
-String _$wallpaperListHash() => r'dfa51eed28608e5273c8ce7134ab094b2980639c';
+String _$wallpaperListHash() => r'f4478d996c33a2011651e6a06ea9b91a6b0d88d1';
 
 abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -259,7 +259,7 @@ final class FilterWallpaperListProvider
 }
 
 String _$filterWallpaperListHash() =>
-    r'a5319dc29fd38c4731624ebf49ccb1bcaf00f24f';
+    r'bf2e5fd65c2139fccfed1413db4893bf0af01c78';
 
 @ProviderFor(ExtractList)
 final extractListProvider = ExtractListProvider._();

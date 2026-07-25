@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:we_repkg/constants/content_rating.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/filter.dart';
@@ -116,13 +117,14 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   List<WallpaperInfo> list = ref.watch(wallpaperListProvider);
   String keyWord = ref.watch(searchContentProvider);
   final WallpaperFilter filter = ref.watch(filterStateProvider);
-  final MatureState matureState = filter.matureState;
-  final bool showAll = filter.showAll;
   final bool hideScene = filter.hideScene;
   final bool hideVideo = filter.hideVideo;
   final bool hideWeb = filter.hideWeb;
   final bool hideApp = filter.hideApp;
   final bool hideUnknown = filter.hideUnknown;
+  final bool hideEveryone = filter.hideEveryone;
+  final bool hideQuestionable = filter.hideQuestionable;
+  final bool hideMature = filter.hideMature;
   final SortType sortType = ref.watch(wallpaperSortTypeProvider);
   final bool sortAscending = ref.watch(sortAscendingProvider);
 
@@ -132,11 +134,14 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   // later sort from mutating the provider's own stored list.
   final String keyWordLower = keyWord.toLowerCase();
   list = list.where((e) {
-    // mature content rating
-    if (matureState == MatureState.hide && e.contentRating == 'mature') {
-      return false;
-    }
-    if (matureState == MatureState.only && e.contentRating != 'mature') {
+    // age rating. A project.json can carry an unrecognised contentrating or
+    // none at all, so anything that isn't mature or questionable counts as all
+    // ages; that way no wallpaper can hide from all three checkboxes at once.
+    if (e.contentRating == ContentRating.mature) {
+      if (hideMature) return false;
+    } else if (e.contentRating == ContentRating.questionable) {
+      if (hideQuestionable) return false;
+    } else if (hideEveryone) {
       return false;
     }
     // search keyword (case-insensitive)
@@ -144,8 +149,8 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
         !e.title.toLowerCase().contains(keyWordLower)) {
       return false;
     }
-    // only show wallpapers with an extractable file
-    if (!showAll && e.target.isEmpty) return false;
+    // Wallpapers with no extractable file are no longer filtered out. They
+    // still extract: extractBranch falls through to copying the whole folder.
     // type filters
     if (hideScene && e.type == WallpaperType.scene) return false;
     if (hideVideo && e.type == WallpaperType.video) return false;

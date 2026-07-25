@@ -28,6 +28,16 @@ class AppI10n {
   static const String homeWallpaper = 'home.wallpaper';
   static const String homeProject = 'home.project';
 
+  // 首页-过滤相关 (top bar filter dropdown)
+  static const String homeFilterTip = 'home.filter.tip';
+  static const String homeFilterReset = 'home.filter.reset';
+  static const String homeFilterType = 'home.filter.type';
+  static const String homeFilterRating = 'home.filter.rating';
+  static const String homeFilterRatingEveryone = 'home.filter.ratingEveryone';
+  static const String homeFilterRatingQuestionable =
+      'home.filter.ratingQuestionable';
+  static const String homeFilterRatingMature = 'home.filter.ratingMature';
+
   // 弹窗相关
   static const String dialogOperationCompleted = 'dialog.operationCompleted';
   static const String dialogProcessingWallpaper = 'dialog.ProcessingWallpaper';
@@ -53,22 +63,6 @@ class AppI10n {
 
   // 设置页面相关
   static const String settingTitle = 'setting.title';
-
-  // 设置-过滤相关
-  static const String settingFilterLabel = 'setting.filter.label';
-  static const String settingFilterShowAll = 'setting.filter.showAll';
-  static const String settingFilterHideScene = 'setting.filter.hideScene';
-  static const String settingFilterHideVideo = 'setting.filter.hideVideo';
-  static const String settingFilterHideWeb = 'setting.filter.hideWeb';
-  static const String settingFilterHideApplication =
-      'setting.filter.hideApplication';
-  static const String settingFilterHideUnknown = 'setting.filter.hideUnknown';
-
-  static const String settingFilterHideMature = 'setting.filter.hideMature';
-
-  static const String settingFilterOnly = 'setting.filter.only';
-  static const String settingFilterShow = 'setting.filter.show';
-  static const String settingFilterHide = 'setting.filter.hide';
 
   // 设置-配置相关
   static const String settingConfigLabel = 'setting.config.label';
