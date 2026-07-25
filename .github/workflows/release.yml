@@ -82,9 +82,10 @@ jobs:
                      Select-Object -First 1
           if (-not $notices) { throw "THIRD-PARTY-NOTICES.txt not found inside RePKG.zip" }
           "REPKG_NOTICES=$($notices.FullName)" >> $env:GITHUB_ENV
-          # HEAD resolves to the default branch, so this survives a master/main
-          # rename upstream.
-          Invoke-WebRequest -Uri 'https://github.com/notscuffed/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
+          # From our fork, which is what actually ships. Same MIT text it
+          # inherited from notscuffed, whose copyright line it still carries.
+          # HEAD resolves to the default branch, so this survives a rename.
+          Invoke-WebRequest -Uri 'https://github.com/Owl-ish/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
 
       # The bundle is a folder of 20-odd files, not a single exe, so it has to be
       # zipped. It is staged under a named folder first: zipping the Release
