@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    # Release tags carry a v: v1.6, v1.7, v1.71. A tag without one, like the
+    # original 1.5, does not match and builds nothing.
+    tags: ['v*']
+  # Lets a release be rebuilt by hand without moving a tag, e.g. when a run
+  # failed for an infrastructure reason.
+  workflow_dispatch:
+
+# Needed to create the draft release and attach the zip to it.
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Build Windows bundle
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.7
+          channel: stable
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build
+        run: flutter build windows --release
+
+      # RePKG is the actual unpacker; the app shells out to it. getToolPath()
+      # in lib/utils/info.dart falls back to RePKG.exe sitting beside the app
+      # executable, so shipping it here means users never touch the tool path
+      # setting.
+      #
+      # Pinned rather than "latest" on purpose: AppStrings.repkgVersion is
+      # hardcoded to 0.4.0 and shown in the About section, so a floating version
+      # would make that text lie. Bump the two together.
+      #
+      # RePKG is MIT, which permits redistribution as long as the licence text
+      # travels with the binary, hence the LICENSE fetch below.
+      - name: Fetch RePKG
+        shell: pwsh
+        env:
+          REPKG_TAG: v0.4.0-alpha
+        run: |
+          $url = "https://github.com/notscuffed/repkg/releases/download/$env:REPKG_TAG/RePKG.zip"
+          Invoke-WebRequest -Uri $url -OutFile RePKG.zip
+          # Printed so the hash can be pinned here once it has been eyeballed
+          # once; an upstream asset swap would then fail the build loudly.
+          Write-Host "RePKG.zip SHA256: $((Get-FileHash RePKG.zip -Algorithm SHA256).Hash)"
+          Expand-Archive RePKG.zip -DestinationPath repkg-extracted
+          # Searched for rather than assumed: the archive's internal layout is
+          # upstream's business and has no reason to stay put across versions.
+          $exe = Get-ChildItem repkg-extracted -Recurse -Filter RePKG.exe |
+                 Select-Object -First 1
+          if (-not $exe) { throw "RePKG.exe not found inside RePKG.zip" }
+          "REPKG_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+          # HEAD resolves to the default branch, so this survives a master/main
+          # rename upstream.
+          Invoke-WebRequest -Uri 'https://github.com/notscuffed/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
+
+      # The bundle is a folder of 20-odd files, not a single exe, so it has to be
+      # zipped. It is staged under a named folder first: zipping the Release
+      # directory's contents directly would dump every file loose into whatever
+      # folder the user extracts into.
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $env:GITHUB_REF -replace '^refs/tags/', ''
+          } else {
+            "dev-$($env:GITHUB_SHA.Substring(0,7))"
+          }
+          $stem = "WeRePKG-EX-$tag-windows-x64"
+          New-Item -ItemType Directory -Path $stem | Out-Null
+          Copy-Item 'build\windows\x64\runner\Release\*' -Destination $stem -Recurse
+          # Beside the exe, which is where getToolPath() looks.
+          Copy-Item $env:REPKG_EXE -Destination $stem
+          Copy-Item 'RePKG-LICENSE.txt' -Destination $stem
+          Copy-Item 'LICENSE' -Destination "$stem\LICENSE.txt"
+          Compress-Archive -Path $stem -DestinationPath "$stem.zip"
+          "name=$stem.zip" >> $env:GITHUB_OUTPUT
+          "tag=$tag"       >> $env:GITHUB_OUTPUT
+
+      # Always available, including for workflow_dispatch runs that create no
+      # release. Keeps a downloadable build even if the release step is skipped.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.name }}
+
+      # Draft, not published: the release notes are written by hand, so this
+      # parks the zip on a draft and leaves publishing as a deliberate step.
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          # The tag already carries the v, so no prefix here.
+          name: WeRePKG-EX ${{ steps.package.outputs.tag }}
+          files: ${{ steps.package.outputs.name }}
