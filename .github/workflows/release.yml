@@ -75,6 +75,13 @@ jobs:
                  Select-Object -First 1
           if (-not $exe) { throw "RePKG.exe not found inside RePKG.zip" }
           "REPKG_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+          # Covers the libraries ILRepack merged into RePKG.exe (ImageSharp,
+          # Newtonsoft.Json, K4os.LZ4, System.Drawing.Common), whose licences
+          # would otherwise ship without their notices.
+          $notices = Get-ChildItem repkg-extracted -Recurse -Filter THIRD-PARTY-NOTICES.txt |
+                     Select-Object -First 1
+          if (-not $notices) { throw "THIRD-PARTY-NOTICES.txt not found inside RePKG.zip" }
+          "REPKG_NOTICES=$($notices.FullName)" >> $env:GITHUB_ENV
           # HEAD resolves to the default branch, so this survives a master/main
           # rename upstream.
           Invoke-WebRequest -Uri 'https://github.com/notscuffed/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
@@ -97,6 +104,7 @@ jobs:
           Copy-Item 'build\windows\x64\runner\Release\*' -Destination $stem -Recurse
           # Beside the exe, which is where getToolPath() looks.
           Copy-Item $env:REPKG_EXE -Destination $stem
+          Copy-Item $env:REPKG_NOTICES -Destination "$stem\RePKG-THIRD-PARTY-NOTICES.txt"
           Copy-Item 'RePKG-LICENSE.txt' -Destination $stem
           Copy-Item 'LICENSE' -Destination "$stem\LICENSE.txt"
           Compress-Archive -Path $stem -DestinationPath "$stem.zip"
