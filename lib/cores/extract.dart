@@ -232,13 +232,17 @@ Future<ErrorInfo?> _extractProjectOne({
     debugPrint('${tr(AppI10n.logRunCommand)} $rePKGPath ${args.join(' ')}');
     final result = await runRePKG(rePKGPath!, args, token);
     if (token.isCancelled) return null;
+    // Before the exit code is judged: a non-zero exit now means RePKG skipped
+    // some entries and carried on, not that it produced nothing. Reporting the
+    // failure is right, but denying an otherwise complete folder its preview
+    // image on top of that is not.
+    await copyPreviewImage(wallpaper, outPath);
     if (result.exitCode != 0) {
       return ErrorInfo(
         wallpaper: wallpaper,
         message: '${tr(AppI10n.errorExtractFailed)} ${result.stderr}',
       );
     }
-    await copyPreviewImage(wallpaper, outPath);
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
     return ErrorInfo(
@@ -361,7 +365,10 @@ Future<(String?, bool)> extractBranch(
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
     final err = await extractPKG(ref, target, outPath);
-    if (err == null) await copyPreviewImage(wallpaper, outPath);
+    // Unconditional, like the project-mode path: RePKG reports a non-zero exit
+    // for a partial extraction as well as a total one, and the files it did
+    // write still deserve their preview.
+    await copyPreviewImage(wallpaper, outPath);
     return (err, true);
   } else if (targetLower.endsWith('.mp4')) {
     return (
