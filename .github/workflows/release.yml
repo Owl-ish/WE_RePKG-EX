@@ -93,14 +93,20 @@ jobs:
           Copy-Item 'LICENSE' -Destination "$stem\LICENSE.txt"
           Compress-Archive -Path $stem -DestinationPath "$stem.zip"
           "name=$stem.zip" >> $env:GITHUB_OUTPUT
+          "stem=$stem"     >> $env:GITHUB_OUTPUT
           "tag=$tag"       >> $env:GITHUB_OUTPUT
 
       # Always available, including for workflow_dispatch runs that create no
       # release. Keeps a downloadable build even if the release step is skipped.
+      #
+      # Uploads the staged folder, not the zip: upload-artifact always zips what
+      # it is given, so handing it the zip produced a zip inside a zip (and an
+      # artifact literally named .zip.zip). The release asset below is the real
+      # zip and is attached as-is.
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.name }}
-          path: ${{ steps.package.outputs.name }}
+          name: ${{ steps.package.outputs.stem }}
+          path: ${{ steps.package.outputs.stem }}
 
       # Draft, not published: the release notes are written by hand, so this
       # parks the zip on a draft and leaves publishing as a deliberate step.
