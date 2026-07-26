@@ -20,6 +20,7 @@ class CurrentState extends _$CurrentState {
 class WallpaperPath extends _$WallpaperPath {
   @override
   String? build() => StorageUtil.getString(AppKeys.wallpaperPath);
+
   void update(String? value) async {
     state = value;
     if (state == null) return;
@@ -63,11 +64,7 @@ class ExportPath extends _$ExportPath {
 @Riverpod(keepAlive: true)
 class ToolVersion extends _$ToolVersion {
   @override
-  String? build() => StorageUtil.getString(AppKeys.toolVersion);
-  void update(String? value) async {
-    state = value;
-    await StorageUtil.setString(AppKeys.toolVersion, value!);
-  }
+  Future<String?> build() => readRepkgVersion(ref.watch(toolPathProvider));
 }
 
 @Riverpod(keepAlive: true)

@@ -12,6 +12,8 @@ class AppI10n {
   static const String homeExtractAll = 'home.extractAll';
   static const String homeExtractChecked = 'home.extractChecked';
   static const String homeDeleteChecked = 'home.deleteChecked';
+  static const String homeScrollToTop = 'home.scrollToTop';
+  static const String homeScrollToBottom = 'home.scrollToBottom';
   static const String homeScene = 'home.scene';
   static const String homeVideo = 'home.video';
   static const String homeWeb = 'home.web';
@@ -27,6 +29,18 @@ class AppI10n {
   static const String homeDeleteCurrent = 'home.deleteCurrent';
   static const String homeWallpaper = 'home.wallpaper';
   static const String homeProject = 'home.project';
+  static const String navExtract = 'nav.extract';
+  static const String navBackup = 'nav.backup';
+  static const String navExpand = 'nav.expand';
+  static const String navCollapse = 'nav.collapse';
+  static const String backupComingSoon = 'backup.comingSoon';
+
+  static const String homeDetails = 'home.details';
+  static const String homeDoubleClickDetails = 'home.doubleClickDetails';
+  static const String homeType = 'home.type';
+  static const String homeSize = 'home.size';
+  static const String homeTags = 'home.tags';
+  static const String homeRating = 'home.rating';
 
   // 首页-过滤相关 (top bar filter dropdown)
   static const String homeFilterTip = 'home.filter.tip';
@@ -125,6 +139,7 @@ class AppI10n {
   static const String settingAboutLabel = 'setting.about.label';
   static const String settingAboutOpenSourceLicense =
       'setting.about.openSourceLicense';
+  static const String settingAboutVersion = 'setting.about.version';
   static const String settingAboutRepkgVersion = 'setting.about.repkgVersion';
   static const String settingAboutRepkgAuthor = 'setting.about.repkgAuthor';
   static const String settingAboutRepkgUrl = 'setting.about.repkgUrl';

@@ -19,7 +19,6 @@ class AppKeys {
   static const String wallpaperPath = 'wallpaperPath';
   static const String toolPath = 'toolPath';
   static const String exportPath = 'exportPath';
-  static const String toolVersion = 'toolVersion';
   static const String sortType = 'sortType';
   static const String earliestDate = 'earliestDate';
   static const String ctrlPressedIndex = 'ctrlPressedIndex';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/widgets/click_icon.dart';
+import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:window_manager/window_manager.dart';
 
 class WindowBtnGroup extends StatefulWidget {
@@ -36,11 +36,11 @@ class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        ClickIcon(
+        AppIconButton(
           width: 40,
           height: 32,
           icon: Icons.horizontal_rule_rounded,
-          onTap: () async {
+          onPressed: () async {
             bool isMinimized = await windowManager.isMinimized();
             if (isMinimized) {
               windowManager.restore();
@@ -63,20 +63,20 @@ class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
                 : () {
                     windowManager.maximize();
                   };
-            return ClickIcon(
+            return AppIconButton(
               width: 40,
               height: 32,
-              size: size,
+              iconSize: size,
               icon: icon,
-              onTap: onTap,
+              onPressed: onTap,
             );
           },
         ),
-        ClickIcon(
+        AppIconButton(
           width: 40,
           height: 32,
           icon: Icons.close_rounded,
-          onTap: () {
+          onPressed: () {
             windowManager.close();
           },
         ),

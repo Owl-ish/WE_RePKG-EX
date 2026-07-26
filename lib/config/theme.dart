@@ -7,7 +7,7 @@ class AppTheme {
     brightness: Brightness.light,
     fontFamily: 'Microsoft YaHei',
     scaffoldBackgroundColor: Colors.white,
-    primaryColor: Color(0xFF2E70ED),
+    primaryColor: Color.fromARGB(255, 91, 144, 243),
     textTheme: TextTheme(),
     inputDecorationTheme: InputDecorationTheme(
       hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
@@ -36,12 +36,13 @@ class AppTheme {
       barrierColor: Colors.white.withValues(alpha: .6),
     ),
     extensions: [
+      ActionButtonTheme.light,
       SlidingSegmentedTheme(
         backgroundColor: Color(0xFFF3F3F3),
         foregroundColor: Colors.white,
       ),
       ToastTheme(backgroundColor: Colors.white),
-      SideTheme(
+      MetaTheme(
         largeStyle: TextStyle(
           color: Color(0xFF666666),
           fontSize: 16,
@@ -89,12 +90,13 @@ class AppTheme {
       barrierColor: Colors.black.withValues(alpha: .6),
     ),
     extensions: [
+      ActionButtonTheme.dark,
       SlidingSegmentedTheme(
         backgroundColor: Color(0xFF333333),
         foregroundColor: Color(0xFF222222),
       ),
       ToastTheme(backgroundColor: Color(0xFF222222)),
-      SideTheme(
+      MetaTheme(
         largeStyle: TextStyle(
           color: Color(0xFFDDDDDD),
           fontSize: 16,

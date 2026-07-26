@@ -5,7 +5,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/models/filter.dart';
 import 'package:we_repkg/provider/filter.dart';
-import 'package:we_repkg/widgets/icon_btn.dart';
+import 'package:we_repkg/widgets/app_icon_button.dart';
 
 /// One checkbox row: its label, whether the wallpapers are showing, and the
 /// setter that flips it.
@@ -112,12 +112,13 @@ class FilterDropdown extends ConsumerWidget {
             Size(_menuWidth, double.infinity),
           ),
         ),
-        builder: (context, controller, child) => IconBtn(
+        builder: (context, controller, child) => AppIconButton(
           tooltip: tr(AppI10n.homeFilterTip),
           onPressed: () =>
               controller.isOpen ? controller.close() : controller.open(),
           icon: Icons.filter_alt_rounded,
-          size: TopBarNums.buttonSize,
+          width: TopBarNums.buttonSize,
+          height: TopBarNums.buttonSize,
           iconSize: TopBarNums.iconSize,
           color: active ? theme.primaryColor : null,
         ),

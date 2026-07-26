@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/widgets/icon_btn.dart';
+import 'package:we_repkg/widgets/app_icon_button.dart';
 
 import 'custom_input.dart';
 
@@ -36,7 +36,10 @@ class FolderInput extends StatelessWidget {
         height: 20,
         color: Theme.of(context).dividerColor,
       ),
-      suffix: IconBtn(icon: Icons.folder_open_rounded, onPressed: onPressed),
+      suffix: AppIconButton(
+        icon: Icons.folder_open_rounded,
+        onPressed: onPressed,
+      ),
       // onPressed: onPressed,
     );
   }

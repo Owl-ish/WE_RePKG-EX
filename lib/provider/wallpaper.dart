@@ -95,13 +95,6 @@ class WallpaperList extends _$WallpaperList {
 }
 
 @Riverpod(keepAlive: true)
-class HoverWallpaper extends _$HoverWallpaper {
-  @override
-  WallpaperInfo? build() => null;
-  void update(WallpaperInfo? value) => state = value;
-}
-
-@Riverpod(keepAlive: true)
 class SelectedWallpaper extends _$SelectedWallpaper {
   @override
   WallpaperInfo? build() => null;

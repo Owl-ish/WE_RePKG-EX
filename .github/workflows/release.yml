@@ -66,9 +66,9 @@ jobs:
       # executable, so shipping it here means users never touch the tool path
       # setting.
       #
-      # Pinned rather than "latest" on purpose: AppStrings.repkgVersion is
-      # hardcoded to 0.4.0 and shown in the About section, so a floating version
-      # would make that text lie. Bump the two together.
+      # Pinned rather than "latest" so every release is reproducible. The About
+      # section asks this executable for its version at runtime, so it always
+      # reports the binary that actually shipped.
       #
       # RePKG is MIT, which permits redistribution as long as the licence text
       # travels with the binary, hence the LICENSE fetch below.

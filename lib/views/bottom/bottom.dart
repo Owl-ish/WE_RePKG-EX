@@ -2,10 +2,10 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
-import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/views/bottom/toggle_input.dart';
 import 'package:we_repkg/widgets/custom_btn.dart';
@@ -19,19 +19,20 @@ class BottomView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     List<WallpaperInfo> checkedList = ref.watch(checkedWallpaperListProvider);
     return Container(
-      height: 48,
-      padding: EdgeInsets.symmetric(horizontal: 16),
+      // Taller than the 48 it was, with the extra going below the controls so
+      // they stop sitting on the window's bottom edge.
+      height: 48 + LayoutNums.contentGap,
+      padding: EdgeInsets.fromLTRB(
+        LayoutNums.edgeInset,
+        0,
+        LayoutNums.edgeInset,
+        LayoutNums.contentGap,
+      ),
       child: Row(
         spacing: 8,
         children: [
           FunctionSelectedBtn(),
           ToggleInput(),
-          CustomBtn(
-            onPressed: ref.watch(exportPathProvider) == null
-                ? null
-                : () async => await browseFolder(ref),
-            label: tr(AppI10n.homeBrowseFolder),
-          ),
           if (checkedList.isEmpty)
             CustomBtn(
               onPressed: () => extractAll(ref),
@@ -42,10 +43,9 @@ class BottomView extends ConsumerWidget {
               onPressed: () => extractChecked(ref),
               label: tr(AppI10n.homeExtractChecked),
             ),
-            CustomBtn(
+            CustomBtn.destructive(
               onPressed: () => deleteChecked(ref),
               label: tr(AppI10n.homeDeleteChecked),
-              backgroundColor: Colors.red,
             ),
           ],
         ],

@@ -14,10 +14,43 @@ String? getToolPath() {
     toolPath = path.join(folder, 'RePKG.exe');
     if (!File(toolPath).existsSync()) {
       toolPath = null;
-      StorageUtil.setString(AppKeys.toolVersion, '');
     }
   }
   return toolPath;
+}
+
+/// Extracts RePKG's semantic version from its `version` command output.
+///
+/// RePKG has written this line to both stdout and stderr across releases. Build
+/// metadata identifies the commit but is not part of the user-facing version.
+String? parseRepkgVersionOutput(Object? stdout, Object? stderr) {
+  final RegExp versionLine = RegExp(
+    r'^\s*RePKG\s+([^\s+]+)(?:\+[^\s]+)?\s*$',
+    multiLine: true,
+    caseSensitive: false,
+  );
+  for (final Object? output in <Object?>[stdout, stderr]) {
+    final Match? match = versionLine.firstMatch(output?.toString() ?? '');
+    if (match != null) return match.group(1);
+  }
+  return null;
+}
+
+/// Reads the version reported by the active RePKG executable.
+///
+/// About must remain usable if the configured tool is missing or broken, so
+/// failures and slow processes resolve to null rather than escaping.
+Future<String?> readRepkgVersion(String? toolPath) async {
+  if (toolPath == null || !await File(toolPath).exists()) return null;
+  try {
+    final ProcessResult result = await Process.run(toolPath, const <String>[
+      'version',
+    ]).timeout(const Duration(seconds: 2));
+    if (result.exitCode != 0) return null;
+    return parseRepkgVersionOutput(result.stdout, result.stderr);
+  } catch (_) {
+    return null;
+  }
 }
 
 String? getAcfPath([String? filePath]) {

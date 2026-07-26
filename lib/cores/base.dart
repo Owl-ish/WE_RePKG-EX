@@ -8,9 +8,8 @@ import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
-import 'package:we_repkg/constants/strings.dart';
-import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
+import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
@@ -36,27 +35,17 @@ Future<void> setToolPath(WidgetRef ref) async {
   final xType = XTypeGroup(label: 'RePKG', extensions: ['exe']);
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
   if (file != null) {
-    ProcessResult result = await Process.run(file.path, ['version']);
-    if (result.exitCode == 0) {
-      String version = '';
-      if (result.stdout != '') {
-        version = result.stdout.toString().trim().split('+').first;
-      } else if (result.stderr != '') {
-        version = result.stderr.toString().trim().split('+').first;
-      }
-      version = version.substring(6);
-      ref.read(toolVersionProvider.notifier).update(version);
+    ref.read(toolPathProvider.notifier).update(file.path);
+    final String? version = await ref.read(toolVersionProvider.future);
+    if (version != null) {
       debugPrint('${tr(AppI10n.logVersion)} $version');
     }
-    ref.read(toolPathProvider.notifier).update(file.path);
-    await StorageUtil.setString(AppKeys.toolPath, file.path);
   }
 }
 
 Future<void> refreshToolPath(WidgetRef ref) async {
   await StorageUtil.remove(AppKeys.toolPath);
   ref.read(toolPathProvider.notifier).update(getToolPath());
-  ref.read(toolVersionProvider.notifier).update(AppStrings.repkgVersion);
 }
 
 Future<bool> setProjectPath(WidgetRef ref, [bool show = false]) async {
@@ -78,8 +67,12 @@ void refreshProjectPath(WidgetRef ref) {
 }
 
 Future<void> setWallpaperPath(WidgetRef ref) async {
+  final String? previousPath = ref.read(wallpaperPathProvider);
   final String? wallpaperPath = await getDirectoryPath();
   if (wallpaperPath != null) {
+    if (wallpaperPath != previousPath) {
+      ref.read(currentSectionProvider.notifier).requestExtractEntrance();
+    }
     ref.read(selectedWallpaperProvider.notifier).update(null);
     ref.read(wallpaperPathProvider.notifier).update(wallpaperPath);
     updateOtherFolder(ref, wallpaperPath);
@@ -90,8 +83,12 @@ Future<void> setWallpaperPath(WidgetRef ref) async {
 Future<void> refreshWallpaperPath(WidgetRef ref) async {
   // String? before = StorageUtil.getString(AppKeys.wallpaperPathBefore);
   // await StorageUtil.remove(AppKeys.acfPath);
+  final String? previousPath = ref.read(wallpaperPathProvider);
   String? wallpaperPath = await getWallpaperPath();
   if (wallpaperPath != null) {
+    if (wallpaperPath != previousPath) {
+      ref.read(currentSectionProvider.notifier).requestExtractEntrance();
+    }
     ref.read(wallpaperPathProvider.notifier).update(wallpaperPath);
     updateOtherFolder(ref, wallpaperPath);
   }
@@ -131,24 +128,6 @@ Future<void> refreshAcfPath(WidgetRef ref) async {
   await StorageUtil.remove(AppKeys.acfPath);
   ref.read(acfPathProvider.notifier).update(getAcfPath());
   refreshWallpaperPath(ref);
-}
-
-Future<void> browseFolder(WidgetRef ref) async {
-  ExtractType type = ref.read(currentExtractTypeProvider);
-  String? folderPath = type.isWallpaper
-      ? ref.read(exportPathProvider)
-      : ref.read(projectPathProvider);
-  if (folderPath == null) return;
-  folderPath = folderPath.replaceAll('\\', '/');
-  final uri = Uri.parse('file:///$folderPath');
-  if (!Directory(folderPath).existsSync()) {
-    return showErrorToast(tr(AppI10n.dialogFolderNoExist));
-  }
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri);
-  } else {
-    showErrorToast(tr(AppI10n.dialogOpenFolderFailed));
-  }
 }
 
 Future<void> playVideo(WallpaperInfo wallpaper) async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/views/top/filter_dropdown.dart';
 import 'package:we_repkg/views/top/refresh.dart';
 import 'package:we_repkg/views/top/search.dart';
@@ -22,7 +23,7 @@ class TopView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 48,
-      padding: EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: LayoutNums.edgeInset),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -34,10 +35,10 @@ class TopView extends StatelessWidget {
           Refresh(),
           SizedBox(width: 16),
           // Expanded absorbs every spare pixel, so the row can never overflow
-          // however narrow the window gets.
+          // however narrow the window gets, and Center puts the search in the
+          // middle of what's left rather than jammed against the filter button.
           Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
+            child: Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: _searchMaxWidth),
                 child: Search(),

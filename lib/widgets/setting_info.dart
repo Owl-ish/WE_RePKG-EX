@@ -1,25 +1,37 @@
 import 'package:flutter/material.dart';
 
 class SettingInfo extends StatelessWidget {
-  const SettingInfo({super.key, required this.title, this.content, this.child});
+  const SettingInfo.text({
+    super.key,
+    required this.title,
+    required String content,
+  }) : _content = content,
+       _child = null;
+
+  const SettingInfo.custom({
+    super.key,
+    required this.title,
+    required Widget child,
+  }) : _content = null,
+       _child = child;
 
   final String title;
-  final String? content;
-  final Widget? child;
+  final String? _content;
+  final Widget? _child;
 
   @override
   Widget build(BuildContext context) {
-    TextStyle? textStyle = Theme.of(context).textTheme.bodyMedium;
+    final TextStyle? textStyle = Theme.of(context).textTheme.bodyMedium;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
-        crossAxisAlignment: child == null
+        crossAxisAlignment: _child == null
             ? CrossAxisAlignment.center
             : CrossAxisAlignment.start,
         children: [
           Text('$title:', style: textStyle),
-          SizedBox(width: 8),
-          child ?? Text(content!, style: textStyle),
+          const SizedBox(width: 8),
+          _child ?? Text(_content!, style: textStyle),
         ],
       ),
     );

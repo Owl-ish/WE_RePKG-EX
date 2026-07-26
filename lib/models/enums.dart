@@ -81,6 +81,33 @@ extension ThemeTypeExtension on ThemeType {
   }
 }
 
+/// Top level areas of the app, in the order the nav rail lists them.
+enum NavSection { extract, backup, settings }
+
+extension NavSectionExtension on NavSection {
+  String get label {
+    switch (this) {
+      case NavSection.extract:
+        return tr(AppI10n.navExtract);
+      case NavSection.backup:
+        return tr(AppI10n.navBackup);
+      case NavSection.settings:
+        return tr(AppI10n.settingTitle);
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case NavSection.extract:
+        return Icons.grid_view_rounded;
+      case NavSection.backup:
+        return Icons.backup_outlined;
+      case NavSection.settings:
+        return Icons.settings_outlined;
+    }
+  }
+}
+
 enum NotificationType { system, app }
 
 extension NotificationTypeExtension on NotificationType {

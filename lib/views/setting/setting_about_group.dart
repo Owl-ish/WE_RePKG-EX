@@ -14,51 +14,88 @@ class SettingAboutGroup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final String repkgVersion = ref
+        .watch(toolVersionProvider)
+        .when(
+          data: (version) => version ?? '—',
+          loading: () => '…',
+          error: (_, _) => '—',
+        );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SettingLabel(tr(AppI10n.settingAboutLabel)),
-        SizedBox(height: 8),
-        SettingInfo(
+        SettingInfo.text(
           title: tr(AppI10n.settingAboutOpenSourceLicense),
           content: AppStrings.license,
         ),
-        SettingInfo(
-          title: tr(AppI10n.settingAboutRepkgVersion),
-          content: ref.watch(toolVersionProvider) ?? AppStrings.repkgVersion,
+        _RepositoryVersionInfo(
+          title: tr(AppI10n.settingAboutWeRepkgUrl),
+          label: AppStrings.appRepoGithubLabel,
+          uri: AppStrings.appRepoGithub,
+          version: PackInfo.getVersion(),
         ),
-        SettingInfo(
-          title: tr(AppI10n.settingAboutRepkgAuthor),
-          content: AppStrings.repkgAuthor,
-        ),
-        SettingInfo(
+        _RepositoryVersionInfo(
           title: tr(AppI10n.settingAboutRepkgUrl),
-          child: LinkText(
-            label: AppStrings.repkgRepo,
-            uri: AppStrings.repkgRepo,
-          ),
+          label: AppStrings.repkgRepoLabel,
+          uri: AppStrings.repkgRepo,
+          version: repkgVersion,
         ),
-        SettingInfo(
-          title: tr(AppI10n.settingAboutWeRepkgVersion),
-          content: PackInfo.getVersion(),
-        ),
-        SettingInfo(
+        SettingInfo.custom(
           title: tr(AppI10n.settingAboutWeRepkgAuthor),
           child: LinkText(
-            label: AppStrings.appAuthor,
+            label: AppStrings.appOriginalRepoLabel,
             uri: AppStrings.appOriginalRepo,
           ),
         ),
-        SettingInfo(
-          title: tr(AppI10n.settingAboutWeRepkgUrl),
-          child: Expanded(
-            child: LinkText(
-              label: AppStrings.appRepoGithub,
-              uri: AppStrings.appRepoGithub,
-            ),
+        SettingInfo.custom(
+          title: tr(AppI10n.settingAboutRepkgAuthor),
+          child: LinkText(
+            label: AppStrings.repkgOriginalRepoLabel,
+            uri: AppStrings.repkgOriginalRepo,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RepositoryVersionInfo extends StatelessWidget {
+  const _RepositoryVersionInfo({
+    required this.title,
+    required this.label,
+    required this.uri,
+    required this.version,
+  });
+
+  final String title;
+  final String label;
+  final String uri;
+  final String version;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle? textStyle = Theme.of(context).textTheme.bodyMedium;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          Text('$title:', style: textStyle),
+          LinkText(label: label, uri: uri),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('|  ${tr(AppI10n.settingAboutVersion)}: ', style: textStyle),
+              Text(version, style: textStyle),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

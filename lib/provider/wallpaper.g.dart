@@ -61,58 +61,6 @@ abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   }
 }
 
-@ProviderFor(HoverWallpaper)
-final hoverWallpaperProvider = HoverWallpaperProvider._();
-
-final class HoverWallpaperProvider
-    extends $NotifierProvider<HoverWallpaper, WallpaperInfo?> {
-  HoverWallpaperProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'hoverWallpaperProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$hoverWallpaperHash();
-
-  @$internal
-  @override
-  HoverWallpaper create() => HoverWallpaper();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(WallpaperInfo? value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<WallpaperInfo?>(value),
-    );
-  }
-}
-
-String _$hoverWallpaperHash() => r'312e4fe561eeb2886af2e452c7404a5eaec41bdb';
-
-abstract class _$HoverWallpaper extends $Notifier<WallpaperInfo?> {
-  WallpaperInfo? build();
-  @$mustCallSuper
-  @override
-  void runBuild() {
-    final ref = this.ref as $Ref<WallpaperInfo?, WallpaperInfo?>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<WallpaperInfo?, WallpaperInfo?>,
-              WallpaperInfo?,
-              Object?,
-              Object?
-            >;
-    element.handleCreate(ref, build);
-  }
-}
-
 @ProviderFor(SelectedWallpaper)
 final selectedWallpaperProvider = SelectedWallpaperProvider._();
 
@@ -259,7 +207,7 @@ final class FilterWallpaperListProvider
 }
 
 String _$filterWallpaperListHash() =>
-    r'bf2e5fd65c2139fccfed1413db4893bf0af01c78';
+    r'e742853581728b6be268f0dbc1c6d543fbadcf0c';
 
 @ProviderFor(ExtractList)
 final extractListProvider = ExtractListProvider._();

@@ -271,7 +271,7 @@ abstract class _$ExportPath extends $Notifier<String?> {
 final toolVersionProvider = ToolVersionProvider._();
 
 final class ToolVersionProvider
-    extends $NotifierProvider<ToolVersion, String?> {
+    extends $AsyncNotifierProvider<ToolVersion, String?> {
   ToolVersionProvider._()
     : super(
         from: null,
@@ -289,29 +289,21 @@ final class ToolVersionProvider
   @$internal
   @override
   ToolVersion create() => ToolVersion();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(String? value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<String?>(value),
-    );
-  }
 }
 
-String _$toolVersionHash() => r'fda3a1d3cd2514e77e09fe6083243d5685822323';
+String _$toolVersionHash() => r'fbadd0c9e18876537ca19a70ce14fc45281375dd';
 
-abstract class _$ToolVersion extends $Notifier<String?> {
-  String? build();
+abstract class _$ToolVersion extends $AsyncNotifier<String?> {
+  FutureOr<String?> build();
   @$mustCallSuper
   @override
   void runBuild() {
-    final ref = this.ref as $Ref<String?, String?>;
+    final ref = this.ref as $Ref<AsyncValue<String?>, String?>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<String?, String?>,
-              String?,
+              AnyNotifier<AsyncValue<String?>, String?>,
+              AsyncValue<String?>,
               Object?,
               Object?
             >;

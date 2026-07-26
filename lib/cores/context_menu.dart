@@ -6,6 +6,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/right_menu_item.dart';
 
 import 'base.dart';
@@ -19,6 +20,12 @@ Future<void> showRightMenu(
 ) async {
   List<WallpaperInfo> checkedList = ref.read(checkedWallpaperListProvider);
   final entries = <ContextMenuEntry>[
+    // Double click opens the same dialog, but nothing on a tile advertises
+    // that. This is the discoverable way in.
+    RightMenuItem(
+      label: tr(AppI10n.homeDetails),
+      onSelected: (_) => showWallpaperDetail(context, wallpaper),
+    ),
     RightMenuItem(
       label: tr(AppI10n.homeExtractCurrent),
       onSelected: (_) => extractCurrent(ref, wallpaper),

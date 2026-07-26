@@ -16,43 +16,41 @@ class EmptyView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Expanded(
-      child: Center(
-        child: Column(
-          spacing: 16,
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: runState.isInitial
-              ? [
-                  EasyCircularProgress(size: 80),
-                  EllipsisAnimationText(text: tr(AppI10n.loading)),
-                ]
-              : [
-                  Icon(Icons.error_outline, size: 48, color: Colors.grey),
-                  Text(
-                    tr(AppI10n.emptyTip),
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
-                      fontFamily: 'Microsoft YaHei',
-                    ),
-                    textAlign: TextAlign.center,
+    return Center(
+      child: Column(
+        spacing: 16,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: runState.isInitial
+            ? [
+                EasyCircularProgress(size: 80),
+                EllipsisAnimationText(text: tr(AppI10n.loading)),
+              ]
+            : [
+                Icon(Icons.error_outline, size: 48, color: Colors.grey),
+                Text(
+                  tr(AppI10n.emptyTip),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                    fontFamily: 'Microsoft YaHei',
                   ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * .4,
-                    child: FolderInput(
-                      width: double.infinity,
-                      height: 40,
-                      fontSize: 14,
-                      controller: TextEditingController(
-                        text: ref.watch(wallpaperPathProvider),
-                      ),
-                      hintText: tr(AppI10n.settingConfigWallpapersPathTip),
-                      onPressed: () async => await setWallpaperPath(ref),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * .4,
+                  child: FolderInput(
+                    width: double.infinity,
+                    height: 40,
+                    fontSize: 14,
+                    controller: TextEditingController(
+                      text: ref.watch(wallpaperPathProvider),
                     ),
+                    hintText: tr(AppI10n.settingConfigWallpapersPathTip),
+                    onPressed: () async => await setWallpaperPath(ref),
                   ),
-                ],
-        ),
+                ),
+              ],
       ),
     );
   }

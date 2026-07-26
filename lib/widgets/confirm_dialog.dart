@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:we_repkg/config/custom_theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/widgets/app_dialog_surface.dart';
 
 /// Asks before something destructive, resolving true only if the user confirms.
 ///
@@ -61,46 +63,43 @@ class _ConfirmDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return UnconstrainedBox(
-      child: Material(
-        elevation: 16,
-        borderRadius: BorderRadius.circular(8),
-        color:
-            theme.dialogTheme.backgroundColor ?? theme.scaffoldBackgroundColor,
-        child: Container(
-          width: 420,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final actionColors = theme.actionButtons;
+    return AppDialogSurface(
+      width: 420,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleLarge?.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(message, style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                title,
-                style: theme.textTheme.titleLarge?.copyWith(fontSize: 18),
+              TextButton(
+                onPressed: () => onResult(false),
+                child: Text(tr(AppI10n.cancel)),
               ),
-              const SizedBox(height: 12),
-              Text(message, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => onResult(false),
-                    child: Text(tr(AppI10n.cancel)),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    style: destructive
-                        ? FilledButton.styleFrom(backgroundColor: Colors.red)
-                        : null,
-                    onPressed: () => onResult(true),
-                    child: Text(confirmLabel),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              FilledButton(
+                style: destructive
+                    ? FilledButton.styleFrom(
+                        backgroundColor: actionColors.destructiveBackground,
+                        foregroundColor: actionColors.destructiveForeground,
+                        side: BorderSide(color: actionColors.destructiveBorder),
+                      )
+                    : null,
+                onPressed: () => onResult(true),
+                child: Text(confirmLabel),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
