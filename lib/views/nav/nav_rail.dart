@@ -81,11 +81,7 @@ class _RailButton extends StatelessWidget {
               child: SizedBox(
                 width: 40,
                 height: 40,
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: selected ? active : idle,
-                ),
+                child: Icon(icon, size: 20, color: selected ? active : idle),
               ),
             ),
           ),
