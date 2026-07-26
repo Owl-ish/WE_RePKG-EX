@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,10 +37,9 @@ class _ContentViewState extends ConsumerState<ContentView>
   );
 
   late final SmoothWheelScrollController _scrollController;
-  late final ValueNotifier<bool> _scrollControlsActive;
+  late final ValueNotifier<bool> _topScrollControlActive;
+  late final ValueNotifier<bool> _bottomScrollControlActive;
   late final AnimationController _entranceController;
-  Timer? _scrollIdleTimer;
-  bool _scrollControlHovered = false;
   bool _entranceComplete = true;
   int _entranceStartToken = 0;
 
@@ -53,8 +49,8 @@ class _ContentViewState extends ConsumerState<ContentView>
     _scrollController = SmoothWheelScrollController(
       debugLabel: 'wallpaper-grid',
     );
-    _scrollControlsActive = ValueNotifier<bool>(false);
-    _scrollController.addListener(_onScrollActivity);
+    _topScrollControlActive = ValueNotifier<bool>(false);
+    _bottomScrollControlActive = ValueNotifier<bool>(false);
     _entranceController =
         AnimationController(
           vsync: this,
@@ -98,47 +94,16 @@ class _ContentViewState extends ConsumerState<ContentView>
 
   @override
   void dispose() {
-    _scrollIdleTimer?.cancel();
-    _scrollController.removeListener(_onScrollActivity);
-    _scrollControlsActive.dispose();
+    _topScrollControlActive.dispose();
+    _bottomScrollControlActive.dispose();
     _entranceController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _onScrollActivity() {
-    _showScrollControls();
-    _scheduleScrollControlsHide();
-  }
-
-  void _showScrollControls() {
-    if (!_scrollControlsActive.value) {
-      _scrollControlsActive.value = true;
-    }
-    _scrollIdleTimer?.cancel();
-  }
-
-  void _scheduleScrollControlsHide() {
-    _scrollIdleTimer?.cancel();
-    _scrollIdleTimer = Timer(const Duration(milliseconds: 650), () {
-      if (mounted && !_scrollControlHovered) {
-        _scrollControlsActive.value = false;
-      }
-    });
-  }
-
-  void _onScrollControlEnter(PointerEnterEvent event) {
-    _scrollControlHovered = true;
-    _showScrollControls();
-  }
-
-  void _onScrollControlExit(PointerExitEvent event) {
-    _scrollControlHovered = false;
-    _scheduleScrollControlsHide();
-  }
-
   Widget _scrollControlHoverZone({
     required Key key,
+    required ValueNotifier<bool> active,
     required ScrollEdge edge,
     required String tooltip,
   }) {
@@ -146,15 +111,15 @@ class _ContentViewState extends ConsumerState<ContentView>
       key: key,
       opaque: false,
       hitTestBehavior: HitTestBehavior.translucent,
-      onEnter: _onScrollControlEnter,
-      onExit: _onScrollControlExit,
+      onEnter: (_) => active.value = true,
+      onExit: (_) => active.value = false,
       child: SizedBox(
         width: 112,
         height: 80,
         child: Center(
           child: ScrollEdgeButton(
             controller: _scrollController,
-            active: _scrollControlsActive,
+            active: active,
             edge: edge,
             tooltip: tooltip,
           ),
@@ -285,6 +250,7 @@ class _ContentViewState extends ConsumerState<ContentView>
               child: Center(
                 child: _scrollControlHoverZone(
                   key: ContentView.topScrollHoverKey,
+                  active: _topScrollControlActive,
                   edge: ScrollEdge.top,
                   tooltip: tr(AppI10n.homeScrollToTop),
                 ),
@@ -297,6 +263,7 @@ class _ContentViewState extends ConsumerState<ContentView>
               child: Center(
                 child: _scrollControlHoverZone(
                   key: ContentView.bottomScrollHoverKey,
+                  active: _bottomScrollControlActive,
                   edge: ScrollEdge.bottom,
                   tooltip: tr(AppI10n.homeScrollToBottom),
                 ),
