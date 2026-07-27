@@ -73,12 +73,15 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
   }
 }
 
-/// Copies the wallpaper's preview image into [destDir].
+/// Copies a project's preview image into [destDir].
 ///
 /// RePKG does not emit the preview, so an extracted scene had no thumbnail and
 /// nothing identifying it but the folder name. Failure here is logged and
 /// ignored: a missing preview must not fail an otherwise good extraction.
-Future<void> copyPreviewImage(WallpaperInfo wallpaper, String destDir) async {
+Future<void> copyProjectPreviewImage(
+  WallpaperInfo wallpaper,
+  String destDir,
+) async {
   final String src = wallpaper.previews;
   if (src.isEmpty) return;
   try {
@@ -236,7 +239,7 @@ Future<ErrorInfo?> _extractProjectOne({
     // some entries and carried on, not that it produced nothing. Reporting the
     // failure is right, but denying an otherwise complete folder its preview
     // image on top of that is not.
-    await copyPreviewImage(wallpaper, outPath);
+    await copyProjectPreviewImage(wallpaper, outPath);
     if (result.exitCode != 0) {
       return ErrorInfo(
         wallpaper: wallpaper,
@@ -365,10 +368,6 @@ Future<(String?, bool)> extractBranch(
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
     final err = await extractPKG(ref, target, outPath);
-    // Unconditional, like the project-mode path: RePKG reports a non-zero exit
-    // for a partial extraction as well as a total one, and the files it did
-    // write still deserve their preview.
-    await copyPreviewImage(wallpaper, outPath);
     return (err, true);
   } else if (targetLower.endsWith('.mp4')) {
     return (
