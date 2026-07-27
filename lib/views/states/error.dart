@@ -58,11 +58,13 @@ class ErrorView extends StatelessWidget {
                                 ),
                         );
                       },
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.broken_image_outlined),
                 ),
               ),
               Expanded(
                 child: ErrorTextInfo(
-                  title: err.wallpaper!.title,
+                  title: '${err.wallpaper!.title} (${err.wallpaper!.id})',
                   label: err.message,
                 ),
               ),
@@ -99,11 +101,8 @@ class ErrorTextInfo extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          Text(
-            label.trim(),
-            style: theme.textTheme.bodyMedium,
-            maxLines: 10,
-            overflow: TextOverflow.ellipsis,
+          SelectionArea(
+            child: Text(label.trim(), style: theme.textTheme.bodyMedium),
           ),
         ],
       ),

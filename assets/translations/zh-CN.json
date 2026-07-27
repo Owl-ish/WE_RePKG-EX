@@ -135,7 +135,16 @@
     "exportImageFailed": "导出图片失败:",
     "createdFolderFailed": "创建文件夹失败:",
     "getWallpaperFailed": "获取壁纸失败:",
-    "parseAcfFailed": "解析 ACF 失败，已忽略附加信息:"
+    "parseAcfFailed": "解析 ACF 失败，已忽略附加信息:",
+    "wallpaperId": "壁纸 ID:",
+    "sourcePath": "来源:",
+    "outputPath": "目标位置:",
+    "extractionOutcome": "结果:",
+    "rePKGPartialOutput": "RePKG 在停止前报告已提取 {count} 个文件，可能存在部分输出。",
+    "rePKGSkippedOutput": "RePKG 未报告新文件，并跳过了 {count} 个已有文件。",
+    "rePKGUnconfirmedOutput": "RePKG 未报告写入任何文件，无法确认提取是否完成。",
+    "rePKGDetails": "RePKG 详细信息:",
+    "rePKGNoDetails": "RePKG 未提供错误详情。"
   },
   "log": {
     "runCommand": "执行完整命令:",

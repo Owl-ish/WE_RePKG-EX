@@ -14,6 +14,7 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
+import 'package:we_repkg/utils/repkg_output.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
@@ -243,14 +244,24 @@ Future<ErrorInfo?> _extractProjectOne({
     if (result.exitCode != 0) {
       return ErrorInfo(
         wallpaper: wallpaper,
-        message: '${tr(AppI10n.errorExtractFailed)} ${result.stderr}',
+        message: _formatRePKGFailure(
+          wallpaper,
+          outPath,
+          exitCode: result.exitCode,
+          summary: summarizeRePKGOutput(result.stdout, result.stderr),
+        ),
       );
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
     return ErrorInfo(
       wallpaper: wallpaper,
-      message: '${tr(AppI10n.errorExtractFailed)} $e',
+      message: _formatRePKGFailure(
+        wallpaper,
+        outPath,
+        exitCode: null,
+        details: e.toString(),
+      ),
     );
   }
   return null;
@@ -285,16 +296,18 @@ Future<void> extractWallpapers(
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
+  final sceneGate = SerialWorkGate();
 
-  // Every wallpaper here writes into the SAME export folder, unlike
-  // extractProject. That is safe only because claimFilePath reserves output
-  // names atomically; without it two workers could be handed the same filename.
+  // Videos and image folders can still copy concurrently. RePKG scene packages
+  // cannot: RePKG chooses internal names such as scene.json and materials/*, so
+  // simultaneous processes collide when this mode shares one export folder.
   final results = await runBounded<WallpaperInfo, (String?, bool)>(
     wallpapers,
     (wallpaper) => extractBranch(
       ref,
       wallpaper,
       outPath,
+      sceneGate: sceneGate,
       // Only a single-wallpaper run can own the progress line.
       detailedProgress: wallpapers.length == 1,
     ),
@@ -361,13 +374,15 @@ Future<(String?, bool)> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath, {
+  SerialWorkGate? sceneGate,
   bool detailedProgress = false,
 }) async {
   final target = wallpaper.target;
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
-    final err = await extractPKG(ref, target, outPath);
+    Future<String?> work() => extractPKG(ref, wallpaper, outPath);
+    final err = sceneGate == null ? await work() : await sceneGate.run(work);
     return (err, true);
   } else if (targetLower.endsWith('.mp4')) {
     return (
@@ -449,7 +464,11 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
-Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
+Future<String?> extractPKG(
+  WidgetRef ref,
+  WallpaperInfo wallpaper,
+  String outPath,
+) async {
   // No text write here: it set the same string the batch already set, and with
   // several workers running it just fought the others for the provider.
   String rePKGPath = ref.read(toolPathProvider)!;
@@ -464,23 +483,68 @@ Future<String?> extractPKG(WidgetRef ref, String file, String outPath) async {
       ?overwrite,
       '-o',
       outPath,
-      file,
+      wallpaper.target,
     ].cast<String>().toList();
     // 提取项目，移动materials一级目录的文件到外面
-    if (excludeTexture) args = ['extract', '-o', outPath, file];
+    if (excludeTexture) {
+      args = ['extract', '-o', outPath, wallpaper.target];
+    }
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
     final token = ref.read(activeCancelTokenProvider) ?? CancelToken();
     final result = await runRePKG(rePKGPath, args, token);
     if (token.isCancelled) return null;
     if (result.exitCode != 0) {
-      return '${tr(AppI10n.errorExtractFailed)} (Exit code: ${result.exitCode})\n${result.stderr}';
+      final summary = summarizeRePKGOutput(result.stdout, result.stderr);
+      return _formatRePKGFailure(
+        wallpaper,
+        outPath,
+        exitCode: result.exitCode,
+        summary: summary,
+      );
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
-    return '${tr(AppI10n.errorExtractFailed)} $e';
+    return _formatRePKGFailure(
+      wallpaper,
+      outPath,
+      exitCode: null,
+      details: e.toString(),
+    );
   }
   return null;
+}
+
+String _formatRePKGFailure(
+  WallpaperInfo wallpaper,
+  String outPath, {
+  required int? exitCode,
+  RePKGOutputSummary? summary,
+  String? details,
+}) {
+  final outcome = switch (summary) {
+    RePKGOutputSummary(extractedFiles: final count) when count > 0 => tr(
+      AppI10n.errorRePKGPartialOutput,
+      namedArgs: {'count': '$count'},
+    ),
+    RePKGOutputSummary(skippedFiles: final count) when count > 0 => tr(
+      AppI10n.errorRePKGSkippedOutput,
+      namedArgs: {'count': '$count'},
+    ),
+    _ => tr(AppI10n.errorRePKGUnconfirmedOutput),
+  };
+  final detailText = (details ?? summary?.details ?? '').trim();
+  final lines = <String>[
+    tr(AppI10n.errorExtractFailed),
+    '${tr(AppI10n.errorWallpaperId)} ${wallpaper.id}',
+    '${tr(AppI10n.errorSourcePath)} ${wallpaper.target}',
+    '${tr(AppI10n.errorOutputPath)} $outPath',
+    '${tr(AppI10n.errorExtractionOutcome)} $outcome',
+    if (exitCode != null) '${tr(AppI10n.logExitCode)} $exitCode',
+    '${tr(AppI10n.errorRePKGDetails)} '
+        '${detailText.isEmpty ? tr(AppI10n.errorRePKGNoDetails) : detailText}',
+  ];
+  return lines.join('\n');
 }
 
 Future<String?> extractVideo(

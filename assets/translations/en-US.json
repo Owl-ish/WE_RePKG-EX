@@ -135,7 +135,16 @@
     "exportImageFailed": "Image export failed:",
     "createdFolderFailed": "Folder creation failed:",
     "getWallpaperFailed": "Failed to get wallpaper:",
-    "parseAcfFailed": "Failed to parse ACF file, ignoring extra info:"
+    "parseAcfFailed": "Failed to parse ACF file, ignoring extra info:",
+    "wallpaperId": "Wallpaper ID:",
+    "sourcePath": "Source:",
+    "outputPath": "Destination:",
+    "extractionOutcome": "Outcome:",
+    "rePKGPartialOutput": "RePKG reported {count} files extracted before stopping. Partial output may exist.",
+    "rePKGSkippedOutput": "RePKG reported no new files and skipped {count} existing files.",
+    "rePKGUnconfirmedOutput": "RePKG did not report writing any files. Extraction could not be confirmed.",
+    "rePKGDetails": "RePKG details:",
+    "rePKGNoDetails": "RePKG provided no error details."
   },
   "log": {
     "runCommand": "Running command:",

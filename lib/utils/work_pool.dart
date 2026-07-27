@@ -1,4 +1,25 @@
+import 'dart:async';
+
 import 'package:we_repkg/utils/cancel_token.dart';
+
+/// Serializes only the work routed through this gate.
+///
+/// This lets a mixed extraction batch keep independent copies in parallel while
+/// preventing RePKG processes from writing the same filenames into one shared
+/// wallpaper export directory.
+class SerialWorkGate {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> run<T>(Future<T> Function() work) {
+    final Future<void> previous = _tail;
+    final done = Completer<void>();
+    _tail = done.future;
+
+    return previous.then((_) => work()).whenComplete(() {
+      if (!done.isCompleted) done.complete();
+    });
+  }
+}
 
 /// Runs [work] over [items] with at most [concurrency] in flight, returning the
 /// results in input order.

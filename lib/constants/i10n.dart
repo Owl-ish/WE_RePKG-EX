@@ -155,6 +155,16 @@ class AppI10n {
   static const String errorCreatedFolderFailed = 'error.createdFolderFailed';
   static const String errorGetWallpaperFailed = 'error.getWallpaperFailed';
   static const String errorParseAcfFailed = 'error.parseAcfFailed';
+  static const String errorWallpaperId = 'error.wallpaperId';
+  static const String errorSourcePath = 'error.sourcePath';
+  static const String errorOutputPath = 'error.outputPath';
+  static const String errorExtractionOutcome = 'error.extractionOutcome';
+  static const String errorRePKGPartialOutput = 'error.rePKGPartialOutput';
+  static const String errorRePKGSkippedOutput = 'error.rePKGSkippedOutput';
+  static const String errorRePKGUnconfirmedOutput =
+      'error.rePKGUnconfirmedOutput';
+  static const String errorRePKGDetails = 'error.rePKGDetails';
+  static const String errorRePKGNoDetails = 'error.rePKGNoDetails';
 
   // 日志 / 调试输出 (log / debug output)
   static const String logRunCommand = 'log.runCommand';

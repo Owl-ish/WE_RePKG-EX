@@ -1,0 +1,56 @@
+class RePKGOutputSummary {
+  const RePKGOutputSummary({
+    required this.extractedFiles,
+    required this.skippedFiles,
+    required this.details,
+  });
+
+  final int extractedFiles;
+  final int skippedFiles;
+  final String details;
+}
+
+/// Reduces RePKG's verbose output to the facts useful in an error dialog.
+RePKGOutputSummary summarizeRePKGOutput(String stdout, String stderr) {
+  final lines = '$stdout\n$stderr'
+      .split(RegExp(r'\r?\n'))
+      .map(_stripAnsi)
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  int extractedFiles = 0;
+  int skippedFiles = 0;
+  final details = <String>[];
+  for (final line in lines) {
+    final lower = line.toLowerCase();
+    if (RegExp(r'^\*\s*extracting:', caseSensitive: false).hasMatch(line)) {
+      extractedFiles++;
+      continue;
+    }
+    if (RegExp(
+      r'^\*\s*skipping,\s*already exists:',
+      caseSensitive: false,
+    ).hasMatch(line)) {
+      skippedFiles++;
+      continue;
+    }
+    if (lower.contains('exception') ||
+        lower.contains('error') ||
+        lower.contains('failed') ||
+        lower.contains('fatal') ||
+        lower.startsWith('at ')) {
+      if (!details.contains(line)) details.add(line);
+    }
+  }
+
+  return RePKGOutputSummary(
+    extractedFiles: extractedFiles,
+    skippedFiles: skippedFiles,
+    details: details.take(8).join('\n'),
+  );
+}
+
+String _stripAnsi(String value) {
+  return value.replaceAll(RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]'), '');
+}
