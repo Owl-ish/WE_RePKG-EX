@@ -1,23 +1,12 @@
 import 'dart:io';
 
 /// Streams [source] into [destination], reporting progress at most once per
-/// [throttle].
+/// [throttle], and always once at the end.
 ///
-/// Two things this fixes over a hand-rolled `listen` + `sink.add` loop:
-///
-/// Backpressure. `IOSink.add` never blocks, so a fast read into a slower write
-/// target buffers the difference in memory. Copying a multi-gigabyte wallpaper
-/// video to a network drive or a slow USB stick could grow the heap by the
-/// whole backlog. `addStream` pauses the read when the sink cannot keep up.
-///
-/// Progress cost. The read stream delivers roughly 64KB per chunk, so a 3GB
-/// video fires about 50,000 progress events. Driving a provider write and a
-/// widget rebuild from each one is most of the jank during a video export.
-/// Throttling to ten updates a second keeps the counter smooth and costs
-/// nothing.
-///
-/// [onProgress] always fires once for the final chunk, so callers never end on
-/// a stale count.
+/// addStream rather than a listen loop, because IOSink.add never blocks: a fast
+/// read into a slow USB stick would buffer the whole difference in memory.
+/// Throttled because 64KB chunks mean a 3GB video fires ~50,000 events, and a
+/// provider write on each is most of the jank during a video export.
 Future<void> copyFileWithProgress(
   File source,
   File destination, {
@@ -49,8 +38,7 @@ Future<void> copyFileWithProgress(
       }),
     );
   } finally {
-    // Exactly one close, in one place. The previous version closed the sink in
-    // both the stream's onDone and an enclosing finally.
+    // Closed here and nowhere else.
     await sink.close();
   }
 }

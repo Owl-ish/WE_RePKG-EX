@@ -10,13 +10,11 @@ import 'package:we_repkg/views/top/title.dart';
 class TopView extends StatelessWidget {
   const TopView({super.key});
 
-  /// Widest the wallpaper count gets before it ellipsizes. Capping it rather
-  /// than making it flexible keeps the search field the row's only flexible
-  /// child, so the view controls stay flush against the right edge.
+  /// Capped rather than flexible, so the search field stays the row's only
+  /// flexible child and the view controls stay flush right.
   static const double _titleMaxWidth = 260;
 
-  /// The search field grows into the empty middle of the bar, but a field
-  /// wider than this reads as a text editor rather than a search box.
+  /// Wider than this and the search field reads as a text editor.
   static const double _searchMaxWidth = 640;
 
   @override
@@ -34,9 +32,8 @@ class TopView extends StatelessWidget {
           SizedBox(width: 4),
           Refresh(),
           SizedBox(width: 16),
-          // Expanded absorbs every spare pixel, so the row can never overflow
-          // however narrow the window gets, and Center puts the search in the
-          // middle of what's left rather than jammed against the filter button.
+          // Expanded absorbs the slack so the row cannot overflow, and Center
+          // keeps the search off the filter button.
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -45,8 +42,7 @@ class TopView extends StatelessWidget {
               ),
             ),
           ),
-          // Wider gap after the search than between the view controls, so the
-          // filter and the two sort controls read as one group.
+          // Wider gap here than between the controls, so they read as a group.
           SizedBox(width: 16),
           FilterDropdown(),
           SizedBox(width: 8),

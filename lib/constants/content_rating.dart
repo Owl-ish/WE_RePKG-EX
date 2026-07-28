@@ -1,10 +1,8 @@
-/// Wallpaper Engine age ratings as they appear in a project.json `contentrating`
-/// field, lowercased to match [WallpaperInfo.contentRating].
+/// project.json's `contentrating`, lowercased.
 ///
-/// Not `ratingsex` / `ratingviolence`. Those are the finer-grained descriptors
-/// (none / mild / full / adult) Wallpaper Engine combines to derive this value;
-/// they are absent on roughly a fifth of workshop items and do not map onto the
-/// three age levels.
+/// Not `ratingsex`/`ratingviolence`, which are the descriptors this value is
+/// derived from. They are missing on about a fifth of workshop items and do not
+/// map onto the three age levels.
 class ContentRating {
   static const String everyone = 'everyone';
   static const String questionable = 'questionable';

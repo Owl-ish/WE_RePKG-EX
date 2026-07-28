@@ -2,11 +2,8 @@ import 'dart:async';
 
 import 'package:we_repkg/utils/cancel_token.dart';
 
-/// Serializes only the work routed through this gate.
-///
-/// This lets a mixed extraction batch keep independent copies in parallel while
-/// preventing RePKG processes from writing the same filenames into one shared
-/// wallpaper export directory.
+/// Serializes only the work routed through it, so a mixed batch can copy in
+/// parallel while RePKG processes take turns over a shared export folder.
 class SerialWorkGate {
   Future<void> _tail = Future<void>.value();
 
@@ -21,25 +18,15 @@ class SerialWorkGate {
   }
 }
 
-/// Runs [work] over [items] with at most [concurrency] in flight, returning the
+/// Runs [work] over [items] with at most [concurrency] in flight, returning
 /// results in input order.
 ///
-/// Extraction used to await one wallpaper at a time, so a batch used a single
-/// core while the other seven idled. This keeps a fixed number of workers busy
-/// instead.
+/// Completions arrive out of order, so [onComplete] is a count, not a cursor
+/// into [items]. A throw propagates once the other workers settle; callers that
+/// must finish the batch return errors instead of throwing.
 ///
-/// [onStart] fires as a worker picks an item up, and [onComplete] as it finishes
-/// one, which is what progress reporting hangs off. Because several items are in
-/// flight, completions arrive out of order: count them, do not treat them as a
-/// cursor into [items].
-///
-/// A throw from [work] propagates once the other in-flight workers settle, so
-/// one bad item cannot leave orphaned futures running. Callers that must finish
-/// the whole batch regardless should return errors rather than throwing, which
-/// is what the extract functions do.
-/// When [cancelToken] is cancelled, workers stop claiming new items. Whatever is
-/// already in flight still finishes, so results stay consistent; entries never
-/// reached come back as null, which is why the return type is nullable.
+/// Cancelling stops workers claiming new items. Whatever is in flight finishes,
+/// and entries never reached come back null.
 Future<List<R?>> runBounded<T, R>(
   List<T> items,
   Future<R> Function(T item) work, {

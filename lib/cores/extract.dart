@@ -37,29 +37,20 @@ void endBatch(WidgetRef ref) {
   ref.read(activeCancelTokenProvider.notifier).update(null);
 }
 
-/// Runs RePKG so a batch can kill it mid-extract.
-///
-/// Process.run cannot be cancelled: it returns only once the child exits, so a
-/// cancelled batch used to sit waiting for a large scene to finish unpacking.
-/// Process.start hands back a handle the token can kill.
-///
-/// stdout and stderr drain concurrently. Reading one to completion before the
-/// other deadlocks as soon as the child fills the pipe nobody is reading, which
-/// RePKG does on a verbose extract.
+/// Runs RePKG through Process.start so a cancelled batch can kill it, rather
+/// than waiting for a large scene to finish unpacking.
 Future<({int exitCode, String stdout, String stderr})> runRePKG(
   String rePKGPath,
   List<String> args,
   CancelToken token,
 ) async {
-  // Invoke the exe directly (no shell): Dart quotes args correctly, which is
-  // more robust for tool/output paths containing spaces.
+  // No shell: Dart quotes args correctly for paths containing spaces.
   final process = await Process.start(rePKGPath, args);
   token.register(process);
   try {
-    // systemEncoding, not utf8: Process.run decoded child output with the
-    // system code page, and RePKG emits the console encoding (GBK on a Chinese
-    // Windows). Decoding that as UTF-8 throws FormatException on the first
-    // non-ASCII byte and failed the extraction.
+    // systemEncoding, not utf8. RePKG emits the console code page, GBK on a
+    // Chinese Windows, and decoding that as UTF-8 throws on the first
+    // non-ASCII byte. Both streams drain at once or a full pipe deadlocks.
     final streams = await Future.wait([
       process.stdout.transform(systemEncoding.decoder).join(),
       process.stderr.transform(systemEncoding.decoder).join(),
@@ -74,11 +65,9 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
   }
 }
 
-/// Copies a project's preview image into [destDir].
-///
-/// RePKG does not emit the preview, so an extracted scene had no thumbnail and
-/// nothing identifying it but the folder name. Failure here is logged and
-/// ignored: a missing preview must not fail an otherwise good extraction.
+/// Copies a project's preview image into [destDir]. RePKG does not emit one, so
+/// without this an extracted scene has nothing identifying it but its folder
+/// name. Failure is logged and ignored.
 Future<void> copyProjectPreviewImage(
   WallpaperInfo wallpaper,
   String destDir,
@@ -125,12 +114,10 @@ Future<void> extractProject(
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final basePath = outPath;
-  // Hoisted out of the worker: these never change mid-batch, and reading a
-  // provider once beats reading it per wallpaper.
+  // Read once rather than per wallpaper; neither changes mid-batch.
   final bool useTitleName = ref.read(useTitleNameProvider);
   final bool overwrite = ref.read(replaceFileProvider);
-  // Resolved before any worker starts, so the folder assignment is decided
-  // single-threaded and cannot race.
+  // Assigned before any worker starts, so the folder choice cannot race.
   final Map<String, String> outDirs = resolveProjectFolders(
     wallpapers,
     basePath,
@@ -138,8 +125,7 @@ Future<void> extractProject(
   );
   final token = startBatch(ref);
 
-  // Safe to run in parallel: resolveProjectFolders guarantees every wallpaper
-  // owns a distinct subfolder, so workers share no output directory.
+  // Parallel is safe here: every wallpaper owns a distinct subfolder.
   final results = await runBounded<WallpaperInfo, ErrorInfo?>(
     wallpapers,
     (wallpaper) => _extractProjectOne(
@@ -166,10 +152,8 @@ Future<void> extractProject(
 /// Assigns each wallpaper a distinct output folder under [basePath].
 ///
 /// Two wallpapers can share a title, and sanitising illegal characters can make
-/// two different titles collide as well. Serially that merged both into one
-/// folder; in parallel it would have two workers writing into the same directory
-/// at once. Suffixing duplicates here, before the pool starts, keeps the
-/// decision deterministic and off the filesystem.
+/// two more collide, which would put two workers in one directory. Suffixed
+/// here, before the pool starts, so the decision is deterministic.
 Map<String, String> resolveProjectFolders(
   List<WallpaperInfo> wallpapers,
   String basePath, {
@@ -203,8 +187,8 @@ Future<ErrorInfo?> _extractProjectOne({
   required CancelToken token,
 }) async {
   try {
-    // recursive+existing-tolerant: two workers can be creating sibling folders
-    // under the same parent at the same time.
+    // Recursive and existing-tolerant: two workers may be creating siblings
+    // under the same parent.
     await Directory(outPath).create(recursive: true);
   } catch (e) {
     debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
@@ -236,10 +220,8 @@ Future<ErrorInfo?> _extractProjectOne({
     debugPrint('${tr(AppI10n.logRunCommand)} $rePKGPath ${args.join(' ')}');
     final result = await runRePKG(rePKGPath!, args, token);
     if (token.isCancelled) return null;
-    // Before the exit code is judged: a non-zero exit now means RePKG skipped
-    // some entries and carried on, not that it produced nothing. Reporting the
-    // failure is right, but denying an otherwise complete folder its preview
-    // image on top of that is not.
+    // Before the exit code is judged. A non-zero exit usually means RePKG
+    // skipped some entries and carried on, so the folder still wants a preview.
     await copyProjectPreviewImage(wallpaper, outPath);
     if (result.exitCode != 0) {
       return ErrorInfo(
@@ -298,9 +280,8 @@ Future<void> extractWallpapers(
   final token = startBatch(ref);
   final sceneGate = SerialWorkGate();
 
-  // Videos and image folders can still copy concurrently. RePKG scene packages
-  // cannot: RePKG chooses internal names such as scene.json and materials/*, so
-  // simultaneous processes collide when this mode shares one export folder.
+  // Videos and image folders copy concurrently. Scenes cannot: RePKG writes
+  // fixed names like scene.json, and this mode shares one export folder.
   final results = await runBounded<WallpaperInfo, (String?, bool)>(
     wallpapers,
     (wallpaper) => extractBranch(
@@ -317,8 +298,8 @@ Future<void> extractWallpapers(
     onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
   );
 
-  // OR, not assignment: the previous version kept only the last item's flag, so
-  // a batch ending in a video skipped the cleanup a .pkg earlier had asked for.
+  // OR, not assignment, or a batch ending in a video skips the cleanup an
+  // earlier .pkg asked for.
   bool needClear = false;
   for (int i = 0; i < results.length; i++) {
     final result = results[i];
@@ -366,10 +347,8 @@ Future<void> extractAll(WidgetRef ref) async {
   }
 }
 
-/// [detailedProgress] enables the per-file byte counter. It is off whenever a
-/// batch runs more than one wallpaper at a time: with four workers each writing
-/// its own progress line into a single provider, the text flickers between
-/// unrelated wallpapers instead of reading as progress.
+/// [detailedProgress] turns on the per-file byte counter. Off for batches, where
+/// several workers writing one progress line just makes it flicker.
 Future<(String?, bool)> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
@@ -405,8 +384,7 @@ Future<(String?, bool)> extractBranch(
       false,
     );
   }
-  // web / application / any other type RePKG does not handle: copy the whole
-  // folder into a per-wallpaper subfolder so it stays re-importable.
+  // Anything RePKG does not handle: copy the folder into a subfolder of its own.
   final name = ref.read(useTitleNameProvider)
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
@@ -418,11 +396,10 @@ Future<(String?, bool)> extractBranch(
   return (err, false);
 }
 
-/// Copies the entire wallpaper folder into [destDir] (every file, so the output
-/// stays a valid, re-importable Wallpaper Engine wallpaper). Used for web,
-/// application, and any type RePKG does not unpack.
-/// Takes [overwrite] directly rather than reading a provider, so it can run
-/// inside a worker without touching a WidgetRef.
+/// Copies the whole wallpaper folder into [destDir], so the output stays a
+/// re-importable Wallpaper Engine wallpaper. For web, application, and anything
+/// else RePKG does not unpack. Takes [overwrite] rather than a provider so it
+/// can run inside a worker.
 Future<String?> copyWallpaperFolderTo(
   WallpaperInfo wallpaper,
   String destDir, {
@@ -431,10 +408,7 @@ Future<String?> copyWallpaperFolderTo(
   try {
     final src = Directory(wallpaper.folder);
     await Directory(destDir).create(recursive: true);
-    // Directories already created during this copy. The previous version issued
-    // a recursive create for every single file's parent, even though the
-    // directory walk had just created it, which is one redundant syscall per
-    // file across the whole tree.
+    // Tracked so each directory is created once, not once per file in it.
     final Set<String> createdDirs = {destDir};
     await for (final entity in src.list(recursive: true, followLinks: false)) {
       final dest = path.join(
@@ -449,8 +423,7 @@ Future<String?> copyWallpaperFolderTo(
         // Respect the "replace existing" toggle: skip files already present.
         if (!overwrite && await File(dest).exists()) continue;
         final parent = path.dirname(dest);
-        // list() does not guarantee a parent arrives before its children, so
-        // this still creates on demand, just once per directory.
+        // list() can hand back a child before its parent.
         if (createdDirs.add(parent)) {
           await Directory(parent).create(recursive: true);
         }

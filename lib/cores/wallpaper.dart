@@ -28,14 +28,10 @@ Future<bool> directoryExists(String path) => Directory(path).exists();
 Future<List<String>> getWindowsDisks({
   DirectoryProbe probe = directoryExists,
 }) async {
-  // Probe drive letters A-Z instead of the deprecated `wmic`; returns e.g.
-  // ['C:', 'D:'] using no external process.
-  //
-  // All 26 probes go out at once rather than awaiting each in turn. An absent
-  // A: or B: floppy letter can block for seconds on some machines, and serially
-  // that cost lands on every startup scan. Future.wait keeps input order, so
-  // the result stays alphabetical and the system drive stays first, which
-  // _generateWallpaperPaths relies on.
+  // Probing letters beats the deprecated `wmic` and spawns no process. All 26
+  // go at once because an absent A: or B: can block for seconds. Future.wait
+  // keeps input order, so the system drive stays first as
+  // _generateWallpaperPaths expects.
   try {
     final letters = [
       for (int code = 'A'.codeUnitAt(0); code <= 'Z'.codeUnitAt(0); code++)
@@ -107,9 +103,8 @@ Future<void> _handleStorageLogic(String? wallpaperPath) async {
 }
 
 Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
-  // Read providers up front (before any await): switching folders unmounts the
-  // widget owning `ref`, so the scan writes its result back through these
-  // captured notifiers, and the scan itself (scanWallpapers) never touches ref.
+  // Read before any await: switching folders unmounts the widget owning `ref`,
+  // so the scan writes back through these captured notifiers instead.
   final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
   final CurrentState currentState = ref.read(currentStateProvider.notifier);
   final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
@@ -152,17 +147,15 @@ Future<List<AcfInfo>> getAcfInfo() async {
     if (content.isEmpty) return acfInfoList;
     acfInfoList = convertToAcfInfoList(content); // 转换为AcfInfo对象列表
   } catch (e) {
-    // ACF only supplies extra info (size / update time); a parse failure must
-    // be ignored rather than aborting the whole scan.
+    // ACF only adds size and update time, so a parse failure is not fatal.
     debugPrint('${tr(AppI10n.errorParseAcfFailed)} $e');
   }
   return acfInfoList;
 }
 
-/// Pure scan of a wallpaper library folder: reads each folder's project.json in
-/// bounded parallel batches and returns the wallpapers (in directory order) plus
-/// the earliest create time. Holds no WidgetRef; the caller writes the results
-/// into providers.
+/// Reads every project.json in bounded parallel batches and returns the
+/// wallpapers in directory order, plus the earliest create time. Holds no
+/// WidgetRef, so the caller writes the results into providers.
 Future<({List<WallpaperInfo> wallpapers, DateTime? earliestDate})>
 scanWallpapers(String? folderPath) async {
   final List<WallpaperInfo> wallpapers = [];
@@ -184,11 +177,9 @@ scanWallpapers(String? folderPath) async {
   for (var acfInfo in acfInfoList) {
     acfInfoMap[acfInfo.id] = acfInfo;
   }
-  // Only directory entries, kept in original order (Future.wait returns
-  // results in input order).
+  // Directories only, in original order.
   final folders = dirList.whereType<Directory>().toList();
-  // Bounded concurrency: parse project.json in parallel batches to avoid
-  // opening too many file handles at once.
+  // Batched, or a large library opens too many file handles at once.
   const int batchSize = 24;
   for (int i = 0; i < folders.length; i += batchSize) {
     final batch = folders.skip(i).take(batchSize);
@@ -206,9 +197,8 @@ scanWallpapers(String? folderPath) async {
   return (wallpapers: wallpapers, earliestDate: earliestDate);
 }
 
-/// Parses a single wallpaper folder's project.json into a [WallpaperInfo].
-/// Returns null (skipping the item, without aborting the whole scan) when the
-/// project.json is missing or fails to parse.
+/// Parses one folder's project.json. Null if it is missing or unreadable, which
+/// skips the wallpaper rather than aborting the scan.
 Future<WallpaperInfo?> _parseWallpaperFolder(
   Directory folder,
   Map<String, AcfInfo> acfInfoMap,
@@ -219,8 +209,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
   try {
     String jsonString = await file.readAsString();
     final jsonMap = json.decode(jsonString);
-    // User-created wallpapers (myprojects) may have a project.json without a
-    // title; fall back to the folder id.
+    // myprojects wallpapers often have no title; fall back to the folder id.
     String title = jsonMap['title'] ?? id;
     String? contentRating = jsonMap['contentrating'];
     if (contentRating == null) {
@@ -237,8 +226,7 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       }
       type = '';
     }
-    // preview may be missing (e.g. a self-made wallpaper with no preview yet);
-    // leave it empty and the UI shows a placeholder.
+    // May be missing on a self-made wallpaper; the UI shows a placeholder.
     String? imgName = jsonMap['preview'];
     String previews = imgName == null ? '' : path.join(folder.path, imgName);
     String? target = jsonMap['file'];
@@ -246,11 +234,9 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       String temp = path.join(folder.path, 'directories', 'customdirectory');
       target = await Directory(temp).exists() ? temp : '';
     } else if (target.toLowerCase().endsWith('json')) {
-      // project.json names scene.json whether the scene is still packed or has
-      // already been unpacked. Claiming scene.pkg either way meant RePKG ran
-      // against a file that was not there, and the wallpaper silently produced
-      // nothing. With no pkg present, target the folder so extraction copies
-      // the unpacked files instead.
+      // project.json says scene.json whether the scene is packed or not, so
+      // assuming scene.pkg pointed RePKG at a file that wasn't there. With no
+      // pkg present, target the folder and copy the unpacked files.
       final bool packed = await File(
         path.join(folder.path, 'scene.pkg'),
       ).exists();
