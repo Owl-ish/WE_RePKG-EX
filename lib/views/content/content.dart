@@ -1,9 +1,10 @@
-import 'dart:async';
+import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
@@ -35,7 +36,7 @@ class ContentView extends ConsumerStatefulWidget {
 }
 
 class _ContentViewState extends ConsumerState<ContentView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const ValueKey<String> _gridTransitionKey = ValueKey<String>(
     'wallpaper-grid-content',
   );
@@ -59,10 +60,23 @@ class _ContentViewState extends ConsumerState<ContentView>
 
   Set<String> _dragIds = <String>{};
   bool _dragWriteQueued = false;
-  Timer? _autoScroll;
+
+  /// A ticker, not a timer: a 16ms timer beats against vsync, so twice a second
+  /// two ticks land in one frame and the grid lurches, and the speed ends up
+  /// depending on the monitor's refresh rate.
+  Ticker? _autoScroll;
+  Duration _lastTick = Duration.zero;
+
+  /// Grid geometry, refreshed by the builder. The ticker cannot close over the
+  /// builder's locals: it outlives the rebuild that made them, and the grid
+  /// rebuilds on every selection write.
+  double _viewportHeight = 0;
+  int _columns = 1;
+  double _tileExtent = 0;
+  List<WallpaperInfo> _tiles = const <WallpaperInfo>[];
 
   static const double _autoScrollZone = 60;
-  static const double _autoScrollMaxStep = 18;
+  static const double _autoScrollSpeed = 1100;
 
   @override
   void initState() {
@@ -108,7 +122,7 @@ class _ContentViewState extends ConsumerState<ContentView>
 
   @override
   void dispose() {
-    _autoScroll?.cancel();
+    _autoScroll?.dispose();
     _marquee.dispose();
     _topScrollControlActive.dispose();
     _bottomScrollControlActive.dispose();
@@ -162,9 +176,83 @@ class _ContentViewState extends ConsumerState<ContentView>
     });
   }
 
+  /// Viewport point to grid point: the grid keeps scrolling under the pointer,
+  /// so the rectangle is stored against the wallpapers, not the window.
+  Offset _toGrid(Offset local) => local + Offset(0, _scrollController.offset);
+
+  void _updateDrag() {
+    final Offset? from = _dragFrom;
+    if (from == null) return;
+    final Rect box = Rect.fromPoints(from, _toGrid(_dragPointer));
+    _marquee.value = box;
+
+    final Set<String> ids = coveredTiles(
+      box,
+      origin: const Offset(LayoutNums.edgeInset, LayoutNums.contentGap),
+      columns: _columns,
+      tile: _tileExtent,
+      spacing: _gridSpacing,
+      count: _tiles.length,
+    ).map((i) => _tiles[i].id).toSet();
+    if (setEquals(ids, _dragIds)) return;
+    _dragIds = ids;
+
+    // One write per frame. Each one refilters and re-sorts the whole library,
+    // and a fast mouse reports twice a frame.
+    if (_dragWriteQueued) return;
+    _dragWriteQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dragWriteQueued = false;
+      if (mounted) {
+        ref.read(wallpaperListProvider.notifier).setCheckedExactly(_dragIds);
+      }
+    });
+  }
+
+  /// Drag near an edge and the grid keeps scrolling, faster the closer you get,
+  /// so a selection can run past one screenful.
+  void _autoScrollTick(Duration elapsed) {
+    final double seconds =
+        (elapsed - _lastTick).inMicroseconds / Duration.microsecondsPerSecond;
+    _lastTick = elapsed;
+    if (!_scrollController.hasClients || seconds <= 0) return;
+
+    final double overTop = _autoScrollZone - _dragPointer.dy;
+    final double overBottom =
+        _dragPointer.dy - (_viewportHeight - _autoScrollZone);
+    final double push = overTop > 0 ? -overTop : max(0, overBottom);
+    if (push == 0) return;
+
+    final ScrollPosition at = _scrollController.position;
+    final double step =
+        (push / _autoScrollZone).clamp(-1, 1) * _autoScrollSpeed * seconds;
+    final double next = (at.pixels + step).clamp(
+      at.minScrollExtent,
+      at.maxScrollExtent,
+    );
+    if (next == at.pixels) return;
+    _scrollController.jumpTo(next);
+    _updateDrag();
+  }
+
+  void _startAutoScroll() {
+    if (_autoScroll != null) return;
+    _lastTick = Duration.zero;
+    _autoScroll = createTicker(_autoScrollTick)..start();
+  }
+
+  void _endDrag() {
+    _autoScroll?.dispose();
+    _autoScroll = null;
+    _dragFrom = null;
+    _marquee.value = null;
+  }
+
+  static const double _gridSpacing = 8;
+
   Widget _buildGrid(List<WallpaperInfo> list) {
     const double width = 180;
-    const double spacing = 8;
+    const double spacing = _gridSpacing;
     return LayoutBuilder(
       key: _gridTransitionKey,
       builder: (context, constraints) {
@@ -181,76 +269,10 @@ class _ContentViewState extends ConsumerState<ContentView>
         final double tile =
             (gridWidth - (spacing * (columnCount - 1))) / columnCount;
 
-        // Grid coordinates: viewport plus however far the list is scrolled.
-        Offset toGrid(Offset local) =>
-            local + Offset(0, _scrollController.offset);
-
-        void drag() {
-          final Offset? from = _dragFrom;
-          if (from == null) return;
-          final Rect box = Rect.fromPoints(from, toGrid(_dragPointer));
-          _marquee.value = box;
-
-          final Set<String> ids = coveredTiles(
-            box,
-            origin: const Offset(LayoutNums.edgeInset, LayoutNums.contentGap),
-            columns: columnCount,
-            tile: tile,
-            spacing: spacing,
-            count: list.length,
-          ).map((i) => list[i].id).toSet();
-          if (setEquals(ids, _dragIds)) return;
-          _dragIds = ids;
-
-          // One write per frame. Each one refilters and re-sorts the whole
-          // library, and a fast mouse reports twice a frame.
-          if (_dragWriteQueued) return;
-          _dragWriteQueued = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _dragWriteQueued = false;
-            if (!mounted) return;
-            ref
-                .read(wallpaperListProvider.notifier)
-                .setCheckedExactly(_dragIds);
-          });
-        }
-
-        // Drag near an edge and the grid keeps scrolling, faster the closer you
-        // get, so a selection can run past one screenful.
-        void autoScrollTick(double height) {
-          final double overTop = _autoScrollZone - _dragPointer.dy;
-          final double overBottom =
-              _dragPointer.dy - (height - _autoScrollZone);
-          final double push = overTop > 0
-              ? -overTop
-              : (overBottom > 0 ? overBottom : 0);
-          if (push == 0) return;
-
-          final ScrollPosition at = _scrollController.position;
-          final double step =
-              (push / _autoScrollZone).clamp(-1, 1) * _autoScrollMaxStep;
-          final double next = (at.pixels + step).clamp(
-            at.minScrollExtent,
-            at.maxScrollExtent,
-          );
-          if (next == at.pixels) return;
-          _scrollController.jumpTo(next);
-          drag();
-        }
-
-        void startAutoScroll(double height) {
-          _autoScroll ??= Timer.periodic(
-            const Duration(milliseconds: 16),
-            (_) => autoScrollTick(height),
-          );
-        }
-
-        void endDrag() {
-          _autoScroll?.cancel();
-          _autoScroll = null;
-          _dragFrom = null;
-          _marquee.value = null;
-        }
+        _viewportHeight = constraints.maxHeight;
+        _columns = columnCount;
+        _tileExtent = tile;
+        _tiles = list;
 
         return Stack(
           key: const ValueKey<String>('wallpaper-content-stack'),
@@ -262,18 +284,21 @@ class _ContentViewState extends ConsumerState<ContentView>
               behavior: HitTestBehavior.translucent,
               onPanStart: (d) {
                 _dragPointer = d.localPosition;
-                _dragFrom = toGrid(d.localPosition);
+                _dragFrom = _toGrid(d.localPosition);
                 // Cleared per drag, or repeating a rectangle matches the last
                 // drag's set and writes nothing.
                 _dragIds = <String>{};
-                startAutoScroll(constraints.maxHeight);
               },
               onPanUpdate: (d) {
                 _dragPointer = d.localPosition;
-                drag();
+                // Armed here rather than on pan start: pressing inside the
+                // bottom band and twitching a pixel would otherwise scroll away
+                // on its own.
+                _startAutoScroll();
+                _updateDrag();
               },
-              onPanEnd: (_) => endDrag(),
-              onPanCancel: endDrag,
+              onPanEnd: (_) => _endDrag(),
+              onPanCancel: _endDrag,
               child: GridView.builder(
                 key: const PageStorageKey<String>('wallpaper-grid'),
                 controller: _scrollController,
