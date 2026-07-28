@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/utils/pack.dart';
 import 'package:we_repkg/views/title_bar/window_btn_group.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -23,8 +24,16 @@ class WindowTitleBar extends StatelessWidget {
                 context,
               ).textTheme.titleSmall?.copyWith(fontSize: 13),
             ),
+            SizedBox(width: 6),
+            Text(
+              'v${PackInfo.getVersion()}',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.normal,
+                color: Colors.grey,
+              ),
+            ),
             Spacer(),
-            // Settings moved out of here and into the nav rail.
             WindowBtnGroup(),
           ],
         ),
