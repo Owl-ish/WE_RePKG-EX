@@ -33,4 +33,28 @@ void main() {
     expect(summary.skippedFiles, 0);
     expect(summary.details, isEmpty);
   });
+
+  test('progress lines never reach the error summary', () {
+    final summary = summarizeRePKGOutput(
+      '{"pos":1,"total":2}\n* Extracting: scene.json\n{"pos":2,"total":2}',
+      '',
+    );
+
+    expect(summary.extractedFiles, 1);
+    expect(summary.details, isEmpty);
+  });
+
+  test('reads a progress line', () {
+    expect(parseRePKGProgress('{"pos":7,"total":128}'), (
+      position: 7,
+      total: 128,
+    ));
+  });
+
+  test('ignores ordinary output and a zero total', () {
+    expect(parseRePKGProgress('* Extracting: scene.json'), isNull);
+    expect(parseRePKGProgress(''), isNull);
+    expect(parseRePKGProgress('{"pos":0,"total":0}'), isNull);
+    expect(parseRePKGProgress('prefix {"pos":1,"total":2}'), isNull);
+  });
 }

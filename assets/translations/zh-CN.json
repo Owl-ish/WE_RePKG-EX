@@ -62,6 +62,7 @@
     "deleteFailedTitle": "删除文件失败",
     "extractImageInfo": "正在复制第 {index}/{count} 张图片",
     "extractVideoInfo": "正在复制视频 {copied} / {total}",
+    "extractSceneInfo": "正在解压第 {index}/{count} 个场景文件",
     "copySuccess": "复制成功",
     "deleteSuccess": "删除成功！文件夹已被移至回收站",
     "cancelled": "已取消",

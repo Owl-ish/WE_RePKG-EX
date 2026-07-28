@@ -36,6 +36,28 @@ String? parseRepkgVersionOutput(Object? stdout, Object? stderr) {
   return null;
 }
 
+/// Whether the active RePKG understands `-p` and `--progress-json`.
+///
+/// CommandLineParser rejects unknown options by printing an error and exiting
+/// 0 without extracting anything, which reads as a clean run that produced no
+/// files. Sending either flag blind would turn an old tool into silent data
+/// loss, so callers must ask first.
+///
+/// The `-ex` suffix is required, not decoration: addallno's fork numbers itself
+/// 0.5.1 as well and has neither flag.
+bool repkgSupportsExtractFlags(String? version) {
+  final Match? match = RegExp(
+    r'^(\d+)\.(\d+)\.(\d+)-ex$',
+  ).firstMatch(version?.trim() ?? '');
+  if (match == null) return false;
+  const List<int> required = <int>[0, 5, 1];
+  for (int i = 0; i < required.length; i++) {
+    final int part = int.parse(match.group(i + 1)!);
+    if (part != required[i]) return part > required[i];
+  }
+  return true;
+}
+
 /// Reads the version reported by the active RePKG executable.
 ///
 /// About must remain usable if the configured tool is missing or broken, so

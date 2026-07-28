@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -39,11 +40,14 @@ void endBatch(WidgetRef ref) {
 
 /// Runs RePKG through Process.start so a cancelled batch can kill it, rather
 /// than waiting for a large scene to finish unpacking.
+/// [onStdoutLine] sees each line as it arrives, for callers reporting progress
+/// while RePKG is still running.
 Future<({int exitCode, String stdout, String stderr})> runRePKG(
   String rePKGPath,
   List<String> args,
-  CancelToken token,
-) async {
+  CancelToken token, {
+  void Function(String line)? onStdoutLine,
+}) async {
   // No shell: Dart quotes args correctly for paths containing spaces.
   final process = await Process.start(rePKGPath, args);
   token.register(process);
@@ -51,15 +55,31 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
     // systemEncoding, not utf8. RePKG emits the console code page, GBK on a
     // Chinese Windows, and decoding that as UTF-8 throws on the first
     // non-ASCII byte. Both streams drain at once or a full pipe deadlocks.
-    final streams = await Future.wait([
-      process.stdout.transform(systemEncoding.decoder).join(),
-      process.stderr.transform(systemEncoding.decoder).join(),
+    final StringBuffer out = StringBuffer();
+    final Future<void> stdoutDone = process.stdout
+        .transform(systemEncoding.decoder)
+        .transform(const LineSplitter())
+        .forEach((line) {
+          out.writeln(line);
+          onStdoutLine?.call(line);
+        });
+    final Future<String> stderrDone = process.stderr
+        .transform(systemEncoding.decoder)
+        .join();
+    // Both are awaited whatever happens. Dropping stderr because stdout threw
+    // would leave its error unhandled, surfacing later with nothing to pin it
+    // to.
+    final List<String> streams = await Future.wait(<Future<String>>[
+      stdoutDone.then((_) => out.toString()),
+      stderrDone,
     ]);
+    final String stdout = streams[0];
+    final String stderr = streams[1];
     final exitCode = await process.exitCode;
     debugPrint('${tr(AppI10n.logExitCode)} $exitCode');
-    debugPrint('${tr(AppI10n.logStdout)} ${streams[0]}');
-    debugPrint('${tr(AppI10n.logStderr)} ${streams[1]}');
-    return (exitCode: exitCode, stdout: streams[0], stderr: streams[1]);
+    debugPrint('${tr(AppI10n.logStdout)} $stdout');
+    debugPrint('${tr(AppI10n.logStderr)} $stderr');
+    return (exitCode: exitCode, stdout: stdout, stderr: stderr);
   } finally {
     token.unregister(process);
   }
@@ -360,7 +380,8 @@ Future<(String?, bool)> extractBranch(
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
-    Future<String?> work() => extractPKG(ref, wallpaper, outPath);
+    Future<String?> work() =>
+        extractPKG(ref, wallpaper, outPath, detailedProgress: detailedProgress);
     final err = sceneGate == null ? await work() : await sceneGate.run(work);
     return (err, true);
   } else if (targetLower.endsWith('.mp4')) {
@@ -437,35 +458,79 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
+/// Turns RePKG's progress lines into loading text, at most once per whole
+/// percent. A large scene runs to thousands of entries, and each update
+/// rebuilds the loading overlay.
+void Function(String) _sceneProgressReporter(WidgetRef ref) {
+  int lastPercent = -1;
+  return (String line) {
+    final progress = parseRePKGProgress(line);
+    if (progress == null) return;
+    final int percent = progress.position * 100 ~/ progress.total;
+    if (percent == lastPercent) return;
+    lastPercent = percent;
+    changeLoadingText(
+      ref,
+      tr(
+        AppI10n.dialogExtractSceneInfo,
+        namedArgs: {
+          'index': '${progress.position}',
+          'count': '${progress.total}',
+        },
+      ),
+    );
+  };
+}
+
 Future<String?> extractPKG(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath,
-) async {
+  String outPath, {
+  bool detailedProgress = false,
+}) async {
   // No text write here: it set the same string the batch already set, and with
   // several workers running it just fought the others for the provider.
   String rePKGPath = ref.read(toolPathProvider)!;
   bool excludeTexture = ref.read(excludeTextureProvider);
+  bool onlySaveImage = ref.read(onlySaveImageProvider);
   try {
     String? overwrite = ref.read(replaceFileProvider) ? '--overwrite' : null;
-    List<String> args = [
-      'extract',
-      '-e',
-      'tex',
-      '-s',
-      ?overwrite,
-      '-o',
-      outPath,
-      wallpaper.target,
-    ].cast<String>().toList();
+    // An older RePKG rejects these and then exits 0 having written nothing, so
+    // a batch would report success over an empty folder.
+    final bool newFlags = repkgSupportsExtractFlags(
+      await ref.read(toolVersionProvider.future),
+    );
+    String? progress = newFlags && detailedProgress ? '--progress-json' : null;
+    // The raw .tex files are deleted right after either way: deleteOther bins
+    // them when only images are wanted, and deleteOtherAndTexture drops the
+    // whole materials tree in the excludeTexture branch.
+    String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
+        ? '-p'
+        : null;
     // 提取项目，移动materials一级目录的文件到外面
-    if (excludeTexture) {
-      args = ['extract', '-o', outPath, wallpaper.target];
-    }
+    List<String> args = excludeTexture
+        ? ['extract', ?onlyImages, ?progress, '-o', outPath, wallpaper.target]
+        : [
+            'extract',
+            '-e',
+            'tex',
+            '-s',
+            ?overwrite,
+            ?onlyImages,
+            ?progress,
+            '-o',
+            outPath,
+            wallpaper.target,
+          ];
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
     final token = ref.read(activeCancelTokenProvider) ?? CancelToken();
-    final result = await runRePKG(rePKGPath, args, token);
+    final result = await runRePKG(
+      rePKGPath,
+      args,
+      token,
+      onStdoutLine: detailedProgress ? _sceneProgressReporter(ref) : null,
+    );
     if (token.isCancelled) return null;
     if (result.exitCode != 0) {
       final summary = summarizeRePKGOutput(result.stdout, result.stderr);

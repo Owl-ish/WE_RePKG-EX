@@ -10,6 +10,22 @@ class RePKGOutputSummary {
   final String details;
 }
 
+final RegExp _progressPattern = RegExp(
+  r'^\s*\{"pos":(\d+),"total":(\d+)\}\s*$',
+);
+
+/// Reads one of RePKG's `--progress-json` lines, or null for anything else.
+///
+/// A regex rather than a JSON decode: this runs on every line RePKG prints, and
+/// all but a handful of them are ordinary log text.
+({int position, int total})? parseRePKGProgress(String line) {
+  final match = _progressPattern.firstMatch(line);
+  if (match == null) return null;
+  final int total = int.parse(match.group(2)!);
+  if (total <= 0) return null;
+  return (position: int.parse(match.group(1)!), total: total);
+}
+
 /// Reduces RePKG's verbose output to the facts useful in an error dialog.
 RePKGOutputSummary summarizeRePKGOutput(String stdout, String stderr) {
   final lines = '$stdout\n$stderr'

@@ -62,6 +62,7 @@
     "deleteFailedTitle": "Failed to delete file",
     "extractImageInfo": "Copying image {index}/{count}",
     "extractVideoInfo": "Copying video {copied} / {total}",
+    "extractSceneInfo": "Extracting scene file {index}/{count}",
     "copySuccess": "Copy successful",
     "deleteSuccess": "Deleted. Moved to the Recycle Bin",
     "cancelled": "Cancelled",

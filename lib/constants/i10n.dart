@@ -60,6 +60,7 @@ class AppI10n {
   static const String dialogDeleteFailedTitle = 'dialog.deleteFailedTitle';
   static const String dialogExtractImageInfo = 'dialog.extractImageInfo';
   static const String dialogExtractVideoInfo = 'dialog.extractVideoInfo';
+  static const String dialogExtractSceneInfo = 'dialog.extractSceneInfo';
   static const String dialogCopySuccess = 'dialog.copySuccess';
   static const String dialogDeleteSuccess = 'dialog.deleteSuccess';
   static const String dialogCancelled = 'dialog.cancelled';
