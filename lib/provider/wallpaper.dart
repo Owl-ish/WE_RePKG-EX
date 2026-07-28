@@ -21,8 +21,7 @@ class WallpaperList extends _$WallpaperList {
 
   void remove(WallpaperInfo value) => removeAll({value.id});
 
-  /// Drops every wallpaper whose id is in [ids] in a single state write, rather
-  /// than one full-list rebuild per id.
+  /// One state write, not one per id.
   void removeAll(Set<String> ids) {
     if (ids.isEmpty) return;
     state = state.where((e) => !ids.contains(e.id)).toList();
@@ -30,13 +29,9 @@ class WallpaperList extends _$WallpaperList {
 
   void clear() => state = [];
 
-  /// Flips the stored element's selection.
-  ///
-  /// Reads `checked` off the element held in state, not off [value]. Callers can
-  /// hand back a stale instance (a captured closure, a list snapshot taken
-  /// before the last rebuild), and `==` compares ids only, so a stale copy looks
-  /// current. Trusting it would both flip the wrong way and overwrite the stored
-  /// element's other fields with stale values.
+  /// Reads `checked` off the stored element, not off [value]. Callers can pass
+  /// a stale instance, and `==` compares ids only, so a stale copy looks
+  /// current and would flip the wrong way.
   void toggleChecked(WallpaperInfo value) => state = [
     for (final e in state)
       e.id == value.id ? e.copyWith(checked: !e.checked) : e,
@@ -45,12 +40,8 @@ class WallpaperList extends _$WallpaperList {
   void updateChecked(WallpaperInfo value, bool checked) =>
       setCheckedByIds({value.id}, checked);
 
-  /// Sets selection for every id in [ids] in one state write.
-  ///
-  /// The loop that this replaces called a single-item mutator per wallpaper, so
-  /// selecting a range of M items over a library of N rebuilt the whole list M
-  /// times and drove M filter-and-sort passes through filterWallpaperList. This
-  /// is one O(N) pass regardless of M.
+  /// One O(N) pass however many ids there are. Doing it per id costs a full
+  /// filter-and-sort through filterWallpaperList each time.
   void setCheckedByIds(Set<String> ids, bool checked) {
     if (ids.isEmpty) return;
     state = [
@@ -61,12 +52,21 @@ class WallpaperList extends _$WallpaperList {
     ];
   }
 
-  /// Selects exactly one wallpaper, clearing every other selection, and clears
-  /// it when it was already the only one selected.
-  ///
-  /// What a plain left click does: picking a wallpaper after a range selection
-  /// replaces that range, and clicking the lone selected wallpaper again lets
-  /// you clear the selection without aiming at the checkbox.
+  /// Selects [ids] and deselects everything else, in one pass. What a drag over
+  /// the grid needs; a clear plus a set would rebuild the list twice a frame.
+  void setCheckedExactly(Set<String> ids) {
+    state = [
+      for (final e in state)
+        if (ids.contains(e.id) == e.checked)
+          e
+        else
+          e.copyWith(checked: !e.checked),
+    ];
+  }
+
+  /// What a plain left click does. Selects only [id], and clears it if it was
+  /// already the only one selected, so you can deselect without aiming at the
+  /// checkbox.
   void setExclusiveChecked(String id) {
     int checkedCount = 0;
     bool targetChecked = false;
@@ -84,11 +84,9 @@ class WallpaperList extends _$WallpaperList {
     ];
   }
 
-  /// Clears selection across the entire library, including wallpapers the
-  /// current filter hides.
+  /// Clears selection across the whole library, including filtered-out ones.
   void clearAllChecked() {
-    // Skip the state write when nothing is selected: an identical new list would
-    // still invalidate filterWallpaperList and rebuild the grid for no reason.
+    // An identical new list would still rebuild the grid for nothing.
     if (!state.any((e) => e.checked)) return;
     state = [for (final e in state) e.checked ? e.copyWith(checked: false) : e];
   }
@@ -121,15 +119,12 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   final SortType sortType = ref.watch(wallpaperSortTypeProvider);
   final bool sortAscending = ref.watch(sortAscendingProvider);
 
-  // Combine all filters into a single pass (was multiple .where calls, each
-  // allocating an intermediate list). All conditions are pure ANDs, so this is
-  // equivalent to the original; the .toList() always copies, preventing the
-  // later sort from mutating the provider's own stored list.
+  // One pass for every filter. toList copies, so the sort below cannot mutate
+  // the provider's own list.
   final String keyWordLower = keyWord.toLowerCase();
   list = list.where((e) {
-    // age rating. A project.json can carry an unrecognised contentrating or
-    // none at all, so anything that isn't mature or questionable counts as all
-    // ages; that way no wallpaper can hide from all three checkboxes at once.
+    // Anything not mature or questionable counts as all ages, so a wallpaper
+    // with a missing or unknown rating cannot hide from all three checkboxes.
     if (e.contentRating == ContentRating.mature) {
       if (hideMature) return false;
     } else if (e.contentRating == ContentRating.questionable) {
@@ -137,14 +132,12 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
     } else if (hideEveryone) {
       return false;
     }
-    // search keyword (case-insensitive)
     if (keyWordLower.isNotEmpty &&
         !e.title.toLowerCase().contains(keyWordLower)) {
       return false;
     }
-    // Wallpapers with no extractable file are no longer filtered out. They
-    // still extract: extractBranch falls through to copying the whole folder.
-    // type filters
+    // Wallpapers with no extractable file stay in the list; extractBranch
+    // falls through to copying the whole folder.
     if (hideScene && e.type == WallpaperType.scene) return false;
     if (hideVideo && e.type == WallpaperType.video) return false;
     if (hideWeb && e.type == WallpaperType.web) return false;
@@ -154,8 +147,8 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   }).toList();
   switch (sortType) {
     case SortType.time:
-      // Group wallpapers created on the library's earliest day (the bulk first
-      // import) and push them to the end; newer additions show on top.
+      // Everything from the library's earliest day is the bulk first import,
+      // so push it to the end and show newer additions on top.
       final String? earliest = ref.watch(earliestTimeProvider);
       final DateTime? earliestDay = (earliest == null || earliest.isEmpty)
           ? null
@@ -201,12 +194,8 @@ class ExtractList extends _$ExtractList {
   void clear() => state = [];
 }
 
-/// How many wallpapers in the current batch have finished. Ranges 0..total.
-///
-/// This used to be the index of the item being worked on, which only made sense
-/// while extraction was sequential. With several wallpapers in flight there is
-/// no single current index, and completions arrive out of order, so the loading
-/// view counts finishes instead of tracking a cursor.
+/// How many wallpapers in the batch have finished, 0..total. A count, not a
+/// cursor: with several in flight, completions arrive out of order.
 @Riverpod(keepAlive: true)
 class CurrentIndex extends _$CurrentIndex {
   @override
@@ -217,9 +206,8 @@ class CurrentIndex extends _$CurrentIndex {
 }
 
 /// The wallpaper a worker most recently picked up, for the loading preview.
-///
-/// Separate from [CurrentIndex] on purpose: driving the preview off the progress
-/// count would index past the end of the list as the final item completes.
+/// Separate from [CurrentIndex], which would index past the end of the list as
+/// the last item completes.
 @Riverpod(keepAlive: true)
 class ProcessingWallpaper extends _$ProcessingWallpaper {
   @override

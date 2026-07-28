@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +13,7 @@ import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/views/states/empty.dart';
 import 'package:we_repkg/widgets/scroll_edge_controls.dart';
 import 'package:we_repkg/widgets/smooth_wheel_scroll.dart';
@@ -43,6 +47,23 @@ class _ContentViewState extends ConsumerState<ContentView>
   bool _entranceComplete = true;
   int _entranceStartToken = 0;
 
+  /// Drag rectangle in grid coordinates, so it stays on the wallpapers under it
+  /// while the list scrolls. A notifier, or repainting it would rebuild two
+  /// thousand tiles behind it.
+  final ValueNotifier<Rect?> _marquee = ValueNotifier<Rect?>(null);
+
+  Offset? _dragFrom;
+
+  /// Viewport coordinates, so autoscroll can redraw without the mouse moving.
+  Offset _dragPointer = Offset.zero;
+
+  Set<String> _dragIds = <String>{};
+  bool _dragWriteQueued = false;
+  Timer? _autoScroll;
+
+  static const double _autoScrollZone = 60;
+  static const double _autoScrollMaxStep = 18;
+
   @override
   void initState() {
     super.initState();
@@ -61,11 +82,8 @@ class _ContentViewState extends ConsumerState<ContentView>
           }
         });
 
-    // A library can finish scanning while Settings is visible and this view is
-    // unmounted. Consume the one-shot request only after Extract mounts, then
-    // replay immediately if the scan has already completed. If it is still
-    // running, the currentState listener in build starts the same entrance when
-    // completion arrives.
+    // A scan can finish while this view is unmounted, so the request waits
+    // until it mounts. Still running, and the listener in build picks it up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final bool replay = ref
@@ -79,13 +97,9 @@ class _ContentViewState extends ConsumerState<ContentView>
     });
 
     Future.delayed(Duration.zero, () async {
-      // Only scan when there is nothing to show.
-      //
-      // wallpaperListProvider is keepAlive, so it outlives this widget. Any
-      // remount that scanned again would append a second copy of the whole
-      // library to the list already in the provider, and the count would climb
-      // by the library's size each time. Refreshing deliberately goes through
-      // refreshWallpaper, which clears before it adds.
+      // The provider is keepAlive, so scanning again on remount would append a
+      // second copy of the library. Refresh goes through refreshWallpaper,
+      // which clears first.
       if (ref.read(wallpaperListProvider).isNotEmpty) return;
       List<WallpaperInfo> wallpapers = await getAllFile(ref);
       ref.read(wallpaperListProvider.notifier).addAll(wallpapers);
@@ -94,6 +108,8 @@ class _ContentViewState extends ConsumerState<ContentView>
 
   @override
   void dispose() {
+    _autoScroll?.cancel();
+    _marquee.dispose();
     _topScrollControlActive.dispose();
     _bottomScrollControlActive.dispose();
     _entranceController.dispose();
@@ -135,8 +151,7 @@ class _ContentViewState extends ConsumerState<ContentView>
       ..value = 0;
     setState(() => _entranceComplete = false);
 
-    // Wait until the zero-progress transition widgets are mounted. Starting
-    // synchronously can consume the opening frames before the grid exists.
+    // Starting synchronously burns the opening frames before the grid exists.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           startToken != _entranceStartToken ||
@@ -163,82 +178,199 @@ class _ContentViewState extends ConsumerState<ContentView>
           1000,
         );
 
+        final double tile =
+            (gridWidth - (spacing * (columnCount - 1))) / columnCount;
+
+        // Grid coordinates: viewport plus however far the list is scrolled.
+        Offset toGrid(Offset local) =>
+            local + Offset(0, _scrollController.offset);
+
+        void drag() {
+          final Offset? from = _dragFrom;
+          if (from == null) return;
+          final Rect box = Rect.fromPoints(from, toGrid(_dragPointer));
+          _marquee.value = box;
+
+          final Set<String> ids = coveredTiles(
+            box,
+            origin: const Offset(LayoutNums.edgeInset, LayoutNums.contentGap),
+            columns: columnCount,
+            tile: tile,
+            spacing: spacing,
+            count: list.length,
+          ).map((i) => list[i].id).toSet();
+          if (setEquals(ids, _dragIds)) return;
+          _dragIds = ids;
+
+          // One write per frame. Each one refilters and re-sorts the whole
+          // library, and a fast mouse reports twice a frame.
+          if (_dragWriteQueued) return;
+          _dragWriteQueued = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _dragWriteQueued = false;
+            if (!mounted) return;
+            ref
+                .read(wallpaperListProvider.notifier)
+                .setCheckedExactly(_dragIds);
+          });
+        }
+
+        // Drag near an edge and the grid keeps scrolling, faster the closer you
+        // get, so a selection can run past one screenful.
+        void autoScrollTick(double height) {
+          final double overTop = _autoScrollZone - _dragPointer.dy;
+          final double overBottom =
+              _dragPointer.dy - (height - _autoScrollZone);
+          final double push = overTop > 0
+              ? -overTop
+              : (overBottom > 0 ? overBottom : 0);
+          if (push == 0) return;
+
+          final ScrollPosition at = _scrollController.position;
+          final double step =
+              (push / _autoScrollZone).clamp(-1, 1) * _autoScrollMaxStep;
+          final double next = (at.pixels + step).clamp(
+            at.minScrollExtent,
+            at.maxScrollExtent,
+          );
+          if (next == at.pixels) return;
+          _scrollController.jumpTo(next);
+          drag();
+        }
+
+        void startAutoScroll(double height) {
+          _autoScroll ??= Timer.periodic(
+            const Duration(milliseconds: 16),
+            (_) => autoScrollTick(height),
+          );
+        }
+
+        void endDrag() {
+          _autoScroll?.cancel();
+          _autoScroll = null;
+          _dragFrom = null;
+          _marquee.value = null;
+        }
+
         return Stack(
           key: const ValueKey<String>('wallpaper-content-stack'),
           children: [
-            GridView.builder(
-              key: const PageStorageKey<String>('wallpaper-grid'),
-              controller: _scrollController,
-              itemCount: list.length,
-              padding: const EdgeInsets.symmetric(
-                horizontal: LayoutNums.edgeInset,
-                vertical: LayoutNums.contentGap,
-              ),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                maxCrossAxisExtent: width,
-              ),
-              scrollCacheExtent: const ScrollCacheExtent.pixels(500),
-              itemBuilder: (context, index) {
-                final WallpaperInfo wallpaper = list[index];
-                final Widget tile = ImageItem(
-                  key: ValueKey(wallpaper.id),
-                  width: width,
-                  index: index,
-                  wallpaper: wallpaper,
-                );
-                if (_entranceComplete) return tile;
+            // Mouse drags do not scroll a desktop list, so a pan here is free
+            // to mean selection. A tap on a tile resolves before this sees any
+            // movement.
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onPanStart: (d) {
+                _dragPointer = d.localPosition;
+                _dragFrom = toGrid(d.localPosition);
+                // Cleared per drag, or repeating a rectangle matches the last
+                // drag's set and writes nothing.
+                _dragIds = <String>{};
+                startAutoScroll(constraints.maxHeight);
+              },
+              onPanUpdate: (d) {
+                _dragPointer = d.localPosition;
+                drag();
+              },
+              onPanEnd: (_) => endDrag(),
+              onPanCancel: endDrag,
+              child: GridView.builder(
+                key: const PageStorageKey<String>('wallpaper-grid'),
+                controller: _scrollController,
+                itemCount: list.length,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: LayoutNums.edgeInset,
+                  vertical: LayoutNums.contentGap,
+                ),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  crossAxisSpacing: spacing,
+                  mainAxisSpacing: spacing,
+                  maxCrossAxisExtent: width,
+                ),
+                scrollCacheExtent: const ScrollCacheExtent.pixels(500),
+                itemBuilder: (context, index) {
+                  final WallpaperInfo wallpaper = list[index];
+                  final Widget tile = ImageItem(
+                    key: ValueKey(wallpaper.id),
+                    width: width,
+                    index: index,
+                    wallpaper: wallpaper,
+                  );
+                  if (_entranceComplete) return tile;
 
-                // Items on the same top-left-to-bottom-right diagonal move
-                // together. Capping the wave keeps off-screen rows from waiting.
-                final int row = index ~/ columnCount;
-                final int column = index % columnCount;
-                final int wave = (row + column).clamp(0, 11);
-                final double start = (wave * .06).clamp(0, .66);
-                final double end = (start + .34).clamp(0, 1);
-                final Animation<double> entrance = CurvedAnimation(
-                  parent: _entranceController,
-                  curve: Interval(start, end, curve: Curves.easeOutCubic),
-                );
-                final Animation<double> scale = TweenSequence<double>([
-                  TweenSequenceItem<double>(
-                    tween: Tween<double>(
-                      begin: .88,
-                      end: 1.04,
-                    ).chain(CurveTween(curve: Curves.easeOutCubic)),
-                    weight: 70,
-                  ),
-                  TweenSequenceItem<double>(
-                    tween: Tween<double>(
-                      begin: 1.04,
-                      end: 1,
-                    ).chain(CurveTween(curve: Curves.easeInOut)),
-                    weight: 30,
-                  ),
-                ]).animate(entrance);
-                final Animation<Offset> position = TweenSequence<Offset>([
-                  TweenSequenceItem<Offset>(
-                    tween: Tween<Offset>(
-                      begin: const Offset(0, .055),
-                      end: const Offset(0, -.012),
-                    ).chain(CurveTween(curve: Curves.easeOutCubic)),
-                    weight: 70,
-                  ),
-                  TweenSequenceItem<Offset>(
-                    tween: Tween<Offset>(
-                      begin: const Offset(0, -.012),
-                      end: Offset.zero,
-                    ).chain(CurveTween(curve: Curves.easeInOut)),
-                    weight: 30,
-                  ),
-                ]).animate(entrance);
+                  // Tiles on the same diagonal move together. Capped, or
+                  // off-screen rows sit waiting their turn.
+                  final int row = index ~/ columnCount;
+                  final int column = index % columnCount;
+                  final int wave = (row + column).clamp(0, 11);
+                  final double start = (wave * .06).clamp(0, .66);
+                  final double end = (start + .34).clamp(0, 1);
+                  final Animation<double> entrance = CurvedAnimation(
+                    parent: _entranceController,
+                    curve: Interval(start, end, curve: Curves.easeOutCubic),
+                  );
+                  final Animation<double> scale = TweenSequence<double>([
+                    TweenSequenceItem<double>(
+                      tween: Tween<double>(
+                        begin: .88,
+                        end: 1.04,
+                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                      weight: 70,
+                    ),
+                    TweenSequenceItem<double>(
+                      tween: Tween<double>(
+                        begin: 1.04,
+                        end: 1,
+                      ).chain(CurveTween(curve: Curves.easeInOut)),
+                      weight: 30,
+                    ),
+                  ]).animate(entrance);
+                  final Animation<Offset> position = TweenSequence<Offset>([
+                    TweenSequenceItem<Offset>(
+                      tween: Tween<Offset>(
+                        begin: const Offset(0, .055),
+                        end: const Offset(0, -.012),
+                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
+                      weight: 70,
+                    ),
+                    TweenSequenceItem<Offset>(
+                      tween: Tween<Offset>(
+                        begin: const Offset(0, -.012),
+                        end: Offset.zero,
+                      ).chain(CurveTween(curve: Curves.easeInOut)),
+                      weight: 30,
+                    ),
+                  ]).animate(entrance);
 
-                return FadeTransition(
-                  opacity: entrance,
-                  child: ScaleTransition(
-                    scale: scale,
-                    child: SlideTransition(position: position, child: tile),
+                  return FadeTransition(
+                    opacity: entrance,
+                    child: ScaleTransition(
+                      scale: scale,
+                      child: SlideTransition(position: position, child: tile),
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Watches the scroll position too, or a wheel scroll mid-drag
+            // leaves the rectangle stuck to the viewport.
+            ListenableBuilder(
+              listenable: Listenable.merge([_marquee, _scrollController]),
+              builder: (context, _) {
+                final Rect? box = _marquee.value;
+                if (box == null) return const SizedBox.shrink();
+                final Color colour = Theme.of(context).primaryColor;
+                return Positioned.fromRect(
+                  // Back to viewport coordinates to paint it.
+                  rect: box.shift(Offset(0, -_scrollController.offset)),
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colour.withValues(alpha: .18),
+                        border: Border.all(color: colour),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -296,8 +428,7 @@ class _ContentViewState extends ConsumerState<ContentView>
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
         transitionBuilder: (child, animation) {
-          // The grid supplies its own diagonal entrance. A second full-grid
-          // fade would flatten the wave and make it much less noticeable.
+          // The grid has its own diagonal entrance; a second fade flattens it.
           if (child.key == _gridTransitionKey) return child;
           return FadeTransition(opacity: animation, child: child);
         },
