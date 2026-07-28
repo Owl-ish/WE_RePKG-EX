@@ -47,21 +47,18 @@ Future<void> showSettingCard(BuildContext context) {
       final double t = Curves.easeInOutCubic.transform(animation.value);
       return Opacity(
         opacity: t,
-        // At zero opacity Flutter drops the whole subtree out of the
-        // accessibility tree, and the settings form is a few hundred nodes
-        // going at once. Windows' bridge then reports orphaned nodes and stays
-        // confused long after the card has closed.
         alwaysIncludeSemantics: true,
         // Scaled, not clipped or height-factored. Both of those drop whatever
         // falls outside them from the accessibility tree, so animating one over
         // a few hundred settings nodes adds and removes them every frame and
-        // Windows' AXTree bridge gives up. A transform moves nodes instead of
-        // removing them, so the tree stays put for the whole 260ms.
+        // Windows' AXTree bridge gives up. A transform moves nodes instead.
+        //
+        // Center is load-bearing: without it the transform's box is the whole
+        // screen and the card unrolls from the top of the window.
         child: Center(
           child: Transform.scale(
-            scaleY: t,
+            scaleY: t.clamp(.01, 1),
             alignment: Alignment.topCenter,
-            filterQuality: FilterQuality.medium,
             child: child,
           ),
         ),
