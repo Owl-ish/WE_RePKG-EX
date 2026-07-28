@@ -63,25 +63,17 @@ jobs:
 
       # RePKG is the actual unpacker; the app shells out to it. getToolPath()
       # in lib/utils/info.dart falls back to RePKG.exe sitting beside the app
-      # executable, so shipping it here means users never touch the tool path
-      # setting.
-      #
-      # Pinned rather than "latest" so every release is reproducible. The About
-      # section asks this executable for its version at runtime, so it always
-      # reports the binary that actually shipped.
+      # executable
       #
       # RePKG is MIT, which permits redistribution as long as the licence text
       # travels with the binary, hence the LICENSE fetch below.
       - name: Fetch RePKG
         shell: pwsh
         env:
-          REPKG_TAG: v0.5.0-ex
-          # A GitHub release asset is mutable: the tag can be deleted and
-          # re-pushed with a different binary behind the same URL. Pinning the
-          # hash turns that into a failed build instead of a silently different
-          # RePKG.exe going out to users. Update it in the same commit as
-          # REPKG_TAG, never on its own.
-          REPKG_SHA256: 70E21597E3F7335761CCA2BAEDACE29EE404FD0328AF14A1653CEA7EDBC763CD
+          # Must stay at or above the version repkgSupportsExtractFlags requires
+          # in lib/utils/info.dart.
+          REPKG_TAG: v0.5.2-ex
+          REPKG_SHA256: 04f307877c49b825767b2855f7814be5840e87e7f0080d6138946fc2fd3b4b61
         run: |
           $url = "https://github.com/Owl-ish/repkg/releases/download/$env:REPKG_TAG/RePKG.zip"
           Invoke-WebRequest -Uri $url -OutFile RePKG.zip
@@ -108,11 +100,6 @@ jobs:
           # inherited from notscuffed, whose copyright line it still carries.
           # HEAD resolves to the default branch, so this survives a rename.
           Invoke-WebRequest -Uri 'https://github.com/Owl-ish/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
-
-      # The bundle is a folder of 20-odd files, not a single exe, so it has to be
-      # zipped. It is staged under a named folder first: zipping the Release
-      # directory's contents directly would dump every file loose into whatever
-      # folder the user extracts into.
       - name: Package
         id: package
         shell: pwsh
