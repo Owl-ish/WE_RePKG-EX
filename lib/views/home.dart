@@ -4,7 +4,6 @@ import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/views/backup/backup.dart';
 import 'package:we_repkg/views/nav/nav_rail.dart';
-import 'package:we_repkg/views/setting/setting.dart';
 import 'package:we_repkg/views/title_bar/window_title_bar.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -21,7 +20,6 @@ class HomeView extends ConsumerWidget {
     final Widget page = switch (section) {
       NavSection.extract => const _ExtractView(),
       NavSection.backup => const BackupView(),
-      NavSection.settings => const SettingView(),
     };
 
     return DragToResizeArea(

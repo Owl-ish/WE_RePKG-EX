@@ -19,7 +19,13 @@ class SettingCheckbox extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        child ?? Text(label!, style: Theme.of(context).textTheme.bodyMedium),
+        // Wraps instead of overflowing. Several subtitles do not fit half a
+        // two-column card.
+        Flexible(
+          child:
+              child ??
+              Text(label!, style: Theme.of(context).textTheme.bodyMedium),
+        ),
         Checkbox(
           value: value,
           onChanged: onChanged,

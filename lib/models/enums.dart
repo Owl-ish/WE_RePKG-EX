@@ -81,8 +81,11 @@ extension ThemeTypeExtension on ThemeType {
   }
 }
 
-/// Top level areas of the app, in the order the nav rail lists them.
-enum NavSection { extract, backup, settings }
+/// The areas you can switch between, in the order they are listed.
+///
+/// Settings is not one: it opens as a card over whichever area you are in, so
+/// it has nothing to be selected.
+enum NavSection { extract, backup }
 
 extension NavSectionExtension on NavSection {
   String get label {
@@ -91,8 +94,6 @@ extension NavSectionExtension on NavSection {
         return tr(AppI10n.navExtract);
       case NavSection.backup:
         return tr(AppI10n.navBackup);
-      case NavSection.settings:
-        return tr(AppI10n.settingTitle);
     }
   }
 
@@ -102,8 +103,6 @@ extension NavSectionExtension on NavSection {
         return Icons.grid_view_rounded;
       case NavSection.backup:
         return Icons.backup_outlined;
-      case NavSection.settings:
-        return Icons.settings_outlined;
     }
   }
 }
