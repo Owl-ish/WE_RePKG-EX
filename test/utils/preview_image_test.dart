@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as path;
 import 'package:we_repkg/utils/preview_image.dart';
 
 /// An animated GIF of solid grey frames, one per value.
@@ -178,6 +180,28 @@ void main() {
     // Nothing owns it until trimBlackLead returns, so if it does not free a
     // codec it gave up on, nothing will.
     expect(broken.disposed, isTrue);
+  });
+
+  testWidgets('a preview loads off disk and paints', (tester) async {
+    final Directory dir = Directory.systemTemp.createTempSync('we_repkg_gif');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final File file = File(path.join(dir.path, 'preview.gif'))
+      ..writeAsBytesSync(gif(<int>[0, 60, 120]));
+
+    // The only test that runs the whole chain: file, decode, trim, widget.
+    // Everything else stops at the codec or the cache key, so a break in the
+    // wiring between them would leave every preview blank and every test green.
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        Image(image: previewImage(file.path, cacheHeight: 32)),
+      );
+      // Real file IO, so it needs real time rather than the fake clock.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
+    });
+
+    expect(tester.takeException(), isNull);
+    expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
   });
 
   test('the key resolves without waiting a microtask', () {
