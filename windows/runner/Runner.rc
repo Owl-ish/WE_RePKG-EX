@@ -89,7 +89,10 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.ilgnefz" "\0"
+            // No CompanyName on purpose. Windows builds the app's %APPDATA%
+            // folder as <CompanyName>\<ProductName>, which buried settings
+            // under com.ilgnefz\WeRePKG-EX. Without one they land in
+            // %APPDATA%\WeRePKG-EX. StorageUtil moves the old file across.
             VALUE "FileDescription", "WeRePKG-EX" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "WeRePKG-EX" "\0"

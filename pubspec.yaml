@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.5.0+0
+version: 1.5.5+0
 
 environment:
   sdk: ^3.11.0
@@ -44,6 +44,9 @@ dependencies:
   window_manager: ^0.5.1
   file_selector: ^1.1.0
   shared_preferences: ^2.5.4
+  # So StorageUtil asks for the settings folder the same way shared_preferences
+  # does, instead of guessing from %APPDATA%.
+  path_provider: ^2.1.5
   package_info_plus: ^9.0.0
   url_launcher: ^6.3.2
   bot_toast: ^4.1.3

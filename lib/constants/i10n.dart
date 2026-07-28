@@ -147,6 +147,7 @@ class AppI10n {
       'setting.about.weRepkgVersion';
   static const String settingAboutWeRepkgAuthor = 'setting.about.weRepkgAuthor';
   static const String settingAboutWeRepkgUrl = 'setting.about.weRepkgUrl';
+  static const String settingAboutSettingsFile = 'setting.about.settingsFile';
 
   // 错误提示
   static const String errorExtractFailed = 'error.extractFailed';

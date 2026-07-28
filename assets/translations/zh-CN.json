@@ -124,7 +124,8 @@
       "repkgUrl": "RePKG-EX 主页",
       "weRepkgVersion": "WeRePKG-EX 版本",
       "weRepkgAuthor": "原 WeRePKG 作者",
-      "weRepkgUrl": "WeRePKG-EX 主页"
+      "weRepkgUrl": "WeRePKG-EX 主页",
+      "settingsFile": "设置文件位置"
     },
     "configConcurrency": "同时提取数量",
     "configConcurrencyTip": "同时解包的壁纸数量。机械硬盘建议调低，固态硬盘可调高。"

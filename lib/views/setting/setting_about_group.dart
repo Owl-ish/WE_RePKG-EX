@@ -5,6 +5,8 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/pack.dart';
+import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/widgets/copy.dart';
 import 'package:we_repkg/widgets/link_text.dart';
 import 'package:we_repkg/widgets/setting_info.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
@@ -56,7 +58,32 @@ class SettingAboutGroup extends ConsumerWidget {
             uri: AppStrings.repkgOriginalRepo,
           ),
         ),
+        ?_settingsFile(context),
       ],
+    );
+  }
+
+  /// Where the settings JSON lives, for backing it up or editing it by hand.
+  /// The path runs to about 430px, so it gets its own line rather than being
+  /// cut off beside its label in a half-width column.
+  Widget? _settingsFile(BuildContext context) {
+    final String? file = StorageUtil.filePath;
+    if (file == null) return null;
+    final TextStyle? style = Theme.of(context).textTheme.bodyMedium;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${tr(AppI10n.settingAboutSettingsFile)}:', style: style),
+          Row(
+            children: [
+              Flexible(child: Text(file, style: style)),
+              CopyBtn(text: file),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

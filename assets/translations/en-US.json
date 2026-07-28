@@ -124,7 +124,8 @@
       "repkgUrl": "RePKG-EX Home",
       "weRepkgVersion": "WeRePKG-EX Version",
       "weRepkgAuthor": "Original WeRePKG Author",
-      "weRepkgUrl": "WeRePKG-EX Home"
+      "weRepkgUrl": "WeRePKG-EX Home",
+      "settingsFile": "Settings file location"
     },
     "configConcurrency": "Simultaneous extractions",
     "configConcurrencyTip": "How many wallpapers unpack at once. Lower this on a hard drive, raise it on an SSD."
