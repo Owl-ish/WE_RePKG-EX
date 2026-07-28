@@ -87,14 +87,18 @@ class _ScrollEdgeButtonState extends State<ScrollEdgeButton> {
         ? position.minScrollExtent
         : position.maxScrollExtent;
 
-    // Scale the duration with the distance, or a short library crawls and a
-    // long one blurs past. Capped so 2000 wallpapers still take under a second.
-    final double distance = (target - position.pixels).abs();
-    final int ms = (distance / 4).clamp(180, 700).round();
+    // Skip to within a couple of screens, then animate the rest. Animating the
+    // whole way looks the same, since nothing in between is readable, but it
+    // mounts and decodes every tile it passes: across a full library that is
+    // the entire preview set off disk for one click.
+    final double runway = position.viewportDimension * 2;
+    final double from = position.pixels.clamp(target - runway, target + runway);
+    if (from != position.pixels) widget.controller.jumpTo(from);
+
     widget.controller.animateTo(
       target,
-      duration: Duration(milliseconds: ms),
-      curve: Curves.easeInOutCubic,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
     );
   }
 
