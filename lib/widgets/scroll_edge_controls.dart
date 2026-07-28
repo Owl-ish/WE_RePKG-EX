@@ -113,58 +113,62 @@ class _ScrollEdgeButtonState extends State<ScrollEdgeButton> {
         final Color foreground = theme.colorScheme.onSurface.withValues(
           alpha: .68,
         );
+        // One child faded in place, rather than AnimatedSwitcher between a
+        // keyed button and a keyed blank. The pointer crosses this widget's
+        // 112x80 hot zone faster than the fade, and swapping back before the
+        // outgoing child finished left two children sharing a key, which
+        // Flutter asserts on. Layout is unchanged: the parent Centers this in a
+        // fixed box either way.
         return IgnorePointer(
           ignoring: !showButton,
           child: ExcludeSemantics(
             excluding: !showButton,
-            child: AnimatedSwitcher(
+            child: AnimatedOpacity(
+              opacity: showButton ? 1 : 0,
               duration: _fadeDuration,
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeOut,
-              child: showButton
-                  ? Material(
-                      key: const ValueKey<String>('scroll-edge-visible'),
-                      elevation: 1,
-                      color: theme.colorScheme.surface.withValues(alpha: .64),
-                      shape: CircleBorder(
-                        side: BorderSide(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: .10,
-                          ),
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: IconButton(
-                        key: widget.edge == ScrollEdge.top
-                            ? ScrollEdgeButton.topButtonKey
-                            : ScrollEdgeButton.bottomButtonKey,
-                        onPressed: _jumpToEdge,
-                        icon: Icon(
-                          widget.edge == ScrollEdge.top
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          size: 26,
-                        ),
-                        tooltip: widget.tooltip,
-                        style: IconButton.styleFrom(
-                          foregroundColor: foreground,
-                          hoverColor: theme.colorScheme.primary.withValues(
-                            alpha: .10,
-                          ),
-                          highlightColor: theme.colorScheme.primary.withValues(
-                            alpha: .14,
-                          ),
-                        ),
-                        constraints: const BoxConstraints.tightFor(
-                          width: 44,
-                          height: 44,
-                        ),
-                        padding: EdgeInsets.zero,
-                      ),
-                    )
-                  : const SizedBox.shrink(
-                      key: ValueKey<String>('scroll-edge-hidden'),
+              curve: Curves.easeOut,
+              // ExcludeSemantics above is the single authority on whether this
+              // is in the tree. Without this, Opacity drops the subtree itself
+              // on reaching zero, which is a removal mid-animation and what
+              // leaves the Windows AXTree broken.
+              alwaysIncludeSemantics: true,
+              child: Material(
+                elevation: 1,
+                color: theme.colorScheme.surface.withValues(alpha: .64),
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: .10),
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: IconButton(
+                  key: widget.edge == ScrollEdge.top
+                      ? ScrollEdgeButton.topButtonKey
+                      : ScrollEdgeButton.bottomButtonKey,
+                  onPressed: _jumpToEdge,
+                  icon: Icon(
+                    widget.edge == ScrollEdge.top
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 26,
+                  ),
+                  tooltip: widget.tooltip,
+                  style: IconButton.styleFrom(
+                    foregroundColor: foreground,
+                    hoverColor: theme.colorScheme.primary.withValues(
+                      alpha: .10,
                     ),
+                    highlightColor: theme.colorScheme.primary.withValues(
+                      alpha: .14,
+                    ),
+                  ),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
             ),
           ),
         );
