@@ -14,6 +14,22 @@ class ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // BotToast's layer is installed above the Navigator, so nothing it shows
+    // can reach an Overlay, and the SelectionArea below asserts on that. One
+    // local Overlay is enough; it fills the space BotToast centres, so the
+    // dialog still centres itself inside it. initialEntries is read once, at
+    // the Overlay's initState, so this only works while ErrorView is shown with
+    // fixed contents rather than rebuilt with new errors.
+    return Overlay(
+      initialEntries: [
+        OverlayEntry(
+          builder: (context) => Center(child: _buildDialog(context)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDialog(BuildContext context) {
     return DialogView(
       title: tr(AppI10n.dialogErrorTitle),
       content: ListView.separated(
