@@ -4,8 +4,8 @@ class AppStrings {
   static const String repkgAuthor = "notscuffed";
   static const String repkgOriginalRepo = "https://github.com/notscuffed/repkg";
   static const String repkgOriginalRepoLabel = "notscuffed/repkg";
-  static const String repkgRepo = "https://github.com/Owl-ish/repkg";
-  static const String repkgRepoLabel = "Owl-ish/repkg";
+  static const String repkgRepo = "https://github.com/Owl-ish/RePKG-EX";
+  static const String repkgRepoLabel = "Owl-ish/RePKG-EX";
   static const String appAuthor = "ilgnefz";
   // Original project by the author, linked under "Author" for attribution.
   static const String appOriginalRepo = "https://github.com/ilgnefz/we_repkg";

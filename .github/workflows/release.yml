@@ -75,7 +75,7 @@ jobs:
           REPKG_TAG: v0.5.2-ex
           REPKG_SHA256: 04f307877c49b825767b2855f7814be5840e87e7f0080d6138946fc2fd3b4b61
         run: |
-          $url = "https://github.com/Owl-ish/repkg/releases/download/$env:REPKG_TAG/RePKG.zip"
+          $url = "https://github.com/Owl-ish/RePKG-EX/releases/download/$env:REPKG_TAG/RePKG.zip"
           Invoke-WebRequest -Uri $url -OutFile RePKG.zip
           $actual = (Get-FileHash RePKG.zip -Algorithm SHA256).Hash
           if ($actual -ne $env:REPKG_SHA256) {
@@ -99,7 +99,7 @@ jobs:
           # From our fork, which is what actually ships. Same MIT text it
           # inherited from notscuffed, whose copyright line it still carries.
           # HEAD resolves to the default branch, so this survives a rename.
-          Invoke-WebRequest -Uri 'https://github.com/Owl-ish/repkg/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
+          Invoke-WebRequest -Uri 'https://github.com/Owl-ish/RePKG-EX/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
       - name: Package
         id: package
         shell: pwsh
