@@ -6,9 +6,8 @@ import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/views/states/error.dart';
 
 void main() {
-  // BotToast installs its layer above the Navigator, so nothing it shows can
-  // reach an Overlay. LookupBoundary reproduces that without booting BotToast:
-  // it stops the ancestor lookup exactly where debugCheckHasOverlay gives up.
+  // LookupBoundary stops the ancestor lookup where debugCheckHasOverlay does,
+  // reproducing BotToast's layer without booting it.
   testWidgets('builds where no Overlay ancestor is reachable', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -24,9 +23,7 @@ void main() {
     expect(find.text('boom'), findsOneWidget);
   });
 
-  // The case above stands in for BotToast with a LookupBoundary. This one is
-  // the real call site, so the dialog also has to survive the constraints
-  // BotToast's own backdrop and alignment hand it.
+  // The real call site, so the dialog also meets BotToast's own constraints.
   testWidgets('shows through the real BotToast layer', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

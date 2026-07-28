@@ -14,10 +14,8 @@ final RegExp _progressPattern = RegExp(
   r'^\s*\{"pos":(\d+),"total":(\d+)\}\s*$',
 );
 
-/// Reads one of RePKG's `--progress-json` lines, or null for anything else.
-///
-/// A regex rather than a JSON decode: this runs on every line RePKG prints, and
-/// all but a handful of them are ordinary log text.
+/// Regex rather than a JSON decode: this sees every line RePKG prints, and
+/// almost none of them are progress.
 ({int position, int total})? parseRePKGProgress(String line) {
   final match = _progressPattern.firstMatch(line);
   if (match == null) return null;

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/widgets/scroll_edge_controls.dart';
 
-/// Mounts the button over a scrollable long enough for both edges to be off
-/// screen, mirroring how content.dart places it in a fixed 112x80 hot zone.
+/// Mirrors how content.dart places the button, in a fixed 112x80 hot zone.
 Future<ScrollController> _pumpButton(
   WidgetTester tester,
   ValueNotifier<bool> active,
@@ -55,9 +54,7 @@ void main() {
     addTearDown(active.dispose);
     await _pumpButton(tester, active);
 
-    // MouseRegion drives `active` from onEnter/onExit, so a mouse swept across
-    // the hot zone toggles it well inside the 180ms fade. Reversing a fade
-    // still in flight is the case that used to throw.
+    // Well inside the 180ms fade, which is what used to throw.
     for (int i = 0; i < 6; i++) {
       active.value = !active.value;
       await tester.pump(const Duration(milliseconds: 40));

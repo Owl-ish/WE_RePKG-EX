@@ -1,9 +1,7 @@
 {
   "nav": {
     "extract": "Extract",
-    "backup": "Backup",
-    "expand": "Expand menu",
-    "collapse": "Collapse menu"
+    "backup": "Backup"
   },
   "backup": {
     "comingSoon": "Backup lives here soon."
@@ -17,7 +15,6 @@
     "sortUpdate": "Sort by update",
     "extractTo": "Extract to",
     "extractFolderTip": "Please select the target folder for export",
-    "browseFolder": "Browse folder",
     "extractAll": "Extract all",
     "extractChecked": "Extract selected",
     "deleteChecked": "Delete selected",

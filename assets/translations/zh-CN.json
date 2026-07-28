@@ -1,9 +1,7 @@
 {
   "nav": {
     "extract": "提取",
-    "backup": "备份",
-    "expand": "展开菜单",
-    "collapse": "收起菜单"
+    "backup": "备份"
   },
   "backup": {
     "comingSoon": "备份功能即将在此处推出。"
@@ -17,7 +15,6 @@
     "sortUpdate": "按更新排序",
     "extractTo": "提取至",
     "extractFolderTip": "请选择导出的目标文件夹",
-    "browseFolder": "浏览文件夹",
     "extractAll": "提取全部",
     "extractChecked": "提取选中",
     "deleteChecked": "删除选中",

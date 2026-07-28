@@ -36,15 +36,9 @@ String? parseRepkgVersionOutput(Object? stdout, Object? stderr) {
   return null;
 }
 
-/// Whether the active RePKG understands `-p` and `--progress-json`.
-///
-/// CommandLineParser rejects unknown options by printing an error and exiting
-/// 0 without extracting anything, which reads as a clean run that produced no
-/// files. Sending either flag blind would turn an old tool into silent data
-/// loss, so callers must ask first.
-///
-/// The `-ex` suffix is required, not decoration: addallno's fork numbers itself
-/// 0.5.1 as well and has neither flag.
+/// An older RePKG rejects an unknown option and exits 0 having written nothing,
+/// so callers must ask before sending `-p` or `--progress-json`. The `-ex`
+/// suffix is required: addallno's fork is also 0.5.1 and has neither flag.
 bool repkgSupportsExtractFlags(String? version) {
   final Match? match = RegExp(
     r'^(\d+)\.(\d+)\.(\d+)-ex$',

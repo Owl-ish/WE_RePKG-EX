@@ -113,12 +113,8 @@ class _ScrollEdgeButtonState extends State<ScrollEdgeButton> {
         final Color foreground = theme.colorScheme.onSurface.withValues(
           alpha: .68,
         );
-        // One child faded in place, rather than AnimatedSwitcher between a
-        // keyed button and a keyed blank. The pointer crosses this widget's
-        // 112x80 hot zone faster than the fade, and swapping back before the
-        // outgoing child finished left two children sharing a key, which
-        // Flutter asserts on. Layout is unchanged: the parent Centers this in a
-        // fixed box either way.
+        // Faded in place rather than switched: the pointer crosses this faster
+        // than the fade, and AnimatedSwitcher then held two children on one key.
         return IgnorePointer(
           ignoring: !showButton,
           child: ExcludeSemantics(
@@ -127,10 +123,9 @@ class _ScrollEdgeButtonState extends State<ScrollEdgeButton> {
               opacity: showButton ? 1 : 0,
               duration: _fadeDuration,
               curve: Curves.easeOut,
-              // ExcludeSemantics above is the single authority on whether this
-              // is in the tree. Without this, Opacity drops the subtree itself
-              // on reaching zero, which is a removal mid-animation and what
-              // leaves the Windows AXTree broken.
+              // Leave it to ExcludeSemantics above: Opacity dropping the
+              // subtree at zero is a removal mid-animation, which breaks the
+              // Windows AXTree.
               alwaysIncludeSemantics: true,
               child: Material(
                 elevation: 1,

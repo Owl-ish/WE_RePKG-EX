@@ -8,7 +8,6 @@ class AppI10n {
   static const String homeSortUpdate = 'home.sortUpdate';
   static const String homeExtractTo = 'home.extractTo';
   static const String homeExtractFolderTip = 'home.extractFolderTip';
-  static const String homeBrowseFolder = 'home.browseFolder';
   static const String homeExtractAll = 'home.extractAll';
   static const String homeExtractChecked = 'home.extractChecked';
   static const String homeDeleteChecked = 'home.deleteChecked';
@@ -34,8 +33,6 @@ class AppI10n {
   static const String homeProject = 'home.project';
   static const String navExtract = 'nav.extract';
   static const String navBackup = 'nav.backup';
-  static const String navExpand = 'nav.expand';
-  static const String navCollapse = 'nav.collapse';
   static const String backupComingSoon = 'backup.comingSoon';
 
   static const String homeDetails = 'home.details';

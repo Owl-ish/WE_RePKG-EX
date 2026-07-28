@@ -5,16 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/utils/cancel_token.dart';
 
-/// runRePKG drives a real child process, so these use cmd.exe rather than a
-/// fake: the behaviour under test is the pipe draining, which a fake would not
-/// reproduce.
+/// cmd.exe rather than a fake: the behaviour under test is the pipe draining.
 void main() {
   test(
     'drains both streams at once past the pipe buffer',
     () async {
-      // Both streams are filled well past the ~4KB a Windows pipe holds, so a
-      // reader that finished one before starting the other would block forever:
-      // the child cannot progress on stdout until someone empties stderr.
+      // Past the ~4KB a pipe holds on both streams, so draining them one after
+      // the other blocks forever.
       const int lines = 4000;
       final result = await runRePKG('cmd.exe', [
         '/c',

@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
 
-/// hover darken the tile a little and say where the details live.
+/// Darkens the tile on hover and says double-click opens the details.
 class HoverHint extends StatelessWidget {
   const HoverHint({super.key, required this.opacity});
 

@@ -40,8 +40,6 @@ void endBatch(WidgetRef ref) {
 
 /// Runs RePKG through Process.start so a cancelled batch can kill it, rather
 /// than waiting for a large scene to finish unpacking.
-/// [onStdoutLine] sees each line as it arrives, for callers reporting progress
-/// while RePKG is still running.
 Future<({int exitCode, String stdout, String stderr})> runRePKG(
   String rePKGPath,
   List<String> args,
@@ -66,9 +64,7 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
     final Future<String> stderrDone = process.stderr
         .transform(systemEncoding.decoder)
         .join();
-    // Both are awaited whatever happens. Dropping stderr because stdout threw
-    // would leave its error unhandled, surfacing later with nothing to pin it
-    // to.
+    // Both awaited even if stdout throws, or stderr's error goes unhandled.
     final List<String> streams = await Future.wait(<Future<String>>[
       stdoutDone.then((_) => out.toString()),
       stderrDone,
@@ -469,9 +465,8 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
-/// Turns RePKG's progress lines into loading text, at most once per whole
-/// percent. A large scene runs to thousands of entries, and each update
-/// rebuilds the loading overlay.
+/// Throttled to whole percents: a large scene runs to thousands of entries and
+/// each update rebuilds the loading overlay.
 void Function(String) _sceneProgressReporter(WidgetRef ref) {
   int lastPercent = -1;
   return (String line) {
@@ -506,15 +501,12 @@ Future<String?> extractPKG(
   bool onlySaveImage = ref.read(onlySaveImageProvider);
   try {
     String? overwrite = ref.read(replaceFileProvider) ? '--overwrite' : null;
-    // An older RePKG rejects these and then exits 0 having written nothing, so
-    // a batch would report success over an empty folder.
+    // Unsupported flags make an older RePKG exit 0 having written nothing.
     final bool newFlags = repkgSupportsExtractFlags(
       await ref.read(toolVersionProvider.future),
     );
     String? progress = newFlags && detailedProgress ? '--progress-json' : null;
-    // The raw .tex files are deleted right after either way: deleteOther bins
-    // them when only images are wanted, and deleteOtherAndTexture drops the
-    // whole materials tree in the excludeTexture branch.
+    // Either cleanup pass deletes the raw .tex straight after anyway.
     String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
         ? '-p'
         : null;
