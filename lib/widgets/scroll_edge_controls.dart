@@ -83,10 +83,18 @@ class _ScrollEdgeButtonState extends State<ScrollEdgeButton> {
   void _jumpToEdge() {
     if (!widget.controller.hasClients) return;
     final ScrollPosition position = widget.controller.position;
-    widget.controller.jumpTo(
-      widget.edge == ScrollEdge.top
-          ? position.minScrollExtent
-          : position.maxScrollExtent,
+    final double target = widget.edge == ScrollEdge.top
+        ? position.minScrollExtent
+        : position.maxScrollExtent;
+
+    // Scale the duration with the distance, or a short library crawls and a
+    // long one blurs past. Capped so 2000 wallpapers still take under a second.
+    final double distance = (target - position.pixels).abs();
+    final int ms = (distance / 4).clamp(180, 700).round();
+    widget.controller.animateTo(
+      target,
+      duration: Duration(milliseconds: ms),
+      curve: Curves.easeInOutCubic,
     );
   }
 
