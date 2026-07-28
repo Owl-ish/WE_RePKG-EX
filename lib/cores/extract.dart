@@ -85,6 +85,19 @@ Future<({int exitCode, String stdout, String stderr})> runRePKG(
   }
 }
 
+/// Guarded because this runs before the loading overlay, so a throw here took
+/// the extraction down with nothing on screen.
+Future<bool> ensureOutputDir(String outPath) async {
+  try {
+    await Directory(outPath).create(recursive: true);
+    return true;
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
+    showErrorToast('${tr(AppI10n.errorCreatedFolderFailed)} $outPath');
+    return false;
+  }
+}
+
 /// Copies a project's preview image into [destDir]. RePKG does not emit one, so
 /// without this an extracted scene has nothing identifying it but its folder
 /// name. Failure is logged and ignored.
@@ -128,9 +141,7 @@ Future<void> extractProject(
   String outPath = useProjectPath || extractType.isProject
       ? ref.read(projectPathProvider)!
       : ref.read(exportPathProvider)!;
-  if (!await Directory(outPath).exists()) {
-    return projectNoExistToast(outPath);
-  }
+  if (!await ensureOutputDir(outPath)) return;
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final basePath = outPath;
@@ -292,8 +303,8 @@ Future<void> extractWallpapers(
   }
   List<ErrorInfo> errList = [];
   String outPath = ref.read(exportPathProvider)!;
-  Directory outDir = Directory(outPath);
-  if (!await outDir.exists()) await outDir.create();
+  if (!await ensureOutputDir(outPath)) return;
+  final Directory outDir = Directory(outPath);
   List<FileSystemEntity> oldFiles = await outDir.list().toList();
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);

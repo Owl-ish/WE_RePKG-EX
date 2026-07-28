@@ -23,7 +23,10 @@ class AppI10n {
   static const String homeCreatedDate = 'home.createdDate';
   static const String homeExtractCurrent = 'home.extractCurrent';
   static const String homeExtractForProject = 'home.extractForProject';
-  static const String homeExtractSelected = 'home.extractSelected';
+  static const String homeExtractSelectedAsWallpaper =
+      'home.extractSelectedAsWallpaper';
+  static const String homeExtractSelectedAsProject =
+      'home.extractSelectedAsProject';
   static const String homePlayVideo = 'home.playVideo';
   static const String homeOpenFileLocation = 'home.openFileLocation';
   static const String homeDeleteCurrent = 'home.deleteCurrent';
