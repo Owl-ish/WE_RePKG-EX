@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:we_repkg/models/wallpaper.dart';
+import 'package:we_repkg/utils/preview_image.dart';
 import 'package:we_repkg/widgets/circular_progress.dart';
 
 class ImageView extends StatelessWidget {
@@ -18,20 +17,19 @@ class ImageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Image preview = Image.file(
-      File(wallpaper.previews),
+    final Image preview = Image(
+      // Decode at the tile's real pixel size, and constrain the height rather
+      // than the width. The tile is square and the fit is cover, so the
+      // image's shorter side has to reach the tile edge, and previews are
+      // nearly always landscape. Capping width instead decoded a 16:9 preview
+      // to 270x152 for a 270x270 tile and cover upscaled it 1.8x, which left
+      // every landscape preview in the grid soft.
+      image: previewImage(
+        wallpaper.previews,
+        cacheHeight: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+      ),
       width: size,
       height: size,
-      // Decode at the tile's real on-screen pixel size (logical size ×
-      // display density) rather than full resolution.
-      //
-      // Constrain the HEIGHT, not the width. The tile is square and the fit
-      // is cover, so the image's shorter side is what has to reach the tile
-      // edge. Wallpaper previews are almost always landscape, which makes
-      // height the shorter side: capping width instead decoded a 16:9
-      // preview to 270x152 for a 270x270 tile, and cover then upscaled it
-      // 1.8x. Every landscape preview in the grid was soft.
-      cacheHeight: (size * MediaQuery.devicePixelRatioOf(context)).round(),
       fit: BoxFit.cover,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded) return child;

@@ -22,6 +22,7 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/preview_image.dart';
 import 'package:we_repkg/widgets/custom_btn.dart';
 
 import 'wallpaper_meta.dart';
@@ -32,15 +33,8 @@ typedef PreviewStats = ({double aspect, double luminance});
 
 final Set<String> _openingWallpaperDetails = <String>{};
 
-/// Measures [previews] from a 32px decode.
-///
-/// Two things come out of one cheap decode. The aspect lets the dialog match
-/// the image instead of cropping it, and the luminance decides whether the
-/// panel's text goes light or dark, which fixed theme colours can't do over an
-/// arbitrary wallpaper.
-///
-/// Returns null for a missing or unreadable file, and gives up after two
-/// seconds rather than leaving a double click with nothing to show.
+/// Aspect and mean brightness of [previews], from one cheap 32px decode.
+/// Null if the file is missing or unreadable, or takes more than two seconds.
 Future<PreviewStats?> _previewStats(String previews) {
   return Future(() async {
     if (previews.isEmpty) return null;
@@ -55,8 +49,6 @@ Future<PreviewStats?> _previewStats(String previews) {
       descriptor = await ImageDescriptor.encoded(buffer);
       final double aspect = descriptor.width / descriptor.height;
 
-      // 32px across is far more than averaging a colour needs, and decoding
-      // that is close to free even for a 4K preview.
       final Codec codec = await descriptor.instantiateCodec(targetWidth: 32);
       final FrameInfo frame = await codec.getNextFrame();
       final ByteData? data = await frame.image.toByteData(
@@ -68,9 +60,8 @@ Future<PreviewStats?> _previewStats(String previews) {
       codec.dispose();
       if (data == null) return (aspect: aspect, luminance: .5);
 
-      // Sample the middle 40% of columns, because BoxFit.cover centres its
-      // crop: a tall narrow panel over a landscape preview shows the middle of
-      // the image, not the end nearest the panel.
+      // Middle 40% of columns only: cover centres its crop, so that is the
+      // part of the image the panel actually sits over.
       final int from = (w * .3).floor();
       final int to = (w * .7).ceil().clamp(from + 1, w);
       double total = 0;
@@ -101,9 +92,8 @@ Future<void> showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
 }) async {
-  // Preview inspection and cache warming happen before the route is pushed.
-  // Ignore a second activation during that window and while this wallpaper's
-  // dialog is already open, otherwise two routes and barriers briefly overlap.
+  // Measuring and cache warming happen before the route is pushed, so a second
+  // double click in that window would open two overlapping dialogs.
   if (!_openingWallpaperDetails.add(wallpaper.id)) return;
   try {
     await _showWallpaperDetail(context, wallpaper, origin: origin);
@@ -117,24 +107,20 @@ Future<void> _showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
 }) async {
-  // Resolved before opening rather than inside the dialog: measuring after the
-  // first frame would resize the dialog mid-animation and repaint its text.
+  // Measured before opening: doing it inside would resize the dialog
+  // mid-animation.
   final PreviewStats? stats = await _previewStats(wallpaper.previews);
   if (!context.mounted) return;
 
-  // Warm the image cache before the route is pushed.
-  //
-  // The sharp preview and the frosted panel are two Image widgets over one
-  // file. Uncached they resolve on separate frames, so the panel's backdrop
-  // arrives after the preview and the blur flickers partway through the open
-  // animation. _previewStats doesn't help: it decodes through ImageDescriptor,
-  // which never touches the ImageCache that FileImage reads.
+  // The preview and the frosted panel are two Images over one file. Uncached
+  // they resolve on separate frames and the blur flickers partway through the
+  // open animation. Must be the same provider both panes use, or this misses
+  // the cache slot entirely.
   if (wallpaper.previews.isNotEmpty) {
     await precacheImage(
-      FileImage(File(wallpaper.previews)),
+      previewImage(wallpaper.previews),
       context,
-      // A preview that fails to load is already handled by both widgets'
-      // errorBuilder; failing here would just block the dialog.
+      // Both widgets have an errorBuilder; failing here would just block.
       onError: (Object error, StackTrace? stack) {},
     );
     if (!context.mounted) return;
@@ -152,8 +138,7 @@ Future<void> _showWallpaperDetail(
     context: context,
     barrierDismissible: true,
     barrierLabel: tr(AppI10n.homeDetails),
-    // Retain outside-click dismissal without visually darkening or repainting
-    // the main window behind the dialog.
+    // Transparent, so the window behind is not repainted just to dim it.
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (_, _, _) =>
@@ -191,9 +176,8 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
 }
 
 class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
-  /// Guards against popping twice. The membership listener and the close button
-  /// can both fire for the same dismissal, and the second pop would take the
-  /// route underneath this one.
+  /// The close button and the membership listener can both fire for one
+  /// dismissal, and the second pop would take the route underneath.
   bool _popped = false;
 
   void _close() {
@@ -204,21 +188,16 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Close as soon as the wallpaper leaves the visible list. Deleting from the
-    // buttons below moves the folder to the Recycle Bin, and without this the
-    // dialog stays up rendering a preview whose file is gone, with a delete
-    // button that now points at a missing path. Filtering and searching while
-    // the dialog is open land here too.
+    // Deleting from the buttons below would otherwise leave the dialog showing
+    // a wallpaper whose folder is now in the Recycle Bin.
     ref.listen(filterWallpaperListProvider, (_, List<WallpaperInfo> next) {
       if (!next.contains(widget.wallpaper)) _close();
     });
 
     final Size screen = MediaQuery.of(context).size;
 
-    // Shape the preview pane to the image rather than the other way round: at a
-    // pane matching the file's own ratio, cover crops nothing and there are no
-    // bars to hide. Only when that would push the dialog past the window does
-    // the pane get squared off and give up a few percent to the crop.
+    // Pane takes the image's ratio so cover crops nothing, unless that would
+    // push the dialog past the window edge.
     const double panelWidth = 340;
     final double maxWidth = screen.width * .84;
     final double aspect = widget.stats?.aspect ?? 16 / 9;
@@ -229,23 +208,18 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
     }
     final double width = previewWidth + panelWidth;
 
-    // The panel normalises every wallpaper to the same brightness, so the text
-    // colour follows that target rather than the wallpaper it sits on. Lower
-    // _GlassPanel.panelLuminance past .5 and the text flips to white on its own.
+    // Text follows the panel's target brightness, not the wallpaper's, since
+    // the panel corrects every wallpaper towards that target anyway.
     const bool onDark = _GlassPanel.panelLuminance < .5;
     const Color foreground = onDark ? Colors.white : Color(0xFF101010);
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      // A transparent Dialog still inherits Material's default elevation.
-      // Its shadow is strongest on the right and bottom, and re-rasterizing
-      // that shadow during the scale transition produces a visible edge flash
-      // on Windows.
+      // Material's default shadow re-rasterizes during the scale transition and
+      // flashes along the edges on Windows.
       elevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
-      // The wallpaper runs edge to edge underneath, so the rounded corners have
-      // to clip the image rather than a panel colour sitting on top of it.
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
@@ -302,10 +276,9 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
 
 /// Frosted pane: its own copy of the wallpaper, blurred, under a scrim.
 ///
-/// It carries its own backdrop rather than blurring a full-bleed image shared
-/// with the preview, because a shared image would have to cover the whole
-/// dialog and that is what was cropping the preview. This copy is blurred past
-/// recognition, so it can crop freely.
+/// Its own copy rather than a shared full-bleed one, which would have to cover
+/// the whole dialog and crop the preview. Blurred past recognition anyway, so
+/// this copy can crop freely.
 class _GlassPanel extends StatelessWidget {
   const _GlassPanel({
     required this.wallpaper,
@@ -316,42 +289,26 @@ class _GlassPanel extends StatelessWidget {
 
   final WallpaperInfo wallpaper;
 
-  /// Whether the finished panel is dark. Follows [panelLuminance], not the
-  /// wallpaper, since the backdrop is normalised to that target either way.
   final bool onDark;
 
-  /// Mean brightness of the wallpaper strip behind this pane, 0 to 1. The gap
-  /// between this and [panelLuminance] is what gets corrected out.
+  /// Mean brightness of the wallpaper behind this pane, 0 to 1.
   final double luminance;
 
   final Widget child;
 
-  /// Brightness every panel is pulled towards, 0 to 1.
-  ///
-  /// Without this a dark red wallpaper made a dark red panel and a pale one
-  /// made a pale panel, so the dialog changed character with every wallpaper.
-  /// Correcting each backdrop to a common target keeps the panel consistent
-  /// and easy on the eyes while the silhouette still shows through. Raise for
-  /// a lighter panel; below .5 the text flips to white on its own.
+  /// Brightness every panel is corrected towards, so the dialog doesn't change
+  /// character with each wallpaper. Below .5 the text flips to white.
   static const double panelLuminance = .7;
 
-  /// How much of the wallpaper's colour survives, 0 to 1. 0 is greyscale, 1 is
-  /// untouched. Low values are what stop a strongly coloured wallpaper from
-  /// staining the whole panel; the blurred shapes come through regardless,
-  /// because desaturating leaves brightness alone.
+  /// 0 is greyscale, 1 untouched. Low enough that a strongly coloured wallpaper
+  /// doesn't stain the panel.
   static const double _saturation = .55;
 
-  /// How much flat tint sits over the corrected backdrop. Kept low so the
-  /// silhouette survives; legibility comes from the text colour and its halo.
   static const double _scrimOpacity = .25;
-
-  /// Higher is blurrier and flatter. Around 15 leaves shapes recognisable.
   static const double _blurSigma = 35;
 
-  /// Desaturate by [saturation] and shift brightness by [lift], as a 4x5 colour
-  /// matrix. The luma weights match the ones [_previewStats] measures with, so
-  /// desaturation leaves the measured brightness untouched and only [lift]
-  /// moves it.
+  /// Desaturate and shift brightness, as a 4x5 colour matrix. Luma weights
+  /// match [_previewStats], so only [lift] moves the measured brightness.
   static List<double> _correction(double saturation, double lift) {
     const double lr = .2126, lg = .7152, lb = .0722;
     final double s = saturation;
@@ -370,26 +327,17 @@ class _GlassPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color tint = onDark ? Colors.black : Colors.white;
-    // Clamped: a nearly black wallpaper lifted all the way to the target washes
-    // out to flat grey and loses the silhouette that makes this worth doing.
+    // Clamped, or a nearly black wallpaper washes out to flat grey.
     final double lift = (panelLuminance - luminance).clamp(-.35, .45);
 
     return ClipRect(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // ImageFiltered, not BackdropFilter.
-          //
-          // BackdropFilter blurs whatever the layer beneath it painted, and its
-          // kernel reaches about 2x sigma outside its own bounds. While the
-          // dialog scales open there is nothing valid out there, so the top and
-          // right edges churned frame to frame. This pane owns its backdrop
-          // rather than borrowing one, so the image can be blurred directly and
-          // the filter never looks outside this subtree.
-          //
-          // TileMode.clamp extends the edge pixels instead of fading to
-          // transparent, which is what keeps the border clean without having to
-          // overscale the image past the clip.
+          // ImageFiltered, not BackdropFilter: a backdrop filter's kernel
+          // reaches outside its own bounds, where nothing valid exists while
+          // the dialog is scaling open, and the edges churn. TileMode.clamp
+          // keeps the border clean without overscaling past the clip.
           ImageFiltered(
             imageFilter: ImageFilter.blur(
               sigmaX: _blurSigma,
@@ -398,8 +346,8 @@ class _GlassPanel extends StatelessWidget {
             ),
             child: ColorFiltered(
               colorFilter: ColorFilter.matrix(_correction(_saturation, lift)),
-              child: Image.file(
-                File(wallpaper.previews),
+              child: Image(
+                image: previewImage(wallpaper.previews),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     ColoredBox(color: tint),
@@ -428,15 +376,10 @@ class _Preview extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: Colors.black,
-      // cover, not contain: contain letterboxed a 16:9 preview inside a nearly
-      // square pane and put black bars down both sides. Filling the dialog
-      // costs a crop off the top and bottom, and the grid tile is the place
-      // that already shows the whole frame.
-      //
-      // No cacheWidth either: a single image at the largest size the app ever
-      // draws it is what a full resolution decode is for.
-      child: Image.file(
-        File(wallpaper.previews),
+      // cover, not contain: contain letterboxes a 16:9 preview in a nearly
+      // square pane. The grid tile is where you see the whole frame.
+      child: Image(
+        image: previewImage(wallpaper.previews),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             const Center(child: Icon(Icons.broken_image, size: 64)),
@@ -477,9 +420,9 @@ class _Actions extends ConsumerWidget {
             label: tr(AppI10n.homeOpenFileLocation),
           ),
           _DetailActionButton.destructive(
-            // No pop here: deleteCurrent drops the wallpaper from the list, and
-            // the membership listener closes the dialog. Popping as well would
-            // close it before the confirm prompt is answered.
+            // No pop: the membership listener closes the dialog once the
+            // wallpaper leaves the list. Popping here would beat the confirm
+            // prompt.
             onPressed: () async => await deleteCurrent(ref, wallpaper),
             label: tr(AppI10n.homeDeleteCurrent),
           ),

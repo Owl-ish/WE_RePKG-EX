@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/utils/preview_image.dart';
 import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/widgets/dialog.dart';
@@ -41,8 +40,8 @@ class ErrorView extends StatelessWidget {
                   color: Colors.grey[200],
                 ),
                 clipBehavior: Clip.hardEdge,
-                child: Image.file(
-                  File(err.wallpaper!.previews),
+                child: Image(
+                  image: previewImage(err.wallpaper!.previews),
                   width: 80,
                   height: 80,
                   fit: BoxFit.cover,

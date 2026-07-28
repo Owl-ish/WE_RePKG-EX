@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/models/wallpaper.dart';
+import 'package:we_repkg/utils/preview_image.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -122,8 +121,8 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                 opacity: _imageAnimation,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    File(current.previews),
+                  child: Image(
+                    image: previewImage(current.previews),
                     key: ValueKey(current.id),
                     width: 160,
                     height: 160,
