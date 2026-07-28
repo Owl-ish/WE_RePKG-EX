@@ -11,12 +11,8 @@ import 'package:we_repkg/widgets/app_icon_button.dart';
 /// setter that flips it.
 typedef _FilterBox = (String, bool, void Function(bool));
 
-/// Type and age-rating filters, in the top bar rather than the settings window.
-///
-/// The trigger stays icon-sized on purpose. TopView is a fixed-width Row, and at
-/// the 1060px minimum window width (config/app.dart) the side panel leaves it
-/// roughly 200px of slack, so a labelled dropdown the width of SortDropdown
-/// would overflow the row.
+/// Type and age-rating filters. The trigger stays icon-sized because TopView is
+/// a fixed Row with about 200px of slack at the minimum window width.
 class FilterDropdown extends ConsumerWidget {
   const FilterDropdown({super.key});
 
@@ -31,9 +27,8 @@ class FilterDropdown extends ConsumerWidget {
       fontSize: 13,
     );
 
-    // A ticked box means "show these", so every value is the negation of the
-    // stored hideX flag. The storage keys keep their original names; renaming
-    // them would silently reset every existing user's saved filters.
+    // A ticked box means "show these", hence the negation of each hideX flag.
+    // The storage keys keep their names; renaming resets everyone's filters.
     final List<_FilterBox> types = [
       (
         tr(AppI10n.homeScene),
@@ -81,8 +76,8 @@ class FilterDropdown extends ConsumerWidget {
       ),
     ];
 
-    // Tint the icon while anything is hidden, so a filtered library never looks
-    // like an empty one. Doubles as whether reset has anything to do.
+    // Tinted while anything is hidden, so a filtered library never reads as an
+    // empty one. Doubles as whether reset has anything to do.
     final bool active = !filter.nothingHidden;
 
     return CheckboxTheme(
@@ -96,17 +91,17 @@ class FilterDropdown extends ConsumerWidget {
         ),
       ),
       child: MenuAnchor(
-        // Right-align the panel with the trigger. Left to itself the menu hangs
-        // off the trigger's left edge, runs past the window, and Flutter shunts
-        // it back so it sits flush against the window edge.
+        // Right-aligned with the trigger. Left alone the panel hangs off its
+        // left edge, runs past the window, and gets shunted back.
         alignmentOffset: const Offset(TopBarNums.buttonSize - _menuWidth, 4),
         style: MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(
-            theme.dropdownMenuTheme.inputDecorationTheme?.fillColor,
-          ),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          ),
+          // _Unfold draws the surface instead, or the background pops in at
+          // full size while only the text unrolls.
+          backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(0),
+          shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
           minimumSize: const WidgetStatePropertyAll(Size(_menuWidth, 0)),
           maximumSize: const WidgetStatePropertyAll(
             Size(_menuWidth, double.infinity),
@@ -122,26 +117,31 @@ class FilterDropdown extends ConsumerWidget {
           iconSize: TopBarNums.iconSize,
           color: active ? theme.primaryColor : null,
         ),
-        // closeOnActivate stays false throughout: ticking three boxes should
-        // take one trip to the menu, not three.
+        // closeOnActivate stays false: ticking three boxes should take one trip.
         menuChildren: [
-          _label(tr(AppI10n.homeFilterType)),
-          ..._boxes(types, itemStyle),
-          const _MenuDivider(),
-          _label(tr(AppI10n.homeFilterRating)),
-          ..._boxes(ratings, itemStyle),
-          const _MenuDivider(),
-          MenuItemButton(
-            closeOnActivate: false,
-            // Disabled rather than hidden, so the menu doesn't reflow under the
-            // pointer the moment the last box goes back on.
-            onPressed: active ? filterRead.reset : null,
-            leadingIcon: Icon(
-              Icons.restart_alt_rounded,
-              size: 18,
-              color: active ? null : theme.disabledColor,
+          _Unfold(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _label(tr(AppI10n.homeFilterType)),
+                ..._boxes(types, itemStyle),
+                const _MenuDivider(),
+                _label(tr(AppI10n.homeFilterRating)),
+                ..._boxes(ratings, itemStyle),
+                const _MenuDivider(),
+                MenuItemButton(
+                  closeOnActivate: false,
+                  // Disabled, not hidden, or the menu reflows under the pointer.
+                  onPressed: active ? filterRead.reset : null,
+                  leadingIcon: Icon(
+                    Icons.restart_alt_rounded,
+                    size: 18,
+                    color: active ? null : theme.disabledColor,
+                  ),
+                  child: Text(tr(AppI10n.homeFilterReset), style: itemStyle),
+                ),
+              ],
             ),
-            child: Text(tr(AppI10n.homeFilterReset), style: itemStyle),
           ),
         ],
       ),
@@ -169,6 +169,43 @@ class FilterDropdown extends ConsumerWidget {
       ),
     ),
   );
+}
+
+/// Unrolls the panel downward from its top edge, like a blind. Fires once on
+/// build; MenuAnchor drops the panel outright on close.
+class _Unfold extends StatelessWidget {
+  const _Unfold({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOutCubic,
+      // heightFactor changes layout, so the panel itself unrolls. A transform
+      // would leave it full size and only fold what is drawn inside.
+      builder: (context, t, child) => Align(
+        alignment: Alignment.topCenter,
+        heightFactor: t.clamp(.01, 1),
+        // Fading to zero drops the panel's nodes out of the accessibility tree
+        // early, which upsets Windows' bridge.
+        child: Opacity(opacity: t, alwaysIncludeSemantics: true, child: child),
+      ),
+      child: Material(
+        color: theme.dropdownMenuTheme.inputDecorationTheme?.fillColor,
+        elevation: 8,
+        borderRadius: BorderRadius.circular(4),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: child,
+        ),
+      ),
+    );
+  }
 }
 
 /// A Divider needs a bounded width, which the menu panel only has because
