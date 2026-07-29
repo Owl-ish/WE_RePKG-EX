@@ -366,12 +366,17 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
       );
     }
   }
-  folderDeletionFutures.add(
-    File(path.join(outPath, 'scene.json')).delete().catchError((e) {
-      debugPrint('${tr(AppI10n.logDeleteSceneJsonFailed)} $e');
-      throw 'scene.json ${tr(AppI10n.dialogDeleteFailed)} $e';
-    }),
-  );
+  // Guarded like the folders above: wallpaper mode extracts tex entries only,
+  // so scene.json is usually never written in the first place.
+  final File sceneJson = File(path.join(outPath, 'scene.json'));
+  if (await sceneJson.exists()) {
+    folderDeletionFutures.add(
+      sceneJson.delete().catchError((e) {
+        debugPrint('${tr(AppI10n.logDeleteSceneJsonFailed)} $e');
+        throw 'scene.json ${tr(AppI10n.dialogDeleteFailed)} $e';
+      }),
+    );
+  }
   try {
     await Future.wait(folderDeletionFutures);
   } catch (e) {
