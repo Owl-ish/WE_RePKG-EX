@@ -13,9 +13,27 @@ class FunctionSelectedBtn extends ConsumerWidget {
     ExtractType type = ref.watch(currentExtractTypeProvider);
     ThemeData theme = Theme.of(context);
     return Row(
+      spacing: 8,
       children: [
         PopupMenuButton<ExtractType>(
-          icon: Icon(Icons.arrow_drop_down),
+          icon: const Icon(Icons.arrow_drop_down),
+          iconSize: 22,
+          tooltip: type.label,
+          // Circular and filled, like the scroll edge buttons. A bare arrow on
+          // the bar was easy to miss for something that changes what extracting
+          // does.
+          style: IconButton.styleFrom(
+            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            foregroundColor: theme.colorScheme.onSurface,
+            shape: const CircleBorder(),
+            side: BorderSide(
+              color: theme.colorScheme.onSurface.withValues(alpha: .12),
+            ),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(34, 34),
+            maximumSize: const Size(34, 34),
+            hoverColor: theme.colorScheme.primary.withValues(alpha: .10),
+          ),
           color: theme.dialogTheme.backgroundColor,
           itemBuilder: (context) => ExtractType.values
               .map(

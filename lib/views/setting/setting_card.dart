@@ -41,7 +41,7 @@ Future<void> showSettingCard(BuildContext context) {
     barrierDismissible: true,
     barrierLabel: tr(AppI10n.settingTitle),
     barrierColor: Colors.black.withValues(alpha: .45),
-    transitionDuration: const Duration(milliseconds: 260),
+    transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (_, _, _) => const SettingCard(),
     transitionBuilder: (context, animation, _, child) {
       final double t = Curves.easeInOutCubic.transform(animation.value);

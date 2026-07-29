@@ -5,14 +5,12 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
-import 'package:we_repkg/views/setting/acf_path_input.dart';
 import 'package:we_repkg/views/setting/concurrency_slider.dart';
 import 'package:we_repkg/views/setting/project_path_input.dart';
 import 'package:we_repkg/widgets/double_title_checked.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
 
-import 'tool_path_input.dart';
 import 'wallpaper_path_input.dart';
 
 class SettingConfigGroup extends ConsumerWidget {
@@ -99,13 +97,9 @@ class SettingConfigGroup extends ConsumerWidget {
         ),
         ConcurrencySlider(),
         SizedBox(height: 8),
-        ToolPathInput(),
-        SizedBox(height: 4),
         WallpaperPathInput(),
         SizedBox(height: 4),
         ProjectPathInput(),
-        SizedBox(height: 4),
-        AcfPathInput(),
       ],
     );
   }

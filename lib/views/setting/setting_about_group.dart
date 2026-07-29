@@ -6,6 +6,8 @@ import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/pack.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/views/setting/acf_path_input.dart';
+import 'package:we_repkg/views/setting/tool_path_input.dart';
 import 'package:we_repkg/widgets/copy.dart';
 import 'package:we_repkg/widgets/link_text.dart';
 import 'package:we_repkg/widgets/setting_info.dart';
@@ -59,6 +61,12 @@ class SettingAboutGroup extends ConsumerWidget {
           ),
         ),
         ?_settingsFile(context),
+        // Paths the app rarely needs changing sit under About, away from the
+        // extraction settings that decide what a run actually does.
+        const SizedBox(height: 8),
+        const ToolPathInput(),
+        const SizedBox(height: 4),
+        const AcfPathInput(),
       ],
     );
   }
