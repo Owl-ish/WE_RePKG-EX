@@ -12,10 +12,10 @@
   <a href="README-CN.md">简体中文</a>
 </p>
 
-Wallpaper Engine keeps scene wallpapers packed inside `scene.pkg`, so the images
-and videos you subscribed to are not files you can open. WeRePKG-EX unpacks them
-for you: point it at your library, pick what you want, and get the artwork out
-as PNG, JPG, GIF or MP4.
+WeRePKG-EX unpacks `scene.pkg`  as normal image files, or extract as an editable WPE project.
+
+`Extracts to Steam\steamapps\common\wallpaper_engine\projects\myprojects` by default. Which you can then
+edit the scene in WPE
 
 It is a Windows desktop app built on [RePKG-EX](https://github.com/Owl-ish/RePKG-EX),
 and it bundles the extractor, so there is nothing else to install.
