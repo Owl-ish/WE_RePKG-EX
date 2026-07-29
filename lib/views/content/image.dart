@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/utils/preview_image.dart';
-import 'package:we_repkg/widgets/circular_progress.dart';
 
 class ImageView extends StatelessWidget {
   const ImageView({
@@ -33,11 +32,12 @@ class ImageView extends StatelessWidget {
       fit: BoxFit.cover,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded) return child;
+        // Nothing, rather than a spinner. Searching brings up wallpapers the
+        // cache never reached, and a screenful of spinners appearing at once is
+        // its own kind of flash.
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
-          child: frame != null
-              ? child
-              : const Center(child: EasyCircularProgress()),
+          child: frame != null ? child : const SizedBox.shrink(),
         );
       },
       errorBuilder: (context, error, stackTrace) {
@@ -48,11 +48,13 @@ class ImageView extends StatelessWidget {
       },
     );
     final Animation<double>? scaleAnimation = scale;
-    return Container(
+    // No fill while the preview loads: any colour reads as a flash against a
+    // grid of photographs, and a light one especially so in light mode. The
+    // tile's own shadow and title strip still show it is there. The tile's
+    // ClipRRect already takes the corners, so nothing clips here either.
+    return SizedBox(
       width: size,
       height: size,
-      decoration: const BoxDecoration(color: Colors.white),
-      clipBehavior: Clip.hardEdge,
       child: scaleAnimation == null
           ? preview
           : ScaleTransition(
