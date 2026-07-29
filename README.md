@@ -36,8 +36,8 @@ WeRePKG-EX unpacks `scene.pkg`  as normal image files, or extract as an editable
 `Extracts to Steam\steamapps\common\wallpaper_engine\projects\myprojects` by default. Which you can then
 edit the scene in WPE
 
-It is a Windows desktop app built on [RePKG-EX](https://github.com/Owl-ish/RePKG-EX),
-and it bundles the extractor, so there is nothing else to install.
+It is a Windows desktop app built on [WeRePKG](https://github.com/ilgnefz/we_repkg)
+it bundles the extractor, so there is nothing else to install.
 
 <img src="docs/main-window.png" alt="Main window" width="1000"/>
 
