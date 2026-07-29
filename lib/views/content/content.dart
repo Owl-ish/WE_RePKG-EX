@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -282,6 +283,9 @@ class _ContentViewState extends ConsumerState<ContentView>
             // movement.
             GestureDetector(
               behavior: HitTestBehavior.translucent,
+              // Anchor the box where the button went down, not where the pan
+              // won the arena, which on a fast drag is a tile or two away.
+              dragStartBehavior: DragStartBehavior.down,
               onPanStart: (d) {
                 _dragPointer = d.localPosition;
                 _dragFrom = _toGrid(d.localPosition);
