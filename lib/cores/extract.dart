@@ -300,6 +300,7 @@ Future<void> extractWallpapers(
   List<ErrorInfo> errList = [];
   String outPath = ref.read(exportPathProvider)!;
   if (!await ensureOutputDir(outPath)) return;
+  await sweepStaleSceneDirs(outPath);
   final Directory outDir = Directory(outPath);
   List<FileSystemEntity> oldFiles = await outDir.list().toList();
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
@@ -465,23 +466,51 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
+const String _sceneTempPrefix = '.werepkg-';
+
+/// Clears scene directories left by a run that was killed outright, which the
+/// per-scene cleanup never got to.
+Future<void> sweepStaleSceneDirs(String outPath) async {
+  try {
+    await for (final entity in Directory(outPath).list(followLinks: false)) {
+      if (entity is! Directory) continue;
+      if (!path.basename(entity.path).startsWith(_sceneTempPrefix)) continue;
+      await entity.delete(recursive: true);
+    }
+  } catch (e) {
+    debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
+  }
+}
+
 /// Moves every file under [from] into [to], keeping relative paths and taking a
 /// free name when another wallpaper already claimed one.
 Future<String?> moveExtractedInto(String from, String to) async {
+  // Per file, because the caller deletes the source directory afterwards:
+  // stopping at the first failure would throw away everything behind it.
+  final List<String> failed = <String>[];
   try {
     await for (final entity in Directory(
       from,
     ).list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
       final String dest = path.join(to, path.relative(entity.path, from: from));
-      await Directory(path.dirname(dest)).create(recursive: true);
-      await entity.rename(await claimFilePath(dest));
+      try {
+        await Directory(path.dirname(dest)).create(recursive: true);
+        await entity.rename(await claimFilePath(dest));
+      } catch (e) {
+        debugPrint('${tr(AppI10n.logMoveFileFailed)} ${entity.path} $e');
+        failed.add(path.basename(entity.path));
+      }
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.logMoveFileFailed)} $e');
     return '${tr(AppI10n.logMoveFileFailed)} $e';
   }
-  return null;
+
+  if (failed.isEmpty) return null;
+  final String named = failed.take(5).join(', ');
+  final String rest = failed.length > 5 ? ' (+${failed.length - 5})' : '';
+  return '${tr(AppI10n.logMoveFileFailed)} $named$rest';
 }
 
 /// Extracts one scene into a directory of its own, then moves what survives the
@@ -496,7 +525,7 @@ Future<String?> extractSceneToShared(
   bool detailedProgress = false,
 }) async {
   final Directory temp = Directory(
-    path.join(outPath, '.werepkg-${wallpaper.id}'),
+    path.join(outPath, '$_sceneTempPrefix${wallpaper.id}'),
   );
   try {
     if (await temp.exists()) await temp.delete(recursive: true);
@@ -506,6 +535,7 @@ Future<String?> extractSceneToShared(
     return '${tr(AppI10n.errorCreatedFolderFailed)} $e';
   }
 
+  bool keepTemp = false;
   try {
     final String? err = await extractPKG(
       ref,
@@ -520,13 +550,44 @@ Future<String?> extractSceneToShared(
       const <FileSystemEntity>[],
     );
     if (cleanup != null) return cleanup;
-    return await moveExtractedInto(temp.path, outPath);
+
+    final String? moved = await moveExtractedInto(temp.path, outPath);
+    if (moved == null) return null;
+    // Whatever could not be moved is still in here. Deleting it would destroy
+    // output the error message just named, and re-extracting cannot recover it
+    // when the cause is permanent, a path too long being the usual one.
+    keepTemp = true;
+    return '$moved -> ${await keepUnmovedFiles(temp, outPath, wallpaper.id)}';
   } finally {
-    try {
-      await temp.delete(recursive: true);
-    } catch (e) {
-      debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
+    if (!keepTemp) {
+      try {
+        await temp.delete(recursive: true);
+      } catch (e) {
+        debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
+      }
     }
+  }
+}
+
+/// Moves the leftovers out of the sweep's way and says where they went, since
+/// the next run clears anything still named with the scene prefix.
+Future<String> keepUnmovedFiles(
+  Directory temp,
+  String outPath,
+  String id,
+) async {
+  final String kept = path.join(outPath, '$id-unmoved');
+  try {
+    await Directory(kept).delete(recursive: true);
+  } catch (_) {
+    // Nothing there yet, which is the normal case.
+  }
+  try {
+    await temp.rename(kept);
+    return kept;
+  } catch (e) {
+    debugPrint('${tr(AppI10n.logMoveFileFailed)} $e');
+    return temp.path;
   }
 }
 
