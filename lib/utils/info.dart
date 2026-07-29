@@ -37,14 +37,15 @@ String? parseRepkgVersionOutput(Object? stdout, Object? stderr) {
 }
 
 /// An older RePKG rejects an unknown option and exits 0 having written nothing,
-/// so callers must ask before sending `-p` or `--progress-json`. The `-ex`
-/// suffix is required: addallno's fork is also 0.5.1 and has neither flag.
+/// so callers must ask before sending `-p`, `--progress-json` or
+/// `--ignore-dirs`. The `-ex` suffix is required: addallno's fork is also 0.5.1
+/// and has none of them.
 bool repkgSupportsExtractFlags(String? version) {
   final Match? match = RegExp(
     r'^(\d+)\.(\d+)\.(\d+)-ex$',
   ).firstMatch(version?.trim() ?? '');
   if (match == null) return false;
-  const List<int> required = <int>[0, 5, 1];
+  const List<int> required = <int>[0, 5, 3];
   for (int i = 0; i < required.length; i++) {
     final int part = int.parse(match.group(i + 1)!);
     if (part != required[i]) return part > required[i];

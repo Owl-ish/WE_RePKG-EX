@@ -510,9 +510,26 @@ Future<String?> extractPKG(
     String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
         ? '-p'
         : null;
+    // Effect masks are most of the conversion work and none of the artwork.
+    // Wallpaper mode only: a project needs them to still be a project.
+    List<String>? skipMasks = newFlags
+        ? const ['--ignore-dirs', 'masks']
+        : null;
     // 提取项目，移动materials一级目录的文件到外面
     List<String> args = excludeTexture
-        ? ['extract', ?onlyImages, ?progress, '-o', outPath, wallpaper.target]
+        // Only tex entries: everything else was extracted just for
+        // deleteOtherAndTexture to delete, and cancelling left it behind.
+        ? [
+            'extract',
+            '-e',
+            'tex',
+            ?onlyImages,
+            ?progress,
+            ...?skipMasks,
+            '-o',
+            outPath,
+            wallpaper.target,
+          ]
         : [
             'extract',
             '-e',
@@ -521,6 +538,7 @@ Future<String?> extractPKG(
             ?overwrite,
             ?onlyImages,
             ?progress,
+            ...?skipMasks,
             '-o',
             outPath,
             wallpaper.target,
