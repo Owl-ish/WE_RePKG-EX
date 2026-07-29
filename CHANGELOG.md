@@ -2,67 +2,36 @@
 
 ## WeRePKG-EX - v1.6.0
 
-Browsing the grid is the focus of this release: wallpapers can be selected by dragging,
-settings open as a card over the library instead of a separate page, and the filter
-panel and edge buttons animate rather than appearing. Extraction gained live progress
-inside a single scene, and the bundled RePKG moved to 0.5.2-ex, which fixes animated
-textures that previously failed outright.
+A UI pass over browsing and selection, plus extraction fixes from the bundled
+RePKG 0.5.2-ex.
 
 ### Features
-- **Select wallpapers by dragging across the grid.** A marquee selects everything it
-  covers, and dragging past the edge scrolls the grid to follow.
-- **Settings open as a card** over the library rather than replacing it, so the grid
-  stays visible behind them.
-- **Settings live in `%APPDATA%\WeRePKG-EX`,** and the settings window shows the path.
-  An existing settings file is migrated on first launch.
-- **The title bar shows the app version.**
-- **Live progress inside a scene.** Extracting a single wallpaper counts entries,
-  "Extracting scene file 42/128", instead of sitting on a spinner. Needs the bundled
-  RePKG 0.5.2-ex or newer; an older tool falls back to the spinner.
-- **Jump-to-top and jump-to-bottom buttons** on long libraries, fading in when there is
-  somewhere to go.
-- **The filter panel unrolls** as it opens instead of appearing.
-- **Every wallpaper type shows by default**, rather than hiding web and application
-  wallpapers until you find the setting.
+- Select wallpapers by dragging a box across the grid. Dragging past the edge scrolls.
+- Settings open as a card over the library instead of replacing it, and now live in
+  `%APPDATA%\WeRePKG-EX`. An existing settings file is migrated on first launch.
+- Live progress while a scene extracts, counting files instead of showing a spinner.
+- Jump-to-top and jump-to-bottom buttons on long libraries.
+- The filter panel animates open.
+- The title bar shows the app version.
+- Web and application wallpapers show by default.
 
 ### Bug Fixes
-- **Extraction failures are readable instead of crashing.** The error dialog put a
-  `SelectionArea` inside BotToast's layer, which sits above the Navigator and so has no
-  `Overlay` to reach. Every failure threw `No Overlay widget found` rather than listing
-  what went wrong, so the one screen that explains a problem was the one that broke.
-- **The scroll-to-edge buttons no longer crash the grid.** Sweeping the pointer across
-  them faster than their fade left two children sharing a key, which Flutter asserts on.
-- **Animated textures stored as PNG or JPEG now extract.** Wallpaper Engine writes some
-  animation sheets as encoded images; RePKG could not convert them and failed the entry,
-  which failed the whole extraction.
-- **Animated textures come out as `.gif`** instead of a `.png` holding GIF data, which
-  nothing would open.
-- **Animated previews no longer flash.** Wallpaper Engine sometimes starts recording
-  `preview.gif` before the scene draws, leaving a black first frame that read as a flash
-  at the end of every loop.
-- **Extraction works from a shared folder,** and a partial extraction still gets its
-  preview image copied.
-- **Previews are no longer left in wallpaper exports.**
+- Extraction errors open a dialog listing what failed, instead of crashing.
+- The scroll-to-edge buttons no longer crash the grid when the pointer crosses them
+  quickly.
+- Animated textures stored as PNG or JPEG now extract. They used to fail the whole
+  wallpaper.
+- Animated textures are saved as `.gif` rather than a `.png` nothing can open.
+- Animated previews no longer flash at the end of each loop.
+- Extraction works from a shared folder, and a partial extraction keeps its preview
+  image.
+- Previews are no longer left behind in wallpaper exports.
 
 ### Performance
-- **Raw `.tex` files are no longer written just to be deleted.** When only images are
-  wanted, RePKG is told to skip them rather than writing every texture to disk for the
-  cleanup pass to remove seconds later.
-- **Jumping to an edge no longer decodes the whole library.** Animating the full
-  distance mounted every tile it passed; it now skips to within a screen or two and
-  animates the rest.
-- **Drag autoscroll runs off a ticker** rather than a 16ms timer, which beat against
-  vsync and made the speed depend on the monitor.
-
-### Under the hood
-- The bundled RePKG is 0.5.2-ex, pinned by tag and SHA256.
-- **New RePKG options are gated on the version the tool reports.** An older RePKG
-  rejects an unknown option and exits 0 having written nothing, which would have looked
-  like a clean run over an empty folder.
-- RePKG's output is read line by line rather than in one lump, so progress can be
-  reported while it runs.
-- 179 tests, up from 165, covering the error dialog, the edge buttons, RePKG's progress
-  output, and process handling under a full pipe and mid-stream cancellation.
+- Wallpaper mode no longer writes raw `.tex` files only to delete them afterwards.
+- Jumping to the top or bottom of a long library is immediate, instead of loading every
+  wallpaper along the way.
+- Drag autoscroll runs at the same speed on any monitor.
 
 ## WeRePKG-EX - v1.5.0
 
