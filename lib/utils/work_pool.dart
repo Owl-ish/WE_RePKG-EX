@@ -1,22 +1,4 @@
-import 'dart:async';
-
 import 'package:we_repkg/utils/cancel_token.dart';
-
-/// Serializes only the work routed through it, so a mixed batch can copy in
-/// parallel while RePKG processes take turns over a shared export folder.
-class SerialWorkGate {
-  Future<void> _tail = Future<void>.value();
-
-  Future<T> run<T>(Future<T> Function() work) {
-    final Future<void> previous = _tail;
-    final done = Completer<void>();
-    _tail = done.future;
-
-    return previous.then((_) => work()).whenComplete(() {
-      if (!done.isCompleted) done.complete();
-    });
-  }
-}
 
 /// Runs [work] over [items] with at most [concurrency] in flight, returning
 /// results in input order.

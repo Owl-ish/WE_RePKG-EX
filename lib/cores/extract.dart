@@ -305,17 +305,13 @@ Future<void> extractWallpapers(
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
-  final sceneGate = SerialWorkGate();
 
-  // Videos and image folders copy concurrently. Scenes cannot: RePKG writes
-  // fixed names like scene.json, and this mode shares one export folder.
   final results = await runBounded<WallpaperInfo, (String?, bool)>(
     wallpapers,
     (wallpaper) => extractBranch(
       ref,
       wallpaper,
       outPath,
-      sceneGate: sceneGate,
       // Only a single-wallpaper run can own the progress line.
       detailedProgress: wallpapers.length == 1,
     ),
@@ -380,17 +376,21 @@ Future<(String?, bool)> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath, {
-  SerialWorkGate? sceneGate,
   bool detailedProgress = false,
 }) async {
   final target = wallpaper.target;
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
-    Future<String?> work() =>
-        extractPKG(ref, wallpaper, outPath, detailedProgress: detailedProgress);
-    final err = sceneGate == null ? await work() : await sceneGate.run(work);
-    return (err, true);
+    return (
+      await extractSceneToShared(
+        ref,
+        wallpaper,
+        outPath,
+        detailedProgress: detailedProgress,
+      ),
+      true,
+    );
   } else if (targetLower.endsWith('.mp4')) {
     return (
       await extractVideo(
@@ -463,6 +463,71 @@ Future<String?> copyWallpaperFolderTo(
     return '${tr(AppI10n.errorExtractFailed)} $e';
   }
   return null;
+}
+
+/// Moves every file under [from] into [to], keeping relative paths and taking a
+/// free name when another wallpaper already claimed one.
+Future<String?> moveExtractedInto(String from, String to) async {
+  try {
+    await for (final entity in Directory(
+      from,
+    ).list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final String dest = path.join(to, path.relative(entity.path, from: from));
+      await Directory(path.dirname(dest)).create(recursive: true);
+      await entity.rename(await claimFilePath(dest));
+    }
+  } catch (e) {
+    debugPrint('${tr(AppI10n.logMoveFileFailed)} $e');
+    return '${tr(AppI10n.logMoveFileFailed)} $e';
+  }
+  return null;
+}
+
+/// Extracts one scene into a directory of its own, then moves what survives the
+/// cleanup into the shared export folder.
+///
+/// RePKG writes fixed names like scene.json, so several of them cannot share an
+/// output folder. Giving each its own lets the batch run wallpapers at once.
+Future<String?> extractSceneToShared(
+  WidgetRef ref,
+  WallpaperInfo wallpaper,
+  String outPath, {
+  bool detailedProgress = false,
+}) async {
+  final Directory temp = Directory(
+    path.join(outPath, '.werepkg-${wallpaper.id}'),
+  );
+  try {
+    if (await temp.exists()) await temp.delete(recursive: true);
+    await temp.create(recursive: true);
+  } catch (e) {
+    debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
+    return '${tr(AppI10n.errorCreatedFolderFailed)} $e';
+  }
+
+  try {
+    final String? err = await extractPKG(
+      ref,
+      wallpaper,
+      temp.path,
+      detailedProgress: detailedProgress,
+    );
+    if (err != null) return err;
+    final String? cleanup = await deleteUselessFiles(
+      ref,
+      temp.path,
+      const <FileSystemEntity>[],
+    );
+    if (cleanup != null) return cleanup;
+    return await moveExtractedInto(temp.path, outPath);
+  } finally {
+    try {
+      await temp.delete(recursive: true);
+    } catch (e) {
+      debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
+    }
+  }
 }
 
 /// Builds RePKG's arguments for wallpaper mode.

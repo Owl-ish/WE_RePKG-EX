@@ -5,40 +5,6 @@ import 'package:we_repkg/utils/work_pool.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('SerialWorkGate', () {
-    test('runs concurrently submitted work one at a time in order', () async {
-      final gate = SerialWorkGate();
-      int inFlight = 0;
-      int peak = 0;
-      final completed = <int>[];
-
-      final results = await Future.wait([
-        for (int i = 0; i < 8; i++)
-          gate.run(() async {
-            inFlight++;
-            peak = peak > inFlight ? peak : inFlight;
-            await Future<void>.delayed(const Duration(milliseconds: 2));
-            completed.add(i);
-            inFlight--;
-            return i;
-          }),
-      ]);
-
-      expect(peak, 1);
-      expect(completed, List<int>.generate(8, (i) => i));
-      expect(results, List<int>.generate(8, (i) => i));
-    });
-
-    test('a failed job releases the next job', () async {
-      final gate = SerialWorkGate();
-      final first = gate.run<void>(() async => throw StateError('failed'));
-      final second = gate.run(() async => 'completed');
-
-      await expectLater(first, throwsStateError);
-      await expectLater(second, completion('completed'));
-    });
-  });
-
   test(
     'returns results in input order despite finishing out of order',
     () async {
