@@ -1,0 +1,86 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:we_repkg/cores/extract.dart';
+
+List<String> argsFor({
+  bool excludeTexture = false,
+  bool onlySaveImage = false,
+  bool overwrite = false,
+  bool detailedProgress = false,
+  bool newFlags = true,
+}) => wallpaperExtractArgs(
+  target: r'C:\wallpapers\1\scene.pkg',
+  outPath: r'C:\out',
+  excludeTexture: excludeTexture,
+  onlySaveImage: onlySaveImage,
+  overwrite: overwrite,
+  detailedProgress: detailedProgress,
+  newFlags: newFlags,
+);
+
+void main() {
+  test('always converts tex entries into the output directory', () {
+    final args = argsFor();
+
+    expect(args.first, 'extract');
+    expect(args, containsAllInOrder(<String>['-e', 'tex']));
+    expect(args, containsAllInOrder(<String>['-o', r'C:\out']));
+    expect(args.last, r'C:\wallpapers\1\scene.pkg');
+  });
+
+  group('older tool', () {
+    // Anything added since 0.5.3-ex makes it exit 0 having written nothing.
+    test('gets none of the newer flags', () {
+      final args = argsFor(
+        newFlags: false,
+        onlySaveImage: true,
+        excludeTexture: true,
+        detailedProgress: true,
+      );
+
+      expect(args, isNot(contains('-p')));
+      expect(args, isNot(contains('--progress-json')));
+      expect(args, isNot(contains('--ignore-dirs')));
+    });
+
+    test('still extracts, just without them', () {
+      expect(
+        argsFor(newFlags: false),
+        containsAllInOrder(<String>['-e', 'tex']),
+      );
+    });
+  });
+
+  test('skips masks in both wallpaper layouts', () {
+    for (final bool exclude in <bool>[false, true]) {
+      expect(
+        argsFor(excludeTexture: exclude),
+        containsAllInOrder(<String>['--ignore-dirs', 'masks']),
+        reason: 'excludeTexture=$exclude',
+      );
+    }
+  });
+
+  test('keeps the tree when the cleanup pass needs materials/', () {
+    expect(argsFor(excludeTexture: true), isNot(contains('-s')));
+    expect(argsFor(excludeTexture: false), contains('-s'));
+  });
+
+  test('writes only images when either cleanup would bin the raw tex', () {
+    expect(argsFor(onlySaveImage: true), contains('-p'));
+    expect(argsFor(excludeTexture: true), contains('-p'));
+    expect(argsFor(), isNot(contains('-p')));
+  });
+
+  test('reports progress only when asked for it', () {
+    expect(argsFor(detailedProgress: true), contains('--progress-json'));
+    expect(argsFor(), isNot(contains('--progress-json')));
+  });
+
+  test('overwrite applies only to the flattened layout', () {
+    expect(argsFor(overwrite: true), contains('--overwrite'));
+    expect(
+      argsFor(overwrite: true, excludeTexture: true),
+      isNot(contains('--overwrite')),
+    );
+  });
+}

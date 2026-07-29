@@ -465,6 +465,48 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
+/// Builds RePKG's arguments for wallpaper mode.
+///
+/// [newFlags] false means an older tool that rejects an unknown option and then
+/// exits 0 having written nothing, so every flag added since must hang off it.
+List<String> wallpaperExtractArgs({
+  required String target,
+  required String outPath,
+  required bool excludeTexture,
+  required bool onlySaveImage,
+  required bool overwrite,
+  required bool detailedProgress,
+  required bool newFlags,
+}) {
+  // Either cleanup pass deletes the raw .tex straight after anyway.
+  final String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
+      ? '-p'
+      : null;
+  final String? progress = newFlags && detailedProgress
+      ? '--progress-json'
+      : null;
+  // Masks are most of the conversion work and none of the artwork. Wallpaper
+  // mode only: a project needs them to still be a project.
+  final List<String>? skipMasks = newFlags
+      ? const ['--ignore-dirs', 'masks']
+      : null;
+
+  return <String>[
+    'extract',
+    '-e',
+    'tex',
+    // Keeping the tree lets deleteOtherAndTexture find materials/, where -s would flatten it away.
+    if (!excludeTexture) '-s',
+    if (!excludeTexture) ?(overwrite ? '--overwrite' : null),
+    ?onlyImages,
+    ?progress,
+    ...?skipMasks,
+    '-o',
+    outPath,
+    target,
+  ];
+}
+
 /// Throttled to whole percents: a large scene runs to thousands of entries and
 /// each update rebuilds the loading overlay.
 void Function(String) _sceneProgressReporter(WidgetRef ref) {
@@ -500,49 +542,18 @@ Future<String?> extractPKG(
   bool excludeTexture = ref.read(excludeTextureProvider);
   bool onlySaveImage = ref.read(onlySaveImageProvider);
   try {
-    String? overwrite = ref.read(replaceFileProvider) ? '--overwrite' : null;
     // Unsupported flags make an older RePKG exit 0 having written nothing.
-    final bool newFlags = repkgSupportsExtractFlags(
-      await ref.read(toolVersionProvider.future),
+    final List<String> args = wallpaperExtractArgs(
+      target: wallpaper.target,
+      outPath: outPath,
+      excludeTexture: excludeTexture,
+      onlySaveImage: onlySaveImage,
+      overwrite: ref.read(replaceFileProvider),
+      detailedProgress: detailedProgress,
+      newFlags: repkgSupportsExtractFlags(
+        await ref.read(toolVersionProvider.future),
+      ),
     );
-    String? progress = newFlags && detailedProgress ? '--progress-json' : null;
-    // Either cleanup pass deletes the raw .tex straight after anyway.
-    String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
-        ? '-p'
-        : null;
-    // Effect masks are most of the conversion work and none of the artwork.
-    // Wallpaper mode only: a project needs them to still be a project.
-    List<String>? skipMasks = newFlags
-        ? const ['--ignore-dirs', 'masks']
-        : null;
-    // 提取项目，移动materials一级目录的文件到外面
-    List<String> args = excludeTexture
-        // Only tex entries: everything else was extracted just for
-        // deleteOtherAndTexture to delete, and cancelling left it behind.
-        ? [
-            'extract',
-            '-e',
-            'tex',
-            ?onlyImages,
-            ?progress,
-            ...?skipMasks,
-            '-o',
-            outPath,
-            wallpaper.target,
-          ]
-        : [
-            'extract',
-            '-e',
-            'tex',
-            '-s',
-            ?overwrite,
-            ?onlyImages,
-            ?progress,
-            ...?skipMasks,
-            '-o',
-            outPath,
-            wallpaper.target,
-          ];
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
     final token = ref.read(activeCancelTokenProvider) ?? CancelToken();

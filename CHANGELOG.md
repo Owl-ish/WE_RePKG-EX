@@ -3,7 +3,7 @@
 ## WeRePKG-EX - v1.6.0
 
 A UI pass over browsing and selection, plus extraction fixes from the bundled
-RePKG 0.5.2-ex.
+RePKG 0.5.3-ex.
 
 ### Features
 - Select wallpapers by dragging a box across the grid. Dragging past the edge scrolls.
@@ -28,6 +28,9 @@ RePKG 0.5.2-ex.
 - Previews are no longer left behind in wallpaper exports.
 
 ### Performance
+- Wallpaper mode skips effect masks, which were most of the time spent converting a
+  scene and were deleted afterwards anyway. Two to four times faster, and the output
+  is artwork only.
 - Wallpaper mode no longer writes raw `.tex` files only to delete them afterwards.
 - Jumping to the top or bottom of a long library is immediate, instead of loading every
   wallpaper along the way.
