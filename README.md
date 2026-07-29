@@ -1,8 +1,27 @@
 <p align="center"><img alt="WeRePKG-EX" src="docs/logo.png" width="480px"></p>
 
-<div align="center">
-  <h3>Extract your Wallpaper Engine wallpapers back into ordinary files</h3>
-</div>
+## Wallpaper Engine PKG Extractor & TEX Converter
+
+#### WE_RePKG-EX is a GUI utility based on RePKG, designed to unpack Wallpaper Engine `.pkg` files and seamlessly convert `.tex` textures into standard images.
+Notable changes/fixes from WeRepkg(ilgnefz) & RePKG(notscuffed):
+
+WeRePKG changes: Speed, performance & bugfixes:
+ - Lower memory use
+ - Faster initial load
+ - Fixed crashes when switching the library folder.
+ - Reorganized UI
+
+Notable RePKG Changes:
+
+- TEX extraction no longer crashes on dimension mismatches.
+- ImageSharp 2.1.9 → 2.1.13, closing two GIF decoder advisories:
+GHSA-2cmq-823j-5qj8 (out-of-bounds write, high) and CVE-2025-54575 (infinite loop).
+- Animated textures whose frames are stored as PNG or JPEG now convert
+ 
+
+## Features
+* **PKG Unpacker:** Extract scene and asset files from Wallpaper Engine workshops.
+* **TEX to Image Conversion:** Convert compiled texture formats back to PNG/JPG.
 
 <p align="center">
   <a href="https://github.com/Owl-ish/WE_RePKG-EX/releases">Download</a>
