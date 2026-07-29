@@ -1,76 +1,99 @@
-<p align="center"><img alt="WeRePKG" src="docs/logo.png" width="480px"></p>
+<p align="center"><img alt="WeRePKG-EX" src="docs/logo.png" width="480px"></p>
 
-<div align="center"><h2>Wallpaper Engine Wallpaper Extraction Tool, Developed Based on the Open-Source Project <a href="https://github.com/notscuffed/repkg">RePKG</a></h2></div>
+<div align="center">
+  <h3>Extract your Wallpaper Engine wallpapers back into ordinary files</h3>
+</div>
 
-[简体中文](README-CN.md) | English
+<p align="center">
+  <a href="https://github.com/Owl-ish/WE_RePKG-EX/releases">Download</a>
+  ·
+  <a href="CHANGELOG.md">Changelog</a>
+  ·
+  <a href="README-CN.md">简体中文</a>
+</p>
 
-## Language Support
-* Chinese (Simplified)
-* English
+Wallpaper Engine keeps scene wallpapers packed inside `scene.pkg`, so the images
+and videos you subscribed to are not files you can open. WeRePKG-EX unpacks them
+for you: point it at your library, pick what you want, and get the artwork out
+as PNG, JPG, GIF or MP4.
 
-## Quick Start
+It is a Windows desktop app built on [RePKG-EX](https://github.com/Owl-ish/RePKG-EX),
+and it bundles the extractor, so there is nothing else to install.
 
-The software will automatically detect and recognize wallpapers downloaded by Wallpaper Engine. You can also manually modify the wallpaper path in the settings if needed.
-When the software is launched for the first time, it will automatically hide web-based and application-type wallpapers. You can manually enable their display in the settings:
+<img src="docs/main-window.png" alt="Main window" width="1000"/>
 
-![01](docs/01.gif)
 
-Use the filters in the settings to accurately find the wallpapers you want to export:
+## Getting started
 
-![02](docs/02.gif)
+1. Download the latest release and unzip it anywhere.
+2. Run `WeRePKG-EX.exe`.
+3. The app finds your Wallpaper Engine library on its own. If it guesses wrong,
+   set the path in Settings.
 
-You can also search for wallpapers by name:
+Nothing is written to your library. Extraction only ever reads from it.
 
-![03](docs/03.gif)
+## Searching a wallpaper
 
-After subscribing to new wallpapers on Wallpaper Engine, you can click the refresh button to load them into the tool:
+Search by name, filter by type and age rating, and sort by date, size or last
+update. The count at the top left tells you how many match. Selecting works the
+way it does in a file manager, including click and drag to box in several at
+once.
 
-![04](docs/04.gif)
+<img src="docs/searching.gif" alt="Searching" width="1000"/>
 
-As an auxiliary tool for Wallpaper Engine, its operation logic is designed to be consistent with Wallpaper Engine for a seamless experience.
-You can click on a specific wallpaper to perform individual operations:
+## Wallpaper Cards
 
-![05](docs/05.gif)
+Double click, or right click and choose Details. You get the full preview, the
+description, tags, file size, and where it lives on disk.
 
-Operations can also be performed via the right-click menu.
+<img src="docs/wallpaper-card.gif" alt="WallpaperCard" width="1000"/>
 
-![11](docs/11.gif)
+## Extracting
 
-The right-side menu may vary slightly depending on the wallpaper type. For example, video wallpapers allow you to play the video directly using your system's default media player:
+The toggle in the bottom left picks what you get:
 
-![06](docs/06.gif)
+<img src="docs/extraction-mode.png" alt="ExtractionMode" width="1000"/>
 
-You can select multiple wallpapers for batch extraction by checking the box in the upper-right corner of each wallpaper:
+**Wallpaper** gives you the artwork. Images land in one folder, ready to use as
+ordinary wallpapers. Effect masks and shader files are skipped.
 
-![07](docs/07.gif)
+**Project** gives you the whole wallpaper as a folder Wallpaper Engine can
+import again, keeping the scene intact so you can edit it in the editor.
 
-You can also hold the Ctrl key and click to quickly toggle the selection status (alternatively, use the Shift key to select a continuous range of wallpapers):
+Either mode works on one wallpaper or on everything selected. Right click for
+both options, or use the buttons along the bottom for the whole visible list.
 
-![08](docs/08.gif)
+<img src="docs/extract.gif" alt="Extracting" width="1000"/>
 
-If no wallpapers are selected, the software will export all currently displayed wallpapers by default:
+Large batches run several wallpapers at once. A running extraction shows its
+progress and can be cancelled part way without leaving half written files.
 
-![09](docs/09.gif)
+## Settings
 
-You can also export only the selected wallpapers via multi-selection:
+<img src="docs/Settings.png" alt="SettingsPage" width="1000"/>
 
-![10](docs/10.gif)
+Worth knowing about:
 
-Before extraction, you can configure the export settings in the "Settings" menu:
+- **Save only image files** throws away shaders, models and sounds, leaving just
+  the artwork.
+- **Delete transparent images** sends fully transparent PNGs to the recycle bin,
+  since they are usually masks rather than art.
+- **Simultaneous extractions** sets how many wallpapers unpack at once. Lower it
+  on a hard drive, raise it on an SSD.
+- **Move to the project folder** drops finished projects straight into Wallpaper
+  Engine so they show up in the app.
+- **Theme** and **Language** follow your system by default. English and 简体中文
+  are both supported throughout.
 
-![01](docs/01.png)
-
-When you unsubscribe from a wallpaper on Wallpaper Engine, it will not be deleted immediately. You can manually delete it to the Recycle Bin within this tool:
-
-![02](docs/02.png)
-
-You can switch between batch extracting files as wallpapers or projects via the toggle in the bottom-left corner:
-
-![03](docs/03.png)
+Settings live in `%APPDATA%\WeRePKG-EX`, and the About panel shows the exact
+path.
 
 ## Credits
 
-This project is a fork of [WeRePKG](https://github.com/ilgnefz/we_repkg) by **ilgnefz**, which builds on [RePKG](https://github.com/notscuffed/repkg) by **notscuffed**.
+A fork of [WeRePKG](https://github.com/ilgnefz/we_repkg) by **ilgnefz**, which
+builds on [RePKG](https://github.com/notscuffed/repkg) by **notscuffed**. The
+bundled extractor is [RePKG-EX](https://github.com/Owl-ish/RePKG-EX), a fork of
+notscuffed's work.
 
 ## License
 

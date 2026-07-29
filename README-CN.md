@@ -1,74 +1,88 @@
-<p align="center"><img alt="WeRePKG" src="docs/logo.png" width="480px"></p>
+<p align="center"><img alt="WeRePKG-EX" src="docs/logo.png" width="480px"></p>
 
-<div align="center"><h2>Wallpaper Engine 壁纸提取工具，基于开源项目 <a href="https://github.com/notscuffed/repkg">RePKG</a> 开发</h2></div>
+<div align="center">
+  <h3>把 Wallpaper Engine 的壁纸提取回普通文件</h3>
+</div>
 
-简体中文 | [English](README.md)
+<p align="center">
+  <a href="https://github.com/Owl-ish/WE_RePKG-EX/releases">下载</a>
+  ·
+  <a href="CHANGELOG.md">更新日志</a>
+  ·
+  <a href="README.md">English</a>
+</p>
 
-## 语言支持
-* 中文
-* English
+Wallpaper Engine 把场景壁纸打包在 `scene.pkg` 里，所以订阅到的图片和视频并不是
+能直接打开的文件。WeRePKG-EX 负责把它们解出来：指向你的壁纸库，选中想要的，
+再把画面导出成 PNG、JPG、GIF 或 MP4。
+
+这是一个 Windows 桌面程序，基于 [RePKG-EX](https://github.com/Owl-ish/RePKG-EX)，
+并且已经内置了解包器，不需要另外安装任何东西。
+
+<img src="docs/main-window.png" alt="主界面" width="1000"/>
 
 ## 快速上手
 
-软件会自动寻找并识别 Wallpaper Engine 下载的壁纸，你也可以手动在设置里面修改。
+1. 下载最新的发行版，解压到任意位置。
+2. 运行 `WeRePKG-EX.exe`。
+3. 程序会自动找到 Wallpaper Engine 壁纸库。如果找错了，在设置里改路径即可。
 
-软件第一启动会自动隐藏网页和程序类的壁纸，可以手动在设置里面打开：
+程序不会写入你的壁纸库，提取过程只读。
 
-![01](docs/01.gif)
+## 查找壁纸
 
-通过设置的过滤来精准的找到我们需要导出的壁纸：
+可以按名称搜索，按类型和年龄分级过滤，也可以按日期、大小或更新时间排序。
+左上角的数字是当前匹配的数量。选择方式和文件管理器一致，包括按住拖动框选多个。
 
-![02](docs/02.gif)
+<img src="docs/searching.gif" alt="搜索" width="1000"/>
 
-也可以通过搜索名称：
+## 壁纸卡片
 
-![03](docs/03.gif)
+双击，或者右键选择「详情」。可以看到完整预览、简介、标签、文件大小，
+以及它在硬盘上的位置。
 
-当我们在 Wallpaper Engine 上订阅了新的壁纸后，可以通过刷新来加载：
+<img src="docs/wallpaper-card.gif" alt="壁纸卡片" width="1000"/>
 
-![04](docs/04.gif)
+## 提取
 
-作为 Wallpaper Engine 的辅助类软件，操作逻辑自然也要与之对齐。
+左下角的开关决定你得到什么：
 
-我们可以通过点击某个壁纸来进行单独操作：
+<img src="docs/extraction-mode.png" alt="提取模式" width="1000"/>
 
-![05](docs/05.gif)
+**壁纸**：只要画面。图片会放在同一个文件夹里，可以直接当普通壁纸用，
+特效遮罩和着色器文件会被跳过。
 
-也可以通过右键弹出的菜单来进行操作：
+**项目**：得到完整的壁纸文件夹，Wallpaper Engine 可以重新导入，
+场景结构保持完整，还能在编辑器里继续改。
 
-![11](docs/11.gif)
+两种模式都可以只处理一张，或者处理所有选中的壁纸。右键菜单里两个选项都有，
+底部的按钮则作用于当前显示的全部壁纸。
 
-不同类型的壁纸右侧显示菜单会有点差异，比如视频壁纸可以直接调用系统默认播放器来播放：
+<img src="docs/extract.gif" alt="提取" width="1000"/>
 
-![06](docs/06.gif)
+批量提取时会同时处理多张壁纸。提取过程中会显示进度，也可以中途取消，
+不会留下写了一半的文件。
 
-我们可以通过点击每个壁纸右上角的选择框来选择需要一起提取的多个壁纸：
+## 设置
 
-![07](docs/07.gif)
+<img src="docs/Settings.png" alt="设置" width="1000"/>
 
-也通过按住 Ctrl 键来点击快速切换选中状态（当然，也可以通过 Shift 键来快速选中）：
+几个值得注意的选项：
 
-![08](docs/08.gif)
+- **仅保存图片文件**：丢掉着色器、模型和音频，只留下画面。
+- **删除透明图片**：把完全透明的 PNG 移到回收站，这类图通常是遮罩而不是画面。
+- **同时提取数量**：一次解包多少张壁纸。机械硬盘调低，固态硬盘可以调高。
+- **移动到项目文件夹**：提取完的项目直接放进 Wallpaper Engine，能在里面看到。
+- **主题**和**语言**默认跟随系统。中文和 English 在全部界面都可用。
 
-当我们没有选中任何壁纸时默认提取所有显示的壁纸：
+设置文件保存在 `%APPDATA%\WeRePKG-EX`，具体路径在「关于」里可以看到。
 
-![09](docs/09.gif)
+## 致谢
 
-也可以通过多选来提取选中的壁纸：
-
-![10](docs/10.gif)
-
-在提取前，你可以在设置里面对提取的内容进行设置：
-
-![01](docs/01.png)
-
-当我们在 Wallpaper Engine 取消某个壁纸的订阅后，它不会立马被删除，你可以通过在本软件内手动删除至回收站
-
-![02](docs/02.png)
-
-可以通过在左下角切换来更改批量将文件提取为壁纸还是项目
-
-![03](docs/03.png)
+本项目 fork 自 **ilgnefz** 的 [WeRePKG](https://github.com/ilgnefz/we_repkg)，
+后者基于 **notscuffed** 的 [RePKG](https://github.com/notscuffed/repkg)。
+内置的解包器是 [RePKG-EX](https://github.com/Owl-ish/RePKG-EX)，
+同样 fork 自 notscuffed 的项目。
 
 ## License
 
