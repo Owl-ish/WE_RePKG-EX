@@ -6,7 +6,14 @@ A UI pass over browsing and selection, plus extraction fixes from the bundled
 RePKG 0.5.3-ex.
 
 ### Features
-- Select wallpapers by dragging a box across the grid. Dragging past the edge scrolls.
+- Select wallpapers by dragging a box across the grid. Dragging past the edge scrolls,
+  and holding Ctrl adds to what you already picked.
+- The bottom bar shows how many wallpapers are selected.
+- Right click offers **Extract selected as wallpaper** and **Extract selected as
+  project**, both working on one wallpaper or on the whole selection.
+- Searching and filtering animate: wallpapers that still match slide into their new
+  places, new ones fade in.
+- A search that matches nothing says so instead of leaving the window blank.
 - Settings open as a card over the library instead of replacing it, and now live in
   `%APPDATA%\WeRePKG-EX`. An existing settings file is migrated on first launch.
 - Live progress while a scene extracts, counting files instead of showing a spinner.
@@ -23,6 +30,9 @@ RePKG 0.5.3-ex.
   wallpaper.
 - Animated textures are saved as `.gif` rather than a `.png` nothing can open.
 - Animated previews no longer flash at the end of each loop.
+- Wallpaper tiles no longer flash white while their preview loads, which was worst in
+  dark mode.
+- Extracting to a folder that does not exist creates it instead of failing silently.
 - Extraction works from a shared folder, and a partial extraction keeps its preview
   image.
 - Previews are no longer left behind in wallpaper exports.
@@ -31,6 +41,8 @@ RePKG 0.5.3-ex.
 - Wallpaper mode skips effect masks, which were most of the time spent converting a
   scene and were deleted afterwards anyway. Two to four times faster, and the output
   is artwork only.
+- Wallpaper mode extracts several wallpapers at once, so the simultaneous extractions
+  setting now applies to scenes and not only to videos.
 - Wallpaper mode no longer writes raw `.tex` files only to delete them afterwards.
 - Jumping to the top or bottom of a long library is immediate, instead of loading every
   wallpaper along the way.
