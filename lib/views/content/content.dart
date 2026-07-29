@@ -11,12 +11,16 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/enums.dart';
+import 'package:we_repkg/models/filter.dart';
 import 'package:we_repkg/models/wallpaper.dart';
+import 'package:we_repkg/provider/filter.dart';
+import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/views/states/empty.dart';
+import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/widgets/scroll_edge_controls.dart';
 import 'package:we_repkg/widgets/smooth_wheel_scroll.dart';
 
@@ -60,6 +64,11 @@ class _ContentViewState extends ConsumerState<ContentView>
   Offset _dragPointer = Offset.zero;
 
   Set<String> _dragIds = <String>{};
+
+  /// Selection the drag started from, kept when ctrl is held so a marquee adds
+  /// rather than replaces. A click that twitches a pixel starts a drag, so
+  /// replacing here is how a ctrl-click loses everything picked so far.
+  Set<String> _dragBaseline = <String>{};
   bool _dragWriteQueued = false;
 
   /// A ticker, not a timer: a 16ms timer beats against vsync, so twice a second
@@ -79,6 +88,19 @@ class _ContentViewState extends ConsumerState<ContentView>
   static const double _autoScrollZone = 60;
   static const double _autoScrollSpeed = 1100;
 
+  static const Duration _fullEntranceDuration = Duration(milliseconds: 900);
+
+  /// Search reflow. Where each wallpaper sat before the results changed, so a
+  /// tile that survived can start from its old cell and slide into its new one
+  /// while the ones that went fade away. Empty except while reflowing.
+  late final AnimationController _reflowController;
+  Map<String, int> _reflowFrom = const <String, int>{};
+  static const Duration _reflowDuration = Duration(milliseconds: 340);
+
+  /// Past this many rows a slide reads as a tile flying across the window, so
+  /// those fade in place instead.
+  static const int _reflowMaxRows = 3;
+
   @override
   void initState() {
     super.initState();
@@ -88,14 +110,19 @@ class _ContentViewState extends ConsumerState<ContentView>
     _topScrollControlActive = ValueNotifier<bool>(false);
     _bottomScrollControlActive = ValueNotifier<bool>(false);
     _entranceController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 900),
-        )..addStatusListener((status) {
-          if (status == AnimationStatus.completed && mounted) {
-            setState(() => _entranceComplete = true);
-          }
-        });
+        AnimationController(vsync: this, duration: _fullEntranceDuration)
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed && mounted) {
+              setState(() => _entranceComplete = true);
+            }
+          });
+    _reflowController =
+        AnimationController(vsync: this, duration: _reflowDuration)
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed && mounted) {
+              setState(() => _reflowFrom = const <String, int>{});
+            }
+          });
 
     // A scan can finish while this view is unmounted, so the request waits
     // until it mounts. Still running, and the listener in build picks it up.
@@ -128,6 +155,7 @@ class _ContentViewState extends ConsumerState<ContentView>
     _topScrollControlActive.dispose();
     _bottomScrollControlActive.dispose();
     _entranceController.dispose();
+    _reflowController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -159,10 +187,11 @@ class _ContentViewState extends ConsumerState<ContentView>
     );
   }
 
-  void _startGridEntrance() {
+  void _startGridEntrance({Duration duration = _fullEntranceDuration}) {
     final int startToken = ++_entranceStartToken;
     _entranceController
       ..stop()
+      ..duration = duration
       ..value = 0;
     setState(() => _entranceComplete = false);
 
@@ -176,6 +205,73 @@ class _ContentViewState extends ConsumerState<ContentView>
       _entranceController.forward();
     });
   }
+
+  /// A tile mid-reflow: one that was already on screen slides in from wherever
+  /// it used to sit, one that has just matched grows into place.
+  ///
+  /// Always the same widgets, whether or not a reflow is running. Wrapping and
+  /// unwrapping re-parents the Image inside, and an Image rebuilt into a new
+  /// position paints its white background for a frame before the picture
+  /// returns, which reads as the whole grid flashing.
+  Widget _reflowed(Widget tile, String id, int index) {
+    return AnimatedBuilder(
+      animation: _reflowController,
+      builder: (context, child) {
+        double opacity = 1;
+        double scale = 1;
+        Offset shift = Offset.zero;
+
+        if (_reflowFrom.isNotEmpty) {
+          final double t = Curves.easeOutCubic.transform(
+            _reflowController.value,
+          );
+          final int? from = _reflowFrom[id];
+          if (from == null) {
+            opacity = t;
+            scale = .82 + .18 * t;
+          } else {
+            final Offset was = _cellOrigin(from) - _cellOrigin(index);
+            if (was.dy.abs() > _reflowMaxRows * (_tileExtent + _gridSpacing)) {
+              opacity = t;
+            } else {
+              shift = was * (1 - t);
+            }
+          }
+        }
+
+        return Transform.translate(
+          offset: shift,
+          // alwaysIncludeSemantics: reaching zero would drop the tile from the
+          // accessibility tree, which is what upsets Windows' bridge.
+          child: Opacity(
+            opacity: opacity,
+            alwaysIncludeSemantics: true,
+            child: Transform.scale(scale: scale, child: child),
+          ),
+        );
+      },
+      child: tile,
+    );
+  }
+
+  /// Snapshots where every wallpaper sits, then runs the reflow against it.
+  /// Called before the rebuild, so `_tiles` is still the outgoing list.
+  void _startReflow() {
+    if (_tiles.isEmpty) return;
+    setState(() {
+      _reflowFrom = <String, int>{
+        for (int i = 0; i < _tiles.length; i++) _tiles[i].id: i,
+      };
+    });
+    _reflowController.forward(from: 0);
+  }
+
+  Offset _cellOrigin(int index) => cellOrigin(
+    index,
+    columns: _columns,
+    tile: _tileExtent,
+    spacing: _gridSpacing,
+  );
 
   /// Viewport point to grid point: the grid keeps scrolling under the pointer,
   /// so the rectangle is stored against the wallpapers, not the window.
@@ -197,6 +293,9 @@ class _ContentViewState extends ConsumerState<ContentView>
     ).map((i) => _tiles[i].id).toSet();
     if (setEquals(ids, _dragIds)) return;
     _dragIds = ids;
+    final Set<String> wanted = _dragBaseline.isEmpty
+        ? ids
+        : <String>{..._dragBaseline, ...ids};
 
     // One write per frame. Each one refilters and re-sorts the whole library,
     // and a fast mouse reports twice a frame.
@@ -205,7 +304,7 @@ class _ContentViewState extends ConsumerState<ContentView>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dragWriteQueued = false;
       if (mounted) {
-        ref.read(wallpaperListProvider.notifier).setCheckedExactly(_dragIds);
+        ref.read(wallpaperListProvider.notifier).setCheckedExactly(wanted);
       }
     });
   }
@@ -292,6 +391,15 @@ class _ContentViewState extends ConsumerState<ContentView>
                 // Cleared per drag, or repeating a rectangle matches the last
                 // drag's set and writes nothing.
                 _dragIds = <String>{};
+                // The whole library, not checkedWallpaperListProvider: that one
+                // is filtered, and anything selected before the filter changed
+                // would be missing from the baseline and get deselected.
+                _dragBaseline = isCtrlPressed
+                    ? <String>{
+                        for (final e in ref.read(wallpaperListProvider))
+                          if (e.checked) e.id,
+                      }
+                    : <String>{};
               },
               onPanUpdate: (d) {
                 _dragPointer = d.localPosition;
@@ -325,7 +433,8 @@ class _ContentViewState extends ConsumerState<ContentView>
                     index: index,
                     wallpaper: wallpaper,
                   );
-                  if (_entranceComplete) return tile;
+                  final Widget reflowed = _reflowed(tile, wallpaper.id, index);
+                  if (_entranceComplete) return reflowed;
 
                   // Tiles on the same diagonal move together. Capped, or
                   // off-screen rows sit waiting their turn.
@@ -373,9 +482,16 @@ class _ContentViewState extends ConsumerState<ContentView>
 
                   return FadeTransition(
                     opacity: entrance,
+                    // Now that this replays on every search, a fade to zero
+                    // dropping tiles from the accessibility tree would upset
+                    // Windows' bridge far more often.
+                    alwaysIncludeSemantics: true,
                     child: ScaleTransition(
                       scale: scale,
-                      child: SlideTransition(position: position, child: tile),
+                      child: SlideTransition(
+                        position: position,
+                        child: reflowed,
+                      ),
                     ),
                   );
                 },
@@ -444,11 +560,31 @@ class _ContentViewState extends ConsumerState<ContentView>
       }
     });
 
+    // Listening to what the user changed rather than to the filtered list: that
+    // list is rebuilt by every selection write too, and reflowing the grid each
+    // time a wallpaper is ticked would be unbearable.
+    ref.listen<String>(searchContentProvider, (previous, next) {
+      if (previous == next) return;
+      _startReflow();
+    });
+    ref.listen<WallpaperFilter>(
+      filterStateProvider,
+      (previous, next) => _startReflow(),
+    );
+
     final RunState runState = ref.watch(currentStateProvider);
     final List<WallpaperInfo> list = ref.watch(filterWallpaperListProvider);
-    final Widget content = runState.isComplete
-        ? _buildGrid(list)
-        : EmptyView(key: ValueKey<RunState>(runState), runState: runState);
+    // A search that matches nothing used to leave the grid area blank, which
+    // against a light theme read as the window flashing. Only when the library
+    // itself has wallpapers: refreshing or changing the library path empties
+    // the list for a moment, and swapping the whole grid out and back for that
+    // is both a flicker and a few hundred semantics nodes leaving mid-animation.
+    final bool libraryLoaded = ref.watch(wallpaperListProvider).isNotEmpty;
+    final Widget content = !runState.isComplete
+        ? EmptyView(key: ValueKey<RunState>(runState), runState: runState)
+        : list.isEmpty && libraryLoaded
+        ? const NoResultsView(key: NoResultsView.viewKey)
+        : _buildGrid(list);
 
     return Expanded(
       child: AnimatedSwitcher(
@@ -459,12 +595,23 @@ class _ContentViewState extends ConsumerState<ContentView>
         transitionBuilder: (child, animation) {
           // The grid has its own diagonal entrance; a second fade flattens it.
           if (child.key == _gridTransitionKey) return child;
-          return FadeTransition(opacity: animation, child: child);
+          return FadeTransition(
+            opacity: animation,
+            alwaysIncludeSemantics: true,
+            child: child,
+          );
         },
         layoutBuilder: (currentChild, previousChildren) {
           return Stack(
             fit: StackFit.expand,
-            children: [...previousChildren, ?currentChild],
+            children: [
+              // The outgoing view cannot be reached, and dropping its semantics
+              // in one go beats losing them a few at a time as it fades, which
+              // is what leaves the Windows AXTree broken.
+              for (final Widget child in previousChildren)
+                ExcludeSemantics(child: child),
+              ?currentChild,
+            ],
           );
         },
         child: content,

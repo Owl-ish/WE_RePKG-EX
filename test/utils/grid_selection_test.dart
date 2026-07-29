@@ -59,4 +59,46 @@ void main() {
     // Tile 0 ends at x 120. A box starting at 119 still clips it.
     expect(hit(const Rect.fromLTWH(119, 30, 2, 20)), <int>{0});
   });
+
+  group('cellOrigin', () {
+    Offset at(int index) =>
+        cellOrigin(index, columns: 4, tile: 100, spacing: 8);
+
+    test('walks across a row then wraps', () {
+      expect(at(0), Offset.zero);
+      expect(at(1), const Offset(108, 0));
+      expect(at(3), const Offset(324, 0));
+      expect(at(4), const Offset(0, 108));
+      expect(at(9), const Offset(108, 216));
+    });
+
+    // The reflow slides a tile by the difference between two of these, and the
+    // marquee hit-tests against the same stride. If they drift apart the box
+    // selects one wallpaper while the animation moves another.
+    test('agrees with the stride coveredTiles walks', () {
+      const Offset origin = Offset(16, 12);
+      for (final int index in <int>[0, 5, 7, 11]) {
+        final Offset cell = at(index) + origin;
+        expect(
+          coveredTiles(
+            Rect.fromLTWH(cell.dx + 1, cell.dy + 1, 2, 2),
+            origin: origin,
+            columns: 4,
+            tile: 100,
+            spacing: 8,
+            count: 12,
+          ),
+          <int>{index},
+          reason: 'index $index',
+        );
+      }
+    });
+
+    test('treats a zero column count as one', () {
+      expect(
+        cellOrigin(2, columns: 0, tile: 100, spacing: 8),
+        const Offset(0, 216),
+      );
+    });
+  });
 }

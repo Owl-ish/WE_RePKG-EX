@@ -11,6 +11,8 @@ class AppI10n {
   static const String homeExtractAll = 'home.extractAll';
   static const String homeExtractChecked = 'home.extractChecked';
   static const String homeDeleteChecked = 'home.deleteChecked';
+  static const String homeSelectedCount = 'home.selectedCount';
+  static const String homeNoResults = 'home.noResults';
   static const String homeScrollToTop = 'home.scrollToTop';
   static const String homeScrollToBottom = 'home.scrollToBottom';
   static const String homeScene = 'home.scene';

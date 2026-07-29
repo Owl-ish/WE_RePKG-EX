@@ -7,6 +7,7 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/views/bottom/selected_count.dart';
 import 'package:we_repkg/views/bottom/toggle_input.dart';
 import 'package:we_repkg/widgets/custom_btn.dart';
 
@@ -48,6 +49,7 @@ class BottomView extends ConsumerWidget {
               label: tr(AppI10n.homeDeleteChecked),
             ),
           ],
+          const SelectedCount(),
         ],
       ),
     );

@@ -47,3 +47,18 @@ Set<int> coveredTiles(
   }
   return hit;
 }
+
+/// Top-left of the cell at [index], relative to the first cell.
+///
+/// Mirrors the same stride [coveredTiles] walks, so the marquee and the search
+/// reflow cannot disagree about where a wallpaper sits.
+Offset cellOrigin(
+  int index, {
+  required int columns,
+  required double tile,
+  required double spacing,
+}) {
+  final int stride = columns < 1 ? 1 : columns;
+  final double step = tile + spacing;
+  return Offset((index % stride) * step, (index ~/ stride) * step);
+}
