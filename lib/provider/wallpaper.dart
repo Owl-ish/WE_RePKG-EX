@@ -83,13 +83,6 @@ class WallpaperList extends _$WallpaperList {
           (e.checked ? e.copyWith(checked: false) : e),
     ];
   }
-
-  /// Clears selection across the whole library, including filtered-out ones.
-  void clearAllChecked() {
-    // An identical new list would still rebuild the grid for nothing.
-    if (!state.any((e) => e.checked)) return;
-    state = [for (final e in state) e.checked ? e.copyWith(checked: false) : e];
-  }
 }
 
 @Riverpod(keepAlive: true)

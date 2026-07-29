@@ -116,62 +116,6 @@ void main() {
       expect(identical(container.read(wallpaperListProvider), before), isTrue);
     });
 
-    test('clearAllChecked clears everything in one state write', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([
-        for (int i = 0; i < 50; i++) makeWallpaper('$i', checked: true),
-      ]);
-
-      int emissions = 0;
-      container.listen(wallpaperListProvider, (_, _) => emissions++);
-      notifier.clearAllChecked();
-
-      expect(emissions, 1);
-      expect(
-        container.read(wallpaperListProvider).every((e) => !e.checked),
-        isTrue,
-      );
-    });
-
-    test('clearAllChecked is a no-op when nothing is selected', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([makeWallpaper('a'), makeWallpaper('b')]);
-      final before = container.read(wallpaperListProvider);
-
-      int emissions = 0;
-      container.listen(wallpaperListProvider, (_, _) => emissions++);
-      notifier.clearAllChecked();
-
-      expect(
-        emissions,
-        0,
-        reason: 'an identical list would still rebuild the grid',
-      );
-      expect(identical(container.read(wallpaperListProvider), before), isTrue);
-    });
-
-    test('clearAllChecked also clears wallpapers the filter hides', () async {
-      // The old loop walked the filtered list, so a wallpaper selected before
-      // the filter changed stayed selected but invisible.
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([
-        makeWallpaper('visible', type: WallpaperType.scene, checked: true),
-        makeWallpaper('hidden', type: WallpaperType.video, checked: true),
-      ]);
-      container.read(filterStateProvider.notifier).updateHideVideo(true);
-      expect(container.read(checkedWallpaperListProvider).length, 1);
-
-      notifier.clearAllChecked();
-
-      expect(
-        container.read(wallpaperListProvider).every((e) => !e.checked),
-        isTrue,
-      );
-    });
-
     test('removeAll drops many wallpapers in one state write', () async {
       await boot();
       final notifier = container.read(wallpaperListProvider.notifier);

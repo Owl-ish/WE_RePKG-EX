@@ -7,6 +7,7 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/hover_hint.dart';
@@ -98,14 +99,6 @@ class _ImageItemState extends ConsumerState<ImageItem>
       return;
     }
     final WallpaperInfo wallpaper = widget.wallpaper;
-    Set keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
-    final isCtrlPressed =
-        keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-        keysPressed.contains(LogicalKeyboardKey.controlRight);
-    final isShiftPressed =
-        keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-        keysPressed.contains(LogicalKeyboardKey.shiftRight);
-
     if (isCtrlPressed) {
       await StorageUtil.setInt(AppKeys.ctrlPressedIndex, widget.index);
       ref.read(wallpaperListProvider.notifier).toggleChecked(wallpaper);
