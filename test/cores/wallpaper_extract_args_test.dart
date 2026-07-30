@@ -7,6 +7,7 @@ List<String> argsFor({
   bool overwrite = false,
   bool detailedProgress = false,
   bool newFlags = true,
+  int? threads,
 }) => wallpaperExtractArgs(
   target: r'C:\wallpapers\1\scene.pkg',
   outPath: r'C:\out',
@@ -15,6 +16,7 @@ List<String> argsFor({
   overwrite: overwrite,
   detailedProgress: detailedProgress,
   newFlags: newFlags,
+  threads: threads,
 );
 
 void main() {
@@ -82,5 +84,31 @@ void main() {
       argsFor(overwrite: true, excludeTexture: true),
       isNot(contains('--overwrite')),
     );
+  });
+
+  test('asks for a thread count only when one is given', () {
+    final args = argsFor(threads: 4);
+    expect(args.indexOf('--threads') + 1, args.indexOf('4'));
+    expect(argsFor(), isNot(contains('--threads')));
+  });
+
+  group('splitting the machine between the two levels of concurrency', () {
+    // 4 wallpapers at once, each converting 16 textures at once, would put 64
+    // conversions on a 16 core machine and thrash.
+    test('divides the cores by the wallpapers running side by side', () {
+      expect(textureThreads(cores: 16, concurrency: 4), 4);
+      expect(textureThreads(cores: 16, concurrency: 2), 8);
+      expect(textureThreads(cores: 12, concurrency: 5), 2);
+    });
+
+    test('one wallpaper gets the whole machine', () {
+      expect(textureThreads(cores: 16, concurrency: 1), 16);
+    });
+
+    test('never asks for less than one', () {
+      expect(textureThreads(cores: 4, concurrency: 8), 1);
+      expect(textureThreads(cores: 1, concurrency: 1), 1);
+      expect(textureThreads(cores: 8, concurrency: 0), 8);
+    });
   });
 }

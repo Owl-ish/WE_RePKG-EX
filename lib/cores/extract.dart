@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -603,6 +604,12 @@ Future<String> keepUnmovedFiles(
 ///
 /// [newFlags] false means an older tool that rejects an unknown option and then
 /// exits 0 having written nothing, so every flag added since must hang off it.
+/// How many textures one RePKG may convert at once, given how many wallpapers
+/// are already running side by side. Divides the machine between the two levels
+/// rather than letting them multiply into 4 x 16 conversions.
+int textureThreads({required int cores, required int concurrency}) =>
+    max(1, cores ~/ max(1, concurrency));
+
 List<String> wallpaperExtractArgs({
   required String target,
   required String outPath,
@@ -611,6 +618,7 @@ List<String> wallpaperExtractArgs({
   required bool overwrite,
   required bool detailedProgress,
   required bool newFlags,
+  int? threads,
 }) {
   // Either cleanup pass deletes the raw .tex straight after anyway.
   final String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
@@ -624,6 +632,9 @@ List<String> wallpaperExtractArgs({
   final List<String>? skipMasks = newFlags
       ? const ['--ignore-dirs', 'masks']
       : null;
+  final List<String>? threadCount = threads != null
+      ? <String>['--threads', '$threads']
+      : null;
 
   return <String>[
     'extract',
@@ -635,6 +646,7 @@ List<String> wallpaperExtractArgs({
     ?onlyImages,
     ?progress,
     ...?skipMasks,
+    ...?threadCount,
     '-o',
     outPath,
     target,
@@ -676,6 +688,7 @@ Future<String?> extractPKG(
   bool excludeTexture = ref.read(excludeTextureProvider);
   bool onlySaveImage = ref.read(onlySaveImageProvider);
   try {
+    final String? version = await ref.read(toolVersionProvider.future);
     // Unsupported flags make an older RePKG exit 0 having written nothing.
     final List<String> args = wallpaperExtractArgs(
       target: wallpaper.target,
@@ -684,9 +697,13 @@ Future<String?> extractPKG(
       onlySaveImage: onlySaveImage,
       overwrite: ref.read(replaceFileProvider),
       detailedProgress: detailedProgress,
-      newFlags: repkgSupportsExtractFlags(
-        await ref.read(toolVersionProvider.future),
-      ),
+      newFlags: repkgSupportsExtractFlags(version),
+      threads: repkgSupportsThreads(version)
+          ? textureThreads(
+              cores: Platform.numberOfProcessors,
+              concurrency: ref.read(extractConcurrencyProvider),
+            )
+          : null,
     );
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');

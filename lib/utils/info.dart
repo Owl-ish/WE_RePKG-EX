@@ -36,22 +36,29 @@ String? parseRepkgVersionOutput(Object? stdout, Object? stderr) {
   return null;
 }
 
-/// An older RePKG rejects an unknown option and exits 0 having written nothing,
-/// so callers must ask before sending `-p`, `--progress-json` or
-/// `--ignore-dirs`. The `-ex` suffix is required: addallno's fork is also 0.5.1
-/// and has none of them.
-bool repkgSupportsExtractFlags(String? version) {
+/// The `-ex` suffix is required: addallno's fork is also 0.5.1 and has none of
+/// these options.
+bool _atLeast(String? version, List<int> required) {
   final Match? match = RegExp(
     r'^(\d+)\.(\d+)\.(\d+)-ex$',
   ).firstMatch(version?.trim() ?? '');
   if (match == null) return false;
-  const List<int> required = <int>[0, 5, 3];
   for (int i = 0; i < required.length; i++) {
     final int part = int.parse(match.group(i + 1)!);
     if (part != required[i]) return part > required[i];
   }
   return true;
 }
+
+/// An older RePKG rejects an unknown option and exits 0 having written nothing,
+/// so callers must ask before sending `-p`, `--progress-json` or
+/// `--ignore-dirs`.
+bool repkgSupportsExtractFlags(String? version) =>
+    _atLeast(version, const <int>[0, 5, 3]);
+
+/// 0.5.4-ex converts the entries of one package at once and takes `--threads`.
+bool repkgSupportsThreads(String? version) =>
+    _atLeast(version, const <int>[0, 5, 4]);
 
 /// Reads the version reported by the active RePKG executable.
 ///

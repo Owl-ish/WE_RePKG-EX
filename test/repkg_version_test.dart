@@ -37,6 +37,15 @@ void main() {
       expect(repkgSupportsExtractFlags('0.4.9-ex'), isFalse);
     });
 
+    test('--threads arrived a version later', () {
+      expect(repkgSupportsThreads('0.5.4-ex'), isTrue);
+      expect(repkgSupportsThreads('0.6.0-ex'), isTrue);
+      expect(repkgSupportsThreads('0.5.3-ex'), isFalse);
+      // Upstream has no -ex suffix and none of these options.
+      expect(repkgSupportsThreads('0.6.0'), isFalse);
+      expect(repkgSupportsThreads(null), isFalse);
+    });
+
     // A tool without the flags answers by writing nothing and exiting 0, so
     // matching on the numbers alone is not enough.
     test('rejects a fork without the ex suffix', () {
