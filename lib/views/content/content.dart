@@ -147,6 +147,9 @@ class _ContentViewState extends ConsumerState<ContentView>
       // which clears first.
       if (ref.read(wallpaperListProvider).isNotEmpty) return;
       List<WallpaperInfo> wallpapers = await getAllFile(ref);
+      // The scan outlives this view if the nav rail swapped it for Backup, and
+      // reading ref after that throws rather than being ignored.
+      if (!mounted) return;
       ref.read(wallpaperListProvider.notifier).addAll(wallpapers);
     });
   }
