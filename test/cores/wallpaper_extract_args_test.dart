@@ -94,15 +94,23 @@ void main() {
 
   group('splitting the machine between the two levels of concurrency', () {
     // 4 wallpapers at once, each converting 16 textures at once, would put 64
-    // conversions on a 16 core machine and thrash.
+    // conversions on a 16 core machine and cost about 7GB.
     test('divides the cores by the wallpapers running side by side', () {
       expect(textureThreads(cores: 16, concurrency: 4), 4);
       expect(textureThreads(cores: 16, concurrency: 2), 8);
       expect(textureThreads(cores: 12, concurrency: 5), 2);
     });
 
-    test('one wallpaper gets the whole machine', () {
-      expect(textureThreads(cores: 16, concurrency: 1), 16);
+    test('scales down to a small machine', () {
+      expect(textureThreads(cores: 4, concurrency: 2), 2);
+      expect(textureThreads(cores: 2, concurrency: 1), 2);
+    });
+
+    // Memory, not cores, is what runs out first: a thread costs roughly 100MB.
+    test('stops asking for more once a package would eat the machine', () {
+      expect(textureThreads(cores: 32, concurrency: 1), 8);
+      expect(textureThreads(cores: 64, concurrency: 2), 8);
+      expect(textureThreads(cores: 128, concurrency: 4), 8);
     });
 
     test('never asks for less than one', () {

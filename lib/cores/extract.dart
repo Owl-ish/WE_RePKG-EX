@@ -604,11 +604,18 @@ Future<String> keepUnmovedFiles(
 ///
 /// [newFlags] false means an older tool that rejects an unknown option and then
 /// exits 0 having written nothing, so every flag added since must hang off it.
+/// Ceiling on the textures one RePKG converts at once. Each in-flight
+/// conversion costs roughly 100MB, so a 15 texture scene measured 347MB on one
+/// thread and 1.9GB on sixteen. Past this the machine runs out of memory long
+/// before it runs out of cores.
+const int _maxTextureThreads = 8;
+
 /// How many textures one RePKG may convert at once, given how many wallpapers
-/// are already running side by side. Divides the machine between the two levels
-/// rather than letting them multiply into 4 x 16 conversions.
+/// are already running side by side. Dividing keeps the two levels from
+/// multiplying, and scales with whatever the machine has: 2 threads each on a
+/// four core box, 8 on a sixteen core one.
 int textureThreads({required int cores, required int concurrency}) =>
-    max(1, cores ~/ max(1, concurrency));
+    max(1, cores ~/ max(1, concurrency)).clamp(1, _maxTextureThreads);
 
 List<String> wallpaperExtractArgs({
   required String target,
