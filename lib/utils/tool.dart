@@ -40,6 +40,39 @@ List<String> splitOnFirstColon(String message) {
   return [beforeColon, afterColon];
 }
 
+/// Hands out the output names for one extraction run.
+///
+/// With [overwrite] off this is [claimFilePath]: everything takes a free name, so
+/// an earlier run's files survive beside the new ones. With it on a name is
+/// reused once, replacing what a previous run left, but never twice within the
+/// same run, so two wallpapers whose files share a name still get one each
+/// instead of the second destroying the first.
+class FileNameClaims {
+  FileNameClaims({required this.overwrite});
+
+  final bool overwrite;
+
+  /// Lower-cased, because Windows resolves two spellings to the same file.
+  final Set<String> _taken = <String>{};
+
+  Future<String> claim(String filePath) async {
+    if (!overwrite) return claimFilePath(filePath);
+
+    final String dirPath = path.dirname(filePath);
+    final String fileName = path.basename(filePath);
+    final String stem = path.basenameWithoutExtension(fileName);
+    final String ext = path.extension(fileName);
+    int index = 0;
+    while (true) {
+      final String candidate = index == 0
+          ? path.join(dirPath, fileName)
+          : path.join(dirPath, '$stem-$index$ext');
+      if (_taken.add(candidate.toLowerCase())) return candidate;
+      index++;
+    }
+  }
+}
+
 /// Highest suffix index already claimed, keyed by directory + stem + extension.
 /// Lets [claimFilePath] resume probing instead of restarting at 1.
 final Map<String, int> _claimIndexCache = {};

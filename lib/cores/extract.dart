@@ -310,6 +310,9 @@ Future<void> extractWallpapers(
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
+  // One set for the whole batch: with overwrite on, a name may replace an
+  // earlier run's file but must not be handed to two wallpapers here.
+  final claims = FileNameClaims(overwrite: ref.read(replaceFileProvider));
 
   List<(String?, bool)?> results = const <(String?, bool)?>[];
   try {
@@ -319,6 +322,7 @@ Future<void> extractWallpapers(
         ref,
         wallpaper,
         outPath,
+        claims,
         // Only a single-wallpaper run can own the progress line.
         detailedProgress: wallpapers.length == 1,
       ),
@@ -381,7 +385,8 @@ Future<void> extractAll(WidgetRef ref) async {
 Future<(String?, bool)> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath, {
+  String outPath,
+  FileNameClaims claims, {
   bool detailedProgress = false,
 }) async {
   final target = wallpaper.target;
@@ -393,6 +398,7 @@ Future<(String?, bool)> extractBranch(
         ref,
         wallpaper,
         outPath,
+        claims,
         detailedProgress: detailedProgress,
       ),
       true,
@@ -403,6 +409,7 @@ Future<(String?, bool)> extractBranch(
         ref,
         wallpaper,
         outPath,
+        claims,
         detailedProgress: detailedProgress,
       ),
       false,
@@ -413,6 +420,7 @@ Future<(String?, bool)> extractBranch(
         ref,
         target,
         outPath,
+        claims,
         detailedProgress: detailedProgress,
       ),
       false,
@@ -489,7 +497,11 @@ Future<void> sweepStaleSceneDirs(String outPath) async {
 
 /// Moves every file under [from] into [to], keeping relative paths and taking a
 /// free name when another wallpaper already claimed one.
-Future<String?> moveExtractedInto(String from, String to) async {
+Future<String?> moveExtractedInto(
+  String from,
+  String to,
+  FileNameClaims claims,
+) async {
   // Per file, because the caller deletes the source directory afterwards:
   // stopping at the first failure would throw away everything behind it.
   final List<String> failed = <String>[];
@@ -501,7 +513,7 @@ Future<String?> moveExtractedInto(String from, String to) async {
       final String dest = path.join(to, path.relative(entity.path, from: from));
       try {
         await Directory(path.dirname(dest)).create(recursive: true);
-        await entity.rename(await claimFilePath(dest));
+        await entity.rename(await claims.claim(dest));
       } catch (e) {
         debugPrint('${tr(AppI10n.logMoveFileFailed)} ${entity.path} $e');
         failed.add(path.basename(entity.path));
@@ -526,7 +538,8 @@ Future<String?> moveExtractedInto(String from, String to) async {
 Future<String?> extractSceneToShared(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath, {
+  String outPath,
+  FileNameClaims claims, {
   bool detailedProgress = false,
 }) async {
   final Directory temp = Directory(
@@ -560,7 +573,7 @@ Future<String?> extractSceneToShared(
     );
     if (cleanup != null) return cleanup;
 
-    final String? moved = await moveExtractedInto(temp.path, outPath);
+    final String? moved = await moveExtractedInto(temp.path, outPath, claims);
     if (moved == null) return null;
     // Whatever could not be moved is still in here. Deleting it would destroy
     // output the error message just named, and re-extracting cannot recover it
@@ -755,7 +768,8 @@ String _formatRePKGFailure(
 Future<String?> extractVideo(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath, {
+  String outPath,
+  FileNameClaims claims, {
   bool detailedProgress = false,
 }) async {
   Stopwatch stopwatch = Stopwatch();
@@ -774,7 +788,7 @@ Future<String?> extractVideo(
         : title;
     final fileName = '$baseName$extension';
     // Atomic claim: several workers may be writing into this same folder.
-    targetPath = await claimFilePath(path.join(outPath, fileName));
+    targetPath = await claims.claim(path.join(outPath, fileName));
     final sourceFile = File(filePath);
     final destinationFile = File(targetPath);
     // 使用流方式复制文件并显示进度，带背压和节流的进度回调
@@ -818,7 +832,8 @@ Future<String?> extractVideo(
 Future<String?> extractImages(
   WidgetRef ref,
   String filePath,
-  String outPath, {
+  String outPath,
+  FileNameClaims claims, {
   bool detailedProgress = false,
 }) async {
   Stopwatch stopwatch = Stopwatch();
@@ -839,7 +854,7 @@ Future<String?> extractImages(
         );
         if (detailedProgress) changeLoadingText(ref, loadingText);
         String fileName = path.basename(file.path);
-        String targetPath = await claimFilePath(path.join(outPath, fileName));
+        String targetPath = await claims.claim(path.join(outPath, fileName));
         await file.copy(targetPath);
       }
       index++;

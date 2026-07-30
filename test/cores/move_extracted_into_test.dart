@@ -27,7 +27,7 @@ void main() {
     write(from, 'art.png', 'a');
     write(from, 'materials\\deep.png', 'b');
 
-    expect(await moveExtractedInto(from.path, to.path), isNull);
+    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
 
     expect(File('${to.path}\\art.png').readAsStringSync(), 'a');
     expect(File('${to.path}\\materials\\deep.png').readAsStringSync(), 'b');
@@ -40,14 +40,63 @@ void main() {
     write(to, 'cover.png', 'first');
     write(from, 'cover.png', 'second');
 
-    expect(await moveExtractedInto(from.path, to.path), isNull);
+    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
 
     expect(File('${to.path}\\cover.png').readAsStringSync(), 'first');
     expect(File('${to.path}\\cover-1.png').readAsStringSync(), 'second');
   });
 
+  group('with replace existing files on', () {
+    // The setting used to do nothing here, because publication always took a
+    // free name, so extracting the same wallpaper twice left art.png beside
+    // art-1.png and a third run added art-2.png.
+    test('replaces what an earlier run left', () async {
+      write(to, 'cover.png', 'last run');
+      write(from, 'cover.png', 'this run');
+
+      expect(
+        await moveExtractedInto(
+          from.path,
+          to.path,
+          FileNameClaims(overwrite: true),
+        ),
+        isNull,
+      );
+
+      expect(File('${to.path}\\cover.png').readAsStringSync(), 'this run');
+      expect(File('${to.path}\\cover-1.png').existsSync(), isFalse);
+    });
+
+    // Overwriting across runs must not become two wallpapers in one run
+    // overwriting each other.
+    test('still suffixes a second claim inside the same run', () async {
+      final claims = FileNameClaims(overwrite: true);
+      write(from, 'cover.png', 'first');
+      expect(await moveExtractedInto(from.path, to.path, claims), isNull);
+
+      final Directory second = Directory('${root.path}\\from2')..createSync();
+      write(second, 'cover.png', 'second');
+      expect(await moveExtractedInto(second.path, to.path, claims), isNull);
+
+      expect(File('${to.path}\\cover.png').readAsStringSync(), 'first');
+      expect(File('${to.path}\\cover-1.png').readAsStringSync(), 'second');
+    });
+
+    test('a differently cased name counts as the same claim', () async {
+      final claims = FileNameClaims(overwrite: true);
+      write(from, 'Cover.PNG', 'first');
+      expect(await moveExtractedInto(from.path, to.path, claims), isNull);
+
+      final Directory second = Directory('${root.path}\\from3')..createSync();
+      write(second, 'cover.png', 'second');
+      expect(await moveExtractedInto(second.path, to.path, claims), isNull);
+
+      expect(File('${to.path}\\cover-1.png').readAsStringSync(), 'second');
+    });
+  });
+
   test('an empty directory moves nothing and reports no error', () async {
-    expect(await moveExtractedInto(from.path, to.path), isNull);
+    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
     expect(to.listSync(), isEmpty);
   });
 
@@ -60,7 +109,7 @@ void main() {
     // A file where that subfolder needs to be, so creating it throws.
     write(to, 'blocked', 'in the way');
 
-    final String? err = await moveExtractedInto(from.path, to.path);
+    final String? err = await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false));
 
     expect(err, isNotNull);
     expect(err, contains('stuck.png'));
