@@ -10,6 +10,38 @@ class CopyCancelled implements Exception {
   String toString() => 'CopyCancelled';
 }
 
+/// Copies through a sibling `.part` and renames over [destination] only once the
+/// whole file has arrived.
+///
+/// Writing straight to [destination] truncates it the moment the sink opens, so
+/// cancelling partway through replacing a file destroys the copy that was
+/// already there. Rename is atomic on NTFS, so until it runs the old file is
+/// untouched.
+Future<void> copyFileReplacing(
+  File source,
+  File destination, {
+  void Function(int copied, int total)? onProgress,
+  Duration throttle = const Duration(milliseconds: 100),
+  CancelToken? cancelToken,
+}) async {
+  final File part = File('${destination.path}.part');
+  try {
+    await copyFileWithProgress(
+      source,
+      part,
+      onProgress: onProgress,
+      throttle: throttle,
+      cancelToken: cancelToken,
+    );
+    await part.rename(destination.path);
+  } catch (_) {
+    try {
+      if (await part.exists()) await part.delete();
+    } catch (_) {}
+    rethrow;
+  }
+}
+
 /// Streams [source] into [destination], reporting progress at most once per
 /// [throttle], and always once at the end.
 ///

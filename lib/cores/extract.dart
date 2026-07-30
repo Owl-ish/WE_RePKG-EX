@@ -837,7 +837,7 @@ Future<String?> extractVideo(
     final sourceFile = File(filePath);
     final destinationFile = File(targetPath);
     // 使用流方式复制文件并显示进度，带背压和节流的进度回调
-    await copyFileWithProgress(
+    await copyFileReplacing(
       sourceFile,
       destinationFile,
       onProgress: (copied, total) {
@@ -856,9 +856,10 @@ Future<String?> extractVideo(
       cancelToken: ref.read(activeCancelTokenProvider),
     );
   } catch (e) {
-    // claimFilePath named it after the wallpaper, so a part-written file left
-    // here is indistinguishable from a finished export.
-    if (targetPath != null) {
+    // Only the placeholder claimFilePath created, never a file that was already
+    // there: the copy goes through a .part and renames, so an export from an
+    // earlier run survives a cancel untouched.
+    if (targetPath != null && !claims.overwrite) {
       try {
         await File(targetPath).delete();
       } catch (_) {}
@@ -900,7 +901,9 @@ Future<String?> extractImages(
         if (detailedProgress) changeLoadingText(ref, loadingText);
         String fileName = path.basename(file.path);
         String targetPath = await claims.claim(path.join(outPath, fileName));
-        await file.copy(targetPath);
+        // Through a .part as well: a copy that fails partway would otherwise
+        // leave a truncated file where the last run's image was.
+        await copyFileReplacing(file, File(targetPath));
       }
       index++;
     }

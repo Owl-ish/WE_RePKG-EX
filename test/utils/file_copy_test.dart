@@ -22,6 +22,52 @@ void main() {
     return File(p.join(tmp.path, name))..writeAsBytesSync(data);
   }
 
+  group('replacing a file that is already there', () {
+    // Writing straight to the destination truncates it when the sink opens, so
+    // cancelling used to destroy an export from an earlier run.
+    test('a cancelled replace leaves the original intact', () async {
+      final src = writeRandom('clip.mp4', 5 * 1024 * 1024);
+      final dest = File(p.join(tmp.path, 'out', 'clip.mp4'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('the previous export');
+      final token = CancelToken();
+
+      await expectLater(
+        copyFileReplacing(
+          src,
+          dest,
+          onProgress: (_, _) => token.cancel(),
+          cancelToken: token,
+        ),
+        throwsA(isA<CopyCancelled>()),
+      );
+
+      expect(dest.readAsStringSync(), 'the previous export');
+      expect(File('${dest.path}.part').existsSync(), isFalse);
+    });
+
+    test('a finished replace swaps the new file in', () async {
+      final src = writeRandom('clip.mp4', 2 * 1024 * 1024);
+      final dest = File(p.join(tmp.path, 'out', 'clip.mp4'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('the previous export');
+
+      await copyFileReplacing(src, dest);
+
+      expect(dest.lengthSync(), src.lengthSync());
+      expect(File('${dest.path}.part').existsSync(), isFalse);
+    });
+
+    test('works when nothing is there yet', () async {
+      final src = writeRandom('clip.mp4', 1024 * 1024);
+      final dest = File(p.join(tmp.path, 'fresh', 'clip.mp4'));
+
+      await copyFileReplacing(src, dest);
+
+      expect(dest.lengthSync(), src.lengthSync());
+    });
+  });
+
   // Without this the pool still has to copy the whole file before the batch can
   // report itself cancelled, so cancel does nothing visible on a large video.
   test('stops part way when the token is cancelled', () async {
