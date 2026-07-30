@@ -281,13 +281,6 @@ Future<ErrorInfo?> _extractProjectOne({
   return null;
 }
 
-Future<void> exportCurrentProject(
-  WidgetRef ref,
-  WallpaperInfo wallpaper,
-) async {
-  await extractProject(ref, [wallpaper]);
-}
-
 // 新增的通用提取方法
 Future<void> extractWallpapers(
   WidgetRef ref,
@@ -313,9 +306,9 @@ Future<void> extractWallpapers(
   // earlier run's file but must not be handed to two wallpapers here.
   final claims = FileNameClaims(overwrite: ref.read(replaceFileProvider));
 
-  List<(String?, bool)?> results = const <(String?, bool)?>[];
+  List<String?> results = const <String?>[];
   try {
-    results = await runBounded<WallpaperInfo, (String?, bool)>(
+    results = await runBounded<WallpaperInfo, String?>(
       wallpapers,
       (wallpaper) => extractBranch(
         ref,
@@ -339,13 +332,11 @@ Future<void> extractWallpapers(
     cancel.call();
   }
 
+  // Each scene cleans up inside its own private directory before publishing, so
+  // there is no sweep out here: it could not tell this run's output from the
+  // user's own files.
   for (int i = 0; i < results.length; i++) {
-    final result = results[i];
-    if (result == null) continue; // never started: the batch was cancelled
-    // No cleanup pass over the export folder: each scene cleans up inside the
-    // private directory it extracted into, before anything is published. A pass
-    // out here cannot tell this run's output from what the user already had.
-    final (err, _) = result;
+    final err = results[i];
     if (err != null) {
       errList.add(ErrorInfo(wallpaper: wallpapers[i], message: err));
     }
@@ -381,7 +372,7 @@ Future<void> extractAll(WidgetRef ref) async {
 
 /// [detailedProgress] turns on the per-file byte counter. Off for batches, where
 /// several workers writing one progress line just makes it flicker.
-Future<(String?, bool)> extractBranch(
+Future<String?> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath,
@@ -392,49 +383,39 @@ Future<(String?, bool)> extractBranch(
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
-    return (
-      await extractSceneToShared(
-        ref,
-        wallpaper,
-        outPath,
-        claims,
-        detailedProgress: detailedProgress,
-      ),
-      true,
+    return extractSceneToShared(
+      ref,
+      wallpaper,
+      outPath,
+      claims,
+      detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('.mp4')) {
-    return (
-      await extractVideo(
-        ref,
-        wallpaper,
-        outPath,
-        claims,
-        detailedProgress: detailedProgress,
-      ),
-      false,
+    return extractVideo(
+      ref,
+      wallpaper,
+      outPath,
+      claims,
+      detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('customdirectory')) {
-    return (
-      await extractImages(
-        ref,
-        target,
-        outPath,
-        claims,
-        detailedProgress: detailedProgress,
-      ),
-      false,
+    return extractImages(
+      ref,
+      target,
+      outPath,
+      claims,
+      detailedProgress: detailedProgress,
     );
   }
   // Anything RePKG does not handle: copy the folder into a subfolder of its own.
   final name = ref.read(useTitleNameProvider)
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
-  final err = await copyWallpaperFolderTo(
+  return copyWallpaperFolderTo(
     wallpaper,
     path.join(outPath, name),
     overwrite: ref.read(replaceFileProvider),
   );
-  return (err, false);
 }
 
 /// Copies the whole wallpaper folder into [destDir], so the output stays a

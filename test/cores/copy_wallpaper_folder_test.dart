@@ -2,45 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-
-/// Mirrors the copy loop in copyWallpaperFolder, which cannot be called directly
-/// from a unit test because it takes a WidgetRef and drives loading toasts.
-///
-/// The behaviour under test is the directory-creation bookkeeping: the previous
-/// version issued a recursive create for every file's parent, even though the
-/// walk had just created it. Counting creates here catches a regression that a
-/// pure output comparison would miss, since both versions produce an identical
-/// tree.
-Future<({int creates, int files})> copyTree(
-  Directory src,
-  String destDir, {
-  required bool overwrite,
-}) async {
-  int creates = 0;
-  int files = 0;
-  await Directory(destDir).create(recursive: true);
-  creates++;
-  final Set<String> createdDirs = {destDir};
-  await for (final entity in src.list(recursive: true, followLinks: false)) {
-    final dest = p.join(destDir, p.relative(entity.path, from: src.path));
-    if (entity is Directory) {
-      if (createdDirs.add(dest)) {
-        await Directory(dest).create(recursive: true);
-        creates++;
-      }
-    } else if (entity is File) {
-      if (!overwrite && await File(dest).exists()) continue;
-      final parent = p.dirname(dest);
-      if (createdDirs.add(parent)) {
-        await Directory(parent).create(recursive: true);
-        creates++;
-      }
-      await entity.copy(dest);
-      files++;
-    }
-  }
-  return (creates: creates, files: files);
-}
+import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/models/wallpaper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -64,13 +27,29 @@ void main() {
     return src;
   }
 
+  WallpaperInfo wallpaperIn(Directory folder) => WallpaperInfo(
+    id: '1',
+    title: 'Wallpaper',
+    contentRating: 'everyone',
+    tags: const [],
+    previews: '',
+    type: 'web',
+    updateTime: null,
+    createTime: DateTime(2024, 1, 1),
+    target: '',
+    folder: folder.path,
+    size: 0,
+  );
+
   test('copies the whole tree faithfully', () async {
     final src = buildSource();
     final dest = p.join(tmp.path, 'out');
 
-    final result = await copyTree(src, dest, overwrite: true);
+    expect(
+      await copyWallpaperFolderTo(wallpaperIn(src), dest, overwrite: true),
+      isNull,
+    );
 
-    expect(result.files, 26); // 1 project.json + 24 + 1 nested
     for (final entity in src.listSync(recursive: true)) {
       final mirrored = p.join(dest, p.relative(entity.path, from: src.path));
       expect(
@@ -85,45 +64,39 @@ void main() {
     );
   });
 
-  test('creates each directory once, not once per file', () async {
-    final src = buildSource();
-
-    final result = await copyTree(
-      src,
-      p.join(tmp.path, 'out'),
-      overwrite: true,
-    );
-
-    // 1 destination root + materials + shaders + models + materials/deep.
-    expect(result.creates, 5);
-    expect(
-      result.creates,
-      lessThan(result.files),
-      reason: 'the old version created a directory per file copied',
-    );
-  });
-
   test('overwrite false leaves existing files alone', () async {
     final src = buildSource();
     final dest = p.join(tmp.path, 'out');
-    await copyTree(src, dest, overwrite: true);
+    await copyWallpaperFolderTo(wallpaperIn(src), dest, overwrite: true);
     final victim = File(p.join(dest, 'project.json'))
       ..writeAsStringSync('edited by hand');
 
-    final second = await copyTree(src, dest, overwrite: false);
+    await copyWallpaperFolderTo(wallpaperIn(src), dest, overwrite: false);
 
-    expect(second.files, 0, reason: 'everything was already present');
     expect(victim.readAsStringSync(), 'edited by hand');
   });
 
   test('overwrite true replaces existing files', () async {
     final src = buildSource();
     final dest = p.join(tmp.path, 'out');
-    await copyTree(src, dest, overwrite: true);
+    await copyWallpaperFolderTo(wallpaperIn(src), dest, overwrite: true);
     File(p.join(dest, 'project.json')).writeAsStringSync('edited by hand');
 
-    await copyTree(src, dest, overwrite: true);
+    await copyWallpaperFolderTo(wallpaperIn(src), dest, overwrite: true);
 
     expect(File(p.join(dest, 'project.json')).readAsStringSync(), '{}');
+  });
+
+  test('a source folder that is gone comes back as an error', () async {
+    final wallpaper = wallpaperIn(Directory(p.join(tmp.path, 'missing')));
+
+    expect(
+      await copyWallpaperFolderTo(
+        wallpaper,
+        p.join(tmp.path, 'out'),
+        overwrite: true,
+      ),
+      isNotNull,
+    );
   });
 }
