@@ -2,7 +2,6 @@ class AppI10n {
   // 首页相关
   static const String homeTopTitle = 'home.topTitle';
   static const String homeSearchTip = 'home.searchTip';
-  static const String homeSetting = 'home.setting';
   static const String homeSortDate = 'home.sortDate';
   static const String homeSortSize = 'home.sortSize';
   static const String homeSortUpdate = 'home.sortUpdate';
@@ -59,7 +58,6 @@ class AppI10n {
   static const String dialogProcessingWallpaper = 'dialog.ProcessingWallpaper';
   static const String dialogProcessingDelete = 'dialog.ProcessingDelete';
   static const String dialogErrorTitle = 'dialog.errorTitle';
-  static const String dialogDeleteFailedTitle = 'dialog.deleteFailedTitle';
   static const String dialogExtractImageInfo = 'dialog.extractImageInfo';
   static const String dialogExtractVideoInfo = 'dialog.extractVideoInfo';
   static const String dialogExtractSceneInfo = 'dialog.extractSceneInfo';
@@ -72,11 +70,9 @@ class AppI10n {
   static const String dialogDeleteConfirmOne = 'dialog.deleteConfirmOne';
   static const String dialogDeleteConfirmMany = 'dialog.deleteConfirmMany';
   static const String dialogOpenFolderFailed = 'dialog.openFolderFailed';
-  static const String dialogFolderNoExist = 'dialog.folderNoExist';
   static const String dialogPlayVideoFailed = 'dialog.playVideoFailed';
   static const String dialogFileNoExist = 'dialog.fileNoExist';
   static const String dialogDeleteFailed = 'dialog.deleteFailed';
-  static const String dialogExtractProject = 'dialog.extractProject';
 
   // 设置页面相关
   static const String settingTitle = 'setting.title';
@@ -143,11 +139,8 @@ class AppI10n {
   static const String settingAboutOpenSourceLicense =
       'setting.about.openSourceLicense';
   static const String settingAboutVersion = 'setting.about.version';
-  static const String settingAboutRepkgVersion = 'setting.about.repkgVersion';
   static const String settingAboutRepkgAuthor = 'setting.about.repkgAuthor';
   static const String settingAboutRepkgUrl = 'setting.about.repkgUrl';
-  static const String settingAboutWeRepkgVersion =
-      'setting.about.weRepkgVersion';
   static const String settingAboutWeRepkgAuthor = 'setting.about.weRepkgAuthor';
   static const String settingAboutWeRepkgUrl = 'setting.about.weRepkgUrl';
   static const String settingAboutSettingsFile = 'setting.about.settingsFile';
@@ -195,7 +188,6 @@ class AppI10n {
   static const String close = 'close';
   static const String emptyTip = 'emptyTip';
   static const String toolNoExist = 'toolNoExist';
-  static const String projectNoExist = 'projectNoExist';
   static const String loading = 'loading';
   static const String extractFolderToast = 'extractFolderToast';
   static const String projectFolderToast = 'projectFolderToast';

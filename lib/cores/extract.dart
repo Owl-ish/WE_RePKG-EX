@@ -133,7 +133,6 @@ Future<void> extractProject(
     return showToolNoExistToast();
   }
   List<ErrorInfo> errList = [];
-  List<String> skipList = [];
   String outPath = useProjectPath || extractType.isProject
       ? ref.read(projectPathProvider)!
       : ref.read(exportPathProvider)!;
@@ -179,7 +178,7 @@ Future<void> extractProject(
   }
   errList.addAll(results.whereType<ErrorInfo>());
   if (token.isCancelled) return showCancelledToast();
-  errList.isNotEmpty ? showErrorView(errList) : showProjectToast(skipList);
+  errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
 }
 
 /// Assigns each wallpaper a distinct output folder under [basePath].
