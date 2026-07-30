@@ -549,6 +549,10 @@ Future<String?> extractSceneToShared(
       detailedProgress: detailedProgress,
     );
     if (err != null) return err;
+    // A cancelled RePKG also returns null, and publishing then would mix a
+    // fraction of a scene into the export folder under names indistinguishable
+    // from real output. The finally below wipes the temp directory instead.
+    if (ref.read(activeCancelTokenProvider)?.isCancelled ?? false) return null;
     final String? cleanup = await deleteUselessFiles(
       ref,
       temp.path,
@@ -756,6 +760,8 @@ Future<String?> extractVideo(
 }) async {
   Stopwatch stopwatch = Stopwatch();
   stopwatch.start();
+  // Hoisted so the catch can clear the name claimFilePath already created.
+  String? targetPath;
   try {
     final filePath = wallpaper.target;
     // Name the exported video after the wallpaper title (sanitized), keeping the
@@ -768,7 +774,7 @@ Future<String?> extractVideo(
         : title;
     final fileName = '$baseName$extension';
     // Atomic claim: several workers may be writing into this same folder.
-    final targetPath = await claimFilePath(path.join(outPath, fileName));
+    targetPath = await claimFilePath(path.join(outPath, fileName));
     final sourceFile = File(filePath);
     final destinationFile = File(targetPath);
     // 使用流方式复制文件并显示进度，带背压和节流的进度回调
@@ -788,8 +794,17 @@ Future<String?> extractVideo(
           ),
         );
       },
+      cancelToken: ref.read(activeCancelTokenProvider),
     );
   } catch (e) {
+    // claimFilePath named it after the wallpaper, so a part-written file left
+    // here is indistinguishable from a finished export.
+    if (targetPath != null) {
+      try {
+        await File(targetPath).delete();
+      } catch (_) {}
+    }
+    if (e is CopyCancelled) return null;
     debugPrint('${tr(AppI10n.errorExportVideoFailed)} $e');
     return '${tr(AppI10n.errorExportVideoFailed)} $e';
   } finally {

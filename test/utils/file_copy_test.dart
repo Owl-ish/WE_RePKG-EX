@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 
 void main() {
@@ -20,6 +21,42 @@ void main() {
     );
     return File(p.join(tmp.path, name))..writeAsBytesSync(data);
   }
+
+  // Without this the pool still has to copy the whole file before the batch can
+  // report itself cancelled, so cancel does nothing visible on a large video.
+  test('stops part way when the token is cancelled', () async {
+    final src = writeRandom('clip.mp4', 5 * 1024 * 1024);
+    final dest = File(p.join(tmp.path, 'out', 'clip.mp4'));
+    final token = CancelToken();
+
+    await expectLater(
+      copyFileWithProgress(
+        src,
+        dest,
+        // Cancels on the first progress report, so the copy is mid-stream.
+        onProgress: (_, _) => token.cancel(),
+        cancelToken: token,
+      ),
+      // A stable type, not the FileSystemException addStream turns the aborting
+      // throw into, or the caller cannot tell cancelling from a disk failure.
+      throwsA(isA<CopyCancelled>()),
+    );
+
+    expect(
+      dest.lengthSync(),
+      lessThan(src.lengthSync()),
+      reason: 'the read must stop rather than finish the file',
+    );
+  });
+
+  test('runs to the end when the token is never cancelled', () async {
+    final src = writeRandom('clip.mp4', 2 * 1024 * 1024);
+    final dest = File(p.join(tmp.path, 'out', 'clip.mp4'));
+
+    await copyFileWithProgress(src, dest, cancelToken: CancelToken());
+
+    expect(dest.lengthSync(), src.lengthSync());
+  });
 
   test('copies bytes faithfully', () async {
     final src = writeRandom('clip.mp4', 5 * 1024 * 1024);
