@@ -50,6 +50,8 @@ dependencies:
   custom_sliding_segmented_control: ^1.8.5
   local_notifier: ^0.1.6
   flutter_context_menu: 0.4.1
+  # One kernel32 call, to size extraction against the machine's RAM.
+  ffi: ^2.1.4
 
 dev_dependencies:
   flutter_test:

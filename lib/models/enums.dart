@@ -46,7 +46,6 @@ extension LanguageTypeExtension on LanguageType {
         return const Locale('zh', 'CN');
     }
   }
-
 }
 
 enum ThemeType { light, dark, system }
@@ -112,7 +111,6 @@ extension NotificationTypeExtension on NotificationType {
         return tr(AppI10n.settingSystemInApp);
     }
   }
-
 }
 
 enum ExtractType { wallpaper, project }

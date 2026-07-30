@@ -52,7 +52,10 @@ void main() {
         ..writeAsStringSync('image');
       final Directory dest = Directory(p.join(tmp.path, 'out'))..createSync();
 
-      await copyProjectPreviewImage(wallpaper(previews: preview.path), dest.path);
+      await copyProjectPreviewImage(
+        wallpaper(previews: preview.path),
+        dest.path,
+      );
 
       expect(
         File(p.join(dest.path, 'preview.jpg')).readAsStringSync(),
@@ -78,13 +81,19 @@ void main() {
       final Directory dest = Directory(p.join(tmp.path, 'out'))..createSync();
       File(p.join(dest.path, 'preview.jpg')).writeAsStringSync('already here');
 
-      await copyProjectPreviewImage(wallpaper(previews: preview.path), dest.path);
+      await copyProjectPreviewImage(
+        wallpaper(previews: preview.path),
+        dest.path,
+      );
 
       expect(
         File(p.join(dest.path, 'preview.jpg')).readAsStringSync(),
         'already here',
       );
-      expect(File(p.join(dest.path, 'preview-1.jpg')).readAsStringSync(), 'new');
+      expect(
+        File(p.join(dest.path, 'preview-1.jpg')).readAsStringSync(),
+        'new',
+      );
     });
   });
 

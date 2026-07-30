@@ -27,7 +27,14 @@ void main() {
     write(from, 'art.png', 'a');
     write(from, 'materials\\deep.png', 'b');
 
-    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
+    expect(
+      await moveExtractedInto(
+        from.path,
+        to.path,
+        FileNameClaims(overwrite: false),
+      ),
+      isNull,
+    );
 
     expect(File('${to.path}\\art.png').readAsStringSync(), 'a');
     expect(File('${to.path}\\materials\\deep.png').readAsStringSync(), 'b');
@@ -40,7 +47,14 @@ void main() {
     write(to, 'cover.png', 'first');
     write(from, 'cover.png', 'second');
 
-    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
+    expect(
+      await moveExtractedInto(
+        from.path,
+        to.path,
+        FileNameClaims(overwrite: false),
+      ),
+      isNull,
+    );
 
     expect(File('${to.path}\\cover.png').readAsStringSync(), 'first');
     expect(File('${to.path}\\cover-1.png').readAsStringSync(), 'second');
@@ -96,7 +110,14 @@ void main() {
   });
 
   test('an empty directory moves nothing and reports no error', () async {
-    expect(await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false)), isNull);
+    expect(
+      await moveExtractedInto(
+        from.path,
+        to.path,
+        FileNameClaims(overwrite: false),
+      ),
+      isNull,
+    );
     expect(to.listSync(), isEmpty);
   });
 
@@ -109,7 +130,11 @@ void main() {
     // A file where that subfolder needs to be, so creating it throws.
     write(to, 'blocked', 'in the way');
 
-    final String? err = await moveExtractedInto(from.path, to.path, FileNameClaims(overwrite: false));
+    final String? err = await moveExtractedInto(
+      from.path,
+      to.path,
+      FileNameClaims(overwrite: false),
+    );
 
     expect(err, isNotNull);
     expect(err, contains('stuck.png'));

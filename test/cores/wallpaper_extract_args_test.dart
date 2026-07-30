@@ -119,4 +119,48 @@ void main() {
       expect(textureThreads(cores: 8, concurrency: 0), 8);
     });
   });
+
+  group('sizing extraction against the machine', () {
+    const int gb = 1024 * 1024 * 1024;
+
+    test('a roomy machine gets what it asked for', () {
+      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 32 * gb);
+      expect(plan.concurrency, 4);
+      expect(plan.threads, 4);
+    });
+
+    // 4 at once would be about 5GB against an 8GB budget of 4GB.
+    test('a small machine runs fewer at once', () {
+      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 8 * gb);
+      expect(plan.concurrency, lessThan(4));
+      expect(plan.peakBytes, lessThanOrEqualTo(4 * gb));
+    });
+
+    test('one wallpaper is the floor, however little memory there is', () {
+      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 1 * gb);
+      expect(plan.concurrency, 1);
+    });
+
+    test('an unreadable machine is bounded by cores alone', () {
+      final plan = extractPlan(requested: 4, cores: 16);
+      expect(plan.concurrency, 4);
+      expect(plan.threads, 4);
+    });
+
+    // The pool and each worker call this separately rather than passing the
+    // answer around, so the same inputs have to give the same plan.
+    test('is deterministic', () {
+      for (final int ram in <int>[4 * gb, 8 * gb, 16 * gb, 64 * gb]) {
+        final a = extractPlan(requested: 6, cores: 12, ramBytes: ram);
+        final b = extractPlan(requested: 6, cores: 12, ramBytes: ram);
+        expect(a, b);
+      }
+    });
+
+    test('the estimate rises with what is actually run', () {
+      final small = extractPlan(requested: 1, cores: 16, ramBytes: 32 * gb);
+      final large = extractPlan(requested: 4, cores: 16, ramBytes: 32 * gb);
+      expect(large.peakBytes, greaterThan(small.peakBytes));
+    });
+  });
 }

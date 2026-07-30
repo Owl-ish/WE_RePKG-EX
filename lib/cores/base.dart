@@ -113,10 +113,7 @@ void updateOtherFolder(WidgetRef ref, String wallpaperPath) {
 }
 
 Future<void> setAcfPath(WidgetRef ref) async {
-  final xType = XTypeGroup(
-    label: AppStrings.acfName,
-    extensions: ['acf'],
-  );
+  final xType = XTypeGroup(label: AppStrings.acfName, extensions: ['acf']);
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
   if (file != null) {
     ref.read(acfPathProvider.notifier).update(file.path);

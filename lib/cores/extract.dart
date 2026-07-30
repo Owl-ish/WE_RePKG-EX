@@ -17,6 +17,7 @@ import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/repkg_output.dart';
+import 'package:we_repkg/utils/system_memory.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
@@ -164,7 +165,11 @@ Future<void> extractProject(
         overwrite: overwrite,
         token: token,
       ),
-      concurrency: ref.read(extractConcurrencyProvider),
+      concurrency: extractPlan(
+        requested: ref.read(extractConcurrencyProvider),
+        cores: Platform.numberOfProcessors,
+        ramBytes: installedMemoryBytes(),
+      ).concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -319,7 +324,11 @@ Future<void> extractWallpapers(
         // Only a single-wallpaper run can own the progress line.
         detailedProgress: wallpapers.length == 1,
       ),
-      concurrency: ref.read(extractConcurrencyProvider),
+      concurrency: extractPlan(
+        requested: ref.read(extractConcurrencyProvider),
+        cores: Platform.numberOfProcessors,
+        ramBytes: installedMemoryBytes(),
+      ).concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -617,6 +626,53 @@ const int _maxTextureThreads = 8;
 int textureThreads({required int cores, required int concurrency}) =>
     max(1, cores ~/ max(1, concurrency)).clamp(1, _maxTextureThreads);
 
+const int _mb = 1024 * 1024;
+
+/// Rough peak for one RePKG. Measured on a 70MB scene of 15 textures: 347MB on
+/// one thread, about 1.1GB from four through eight, 1.9GB at sixteen. It does
+/// not rise smoothly because most of it is .NET's heap, and it is rounded up
+/// because a scene with more or larger textures costs more.
+int estimatedProcessBytes(int threads) {
+  if (threads <= 1) return 400 * _mb;
+  if (threads <= 2) return 700 * _mb;
+  if (threads <= _maxTextureThreads) return 1300 * _mb;
+  return 2100 * _mb;
+}
+
+/// How many wallpapers to extract at once and how many textures each of them may
+/// convert, given what the machine has.
+///
+/// One function rather than two, so the pool and the workers cannot disagree:
+/// both derive the answer from the same inputs instead of one passing it to the
+/// other. [ramBytes] null means the machine could not be asked, and only the
+/// core count bounds the result.
+({int concurrency, int threads, int peakBytes}) extractPlan({
+  required int requested,
+  required int cores,
+  int? ramBytes,
+}) {
+  ({int concurrency, int threads, int peakBytes}) at(int c) {
+    final int threads = textureThreads(cores: cores, concurrency: c);
+    return (
+      concurrency: c,
+      threads: threads,
+      peakBytes: c * estimatedProcessBytes(threads),
+    );
+  }
+
+  final int wanted = max(1, requested);
+  if (ramBytes == null) return at(wanted);
+
+  // Half the machine. The grid still holds a 256MB preview cache, and pushing
+  // Windows into swap costs more than the extra wallpaper ever wins back.
+  final int budget = ramBytes ~/ 2;
+  for (int c = wanted; c > 1; c--) {
+    final plan = at(c);
+    if (plan.peakBytes <= budget) return plan;
+  }
+  return at(1);
+}
+
 List<String> wallpaperExtractArgs({
   required String target,
   required String outPath,
@@ -706,10 +762,11 @@ Future<String?> extractPKG(
       detailedProgress: detailedProgress,
       newFlags: repkgSupportsExtractFlags(version),
       threads: repkgSupportsThreads(version)
-          ? textureThreads(
+          ? extractPlan(
+              requested: ref.read(extractConcurrencyProvider),
               cores: Platform.numberOfProcessors,
-              concurrency: ref.read(extractConcurrencyProvider),
-            )
+              ramBytes: installedMemoryBytes(),
+            ).threads
           : null,
     );
     String fullCommand = '$rePKGPath ${args.join(' ')}';

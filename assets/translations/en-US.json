@@ -123,7 +123,9 @@
       "settingsFile": "Settings file location"
     },
     "configConcurrency": "Simultaneous extractions",
-    "configConcurrencyTip": "How many wallpapers unpack at once. Lower this on a hard drive, raise it on an SSD."
+    "configConcurrencyTip": "How many wallpapers unpack at once. Lower this on a hard drive, raise it on an SSD.",
+    "configConcurrencyMemory": "Uses up to about {size} while extracting.",
+    "configConcurrencyCapped": "Limited to {count} at once by this machine's memory."
   },
   "error": {
     "extractFailed": "Extraction failed:",
