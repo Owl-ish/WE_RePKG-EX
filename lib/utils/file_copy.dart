@@ -24,7 +24,9 @@ Future<void> copyFileReplacing(
   Duration throttle = const Duration(milliseconds: 100),
   CancelToken? cancelToken,
 }) async {
-  final File part = File('${destination.path}.part');
+  // Namespaced, so this cannot land on someone else's in-progress download:
+  // plain `.part` is what Firefox uses, and the export folder may be Downloads.
+  final File part = File('${destination.path}$partSuffix');
   try {
     await copyFileWithProgress(
       source,
@@ -33,13 +35,34 @@ Future<void> copyFileReplacing(
       throttle: throttle,
       cancelToken: cancelToken,
     );
-    await part.rename(destination.path);
   } catch (_) {
-    try {
-      if (await part.exists()) await part.delete();
-    } catch (_) {}
+    await _deleteQuietly(part);
     rethrow;
   }
+
+  try {
+    await part.rename(destination.path);
+    return;
+  } on FileSystemException {
+    // A process holding the destination open blocks a rename but not a write,
+    // so a video open in a player would otherwise fail the whole wallpaper.
+  }
+
+  // No cancel token here: the destination is being overwritten in place, and
+  // stopping midway would tear it. Everything is already in the part, so this
+  // reads from local disk and the part is kept until it lands.
+  await copyFileWithProgress(part, destination);
+  await _deleteQuietly(part);
+}
+
+/// Suffix for a copy still arriving. Shares the app's prefix so a sweep can
+/// recognise one left by a killed run.
+const String partSuffix = '.werepkg-part';
+
+Future<void> _deleteQuietly(File file) async {
+  try {
+    if (await file.exists()) await file.delete();
+  } catch (_) {}
 }
 
 /// Streams [source] into [destination], reporting progress at most once per

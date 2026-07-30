@@ -450,7 +450,13 @@ Future<String?> copyWallpaperFolderTo(
         if (createdDirs.add(parent)) {
           await Directory(parent).create(recursive: true);
         }
-        await entity.copy(dest);
+        // Replacing goes through a part file: copying straight over would leave
+        // a truncated file where the last export was if it failed partway.
+        if (overwrite) {
+          await copyFileReplacing(entity, File(dest));
+        } else {
+          await entity.copy(dest);
+        }
       }
     }
   } catch (e) {

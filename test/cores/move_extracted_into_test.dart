@@ -96,6 +96,21 @@ void main() {
       expect(File('${to.path}\\cover-1.png').readAsStringSync(), 'second');
     });
 
+    // extractVideo's catch deletes the claimed path only when not overwriting,
+    // and that is safe only because of this: overwriting never creates a
+    // placeholder, so the path it hands back may be the user's own file.
+    test('claiming creates a placeholder only when not overwriting', () async {
+      final String taken = '${to.path}\\claimed.png';
+
+      final String off = await FileNameClaims(overwrite: false).claim(taken);
+      expect(File(off).existsSync(), isTrue, reason: 'reserved on disk');
+
+      final String on = await FileNameClaims(
+        overwrite: true,
+      ).claim('${to.path}\\other.png');
+      expect(File(on).existsSync(), isFalse, reason: 'nothing was created');
+    });
+
     test('a differently cased name counts as the same claim', () async {
       final claims = FileNameClaims(overwrite: true);
       write(from, 'Cover.PNG', 'first');

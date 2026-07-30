@@ -43,7 +43,7 @@ void main() {
       );
 
       expect(dest.readAsStringSync(), 'the previous export');
-      expect(File('${dest.path}.part').existsSync(), isFalse);
+      expect(File('${dest.path}$partSuffix').existsSync(), isFalse);
     });
 
     test('a finished replace swaps the new file in', () async {
@@ -55,7 +55,24 @@ void main() {
       await copyFileReplacing(src, dest);
 
       expect(dest.lengthSync(), src.lengthSync());
-      expect(File('${dest.path}.part').existsSync(), isFalse);
+      expect(File('${dest.path}$partSuffix').existsSync(), isFalse);
+    });
+
+    // A rename cannot replace a file another process holds open, but a write
+    // can. Without the fallback, re-exporting a video open in a player failed
+    // the whole wallpaper.
+    test('replaces a destination another handle holds open', () async {
+      final src = writeRandom('clip.mp4', 512 * 1024);
+      final dest = File(p.join(tmp.path, 'out', 'clip.mp4'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('the previous export');
+      final RandomAccessFile holder = dest.openSync(mode: FileMode.read);
+      addTearDown(holder.closeSync);
+
+      await copyFileReplacing(src, dest);
+
+      expect(dest.lengthSync(), src.lengthSync());
+      expect(File('${dest.path}$partSuffix').existsSync(), isFalse);
     });
 
     test('works when nothing is there yet', () async {
