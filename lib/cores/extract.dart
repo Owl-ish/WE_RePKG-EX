@@ -152,27 +152,33 @@ Future<void> extractProject(
   );
   final token = startBatch(ref);
 
-  // Parallel is safe here: every wallpaper owns a distinct subfolder.
-  final results = await runBounded<WallpaperInfo, ErrorInfo?>(
-    wallpapers,
-    (wallpaper) => _extractProjectOne(
-      wallpaper: wallpaper,
-      outPath: outDirs[wallpaper.id]!,
-      rePKGPath: rePKGPath,
-      overwrite: overwrite,
-      token: token,
-    ),
-    concurrency: ref.read(extractConcurrencyProvider),
-    cancelToken: token,
-    onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
-    onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
-  );
+  List<ErrorInfo?> results = const <ErrorInfo?>[];
+  try {
+    // Parallel is safe here: every wallpaper owns a distinct subfolder.
+    results = await runBounded<WallpaperInfo, ErrorInfo?>(
+      wallpapers,
+      (wallpaper) => _extractProjectOne(
+        wallpaper: wallpaper,
+        outPath: outDirs[wallpaper.id]!,
+        rePKGPath: rePKGPath,
+        overwrite: overwrite,
+        token: token,
+      ),
+      concurrency: ref.read(extractConcurrencyProvider),
+      cancelToken: token,
+      onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
+      onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+    );
+  } catch (e) {
+    errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
+  } finally {
+    // The pool rethrows a worker's error, so without this the loading overlay
+    // and its barrier stay up for good and the token is never retired.
+    endBatch(ref);
+    cancel.call();
+  }
   errList.addAll(results.whereType<ErrorInfo>());
-  final bool cancelled = token.isCancelled;
-
-  endBatch(ref);
-  cancel.call();
-  if (cancelled) return showCancelledToast();
+  if (token.isCancelled) return showCancelledToast();
   errList.isNotEmpty ? showErrorView(errList) : showProjectToast(skipList);
 }
 
@@ -305,20 +311,30 @@ Future<void> extractWallpapers(
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
 
-  final results = await runBounded<WallpaperInfo, (String?, bool)>(
-    wallpapers,
-    (wallpaper) => extractBranch(
-      ref,
-      wallpaper,
-      outPath,
-      // Only a single-wallpaper run can own the progress line.
-      detailedProgress: wallpapers.length == 1,
-    ),
-    concurrency: ref.read(extractConcurrencyProvider),
-    cancelToken: token,
-    onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
-    onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
-  );
+  List<(String?, bool)?> results = const <(String?, bool)?>[];
+  try {
+    results = await runBounded<WallpaperInfo, (String?, bool)>(
+      wallpapers,
+      (wallpaper) => extractBranch(
+        ref,
+        wallpaper,
+        outPath,
+        // Only a single-wallpaper run can own the progress line.
+        detailedProgress: wallpapers.length == 1,
+      ),
+      concurrency: ref.read(extractConcurrencyProvider),
+      cancelToken: token,
+      onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
+      onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+    );
+  } catch (e) {
+    errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
+  } finally {
+    // The pool rethrows a worker's error, so without this the loading overlay
+    // and its barrier stay up for good and the token is never retired.
+    endBatch(ref);
+    cancel.call();
+  }
 
   for (int i = 0; i < results.length; i++) {
     final result = results[i];
@@ -332,10 +348,7 @@ Future<void> extractWallpapers(
     }
   }
 
-  final bool wasCancelled = token.isCancelled;
-  endBatch(ref);
-  cancel.call();
-  if (wasCancelled) return showCancelledToast();
+  if (token.isCancelled) return showCancelledToast();
   errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
 }
 
