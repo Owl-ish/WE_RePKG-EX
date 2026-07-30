@@ -33,6 +33,18 @@ typedef PreviewStats = ({double aspect, double luminance});
 
 final Set<String> _openingWallpaperDetails = <String>{};
 
+/// Tallest the preview pane ever gets, so nothing decodes larger than it draws.
+const double _paneMaxHeight = 500;
+
+/// Both panes and the precache have to agree, or they land in different cache
+/// slots and the blur flickers partway through the open animation.
+ImageProvider<Object> _paneImage(BuildContext context, String path) =>
+    previewImage(
+      path,
+      cacheHeight: (_paneMaxHeight * MediaQuery.devicePixelRatioOf(context))
+          .round(),
+    );
+
 /// Aspect and mean brightness of [previews], from one cheap 32px decode.
 /// Null if the file is missing or unreadable, or takes more than two seconds.
 Future<PreviewStats?> _previewStats(String previews) {
@@ -114,11 +126,10 @@ Future<void> _showWallpaperDetail(
 
   // The preview and the frosted panel are two Images over one file. Uncached
   // they resolve on separate frames and the blur flickers partway through the
-  // open animation. Must be the same provider both panes use, or this misses
-  // the cache slot entirely.
+  // open animation.
   if (wallpaper.previews.isNotEmpty) {
     await precacheImage(
-      previewImage(wallpaper.previews),
+      _paneImage(context, wallpaper.previews),
       context,
       // Both widgets have an errorBuilder; failing here would just block.
       onError: (Object error, StackTrace? stack) {},
@@ -200,8 +211,10 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
     // push the dialog past the window edge.
     const double panelWidth = 340;
     final double maxWidth = screen.width * .84;
-    final double aspect = widget.stats?.aspect ?? 16 / 9;
-    final double height = min(screen.height * .72, 500);
+    // Square, not 16/9, when the preview could not be measured: every Wallpaper
+    // Engine preview is square, so a wide fallback is the odd one out.
+    final double aspect = widget.stats?.aspect ?? 1;
+    final double height = min(screen.height * .72, _paneMaxHeight);
     double previewWidth = height * aspect;
     if (previewWidth + panelWidth > maxWidth) {
       previewWidth = maxWidth - panelWidth;
@@ -347,7 +360,7 @@ class _GlassPanel extends StatelessWidget {
             child: ColorFiltered(
               colorFilter: ColorFilter.matrix(_correction(_saturation, lift)),
               child: Image(
-                image: previewImage(wallpaper.previews),
+                image: _paneImage(context, wallpaper.previews),
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
                     ColoredBox(color: tint),
@@ -376,10 +389,10 @@ class _Preview extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: Colors.black,
-      // cover, not contain: contain letterboxes a 16:9 preview in a nearly
-      // square pane. The grid tile is where you see the whole frame.
+      // cover, not contain: the pane takes the preview's own ratio, so cover
+      // crops nothing until the dialog is clamped to the window width.
       child: Image(
-        image: previewImage(wallpaper.previews),
+        image: _paneImage(context, wallpaper.previews),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             const Center(child: Icon(Icons.broken_image, size: 64)),

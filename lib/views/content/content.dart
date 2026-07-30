@@ -93,6 +93,58 @@ class _ContentViewState extends ConsumerState<ContentView>
 
   static const Duration _fullEntranceDuration = Duration(milliseconds: 900);
 
+  /// One per diagonal. The maths depends only on the wave, so building these per
+  /// tile per rebuild made a few thousand short-lived objects a frame.
+  late final List<
+    ({CurvedAnimation t, Animation<double> scale, Animation<Offset> position})
+  >
+  _entranceWaves = List.generate(12, (wave) {
+    final double start = (wave * .06).clamp(0, .66);
+    final CurvedAnimation t = CurvedAnimation(
+      parent: _entranceController,
+      curve: Interval(
+        start,
+        (start + .34).clamp(0, 1),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    return (
+      t: t,
+      scale: TweenSequence<double>([
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: .88,
+            end: 1.04,
+          ).chain(CurveTween(curve: Curves.easeOutCubic)),
+          weight: 70,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: 1.04,
+            end: 1,
+          ).chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 30,
+        ),
+      ]).animate(t),
+      position: TweenSequence<Offset>([
+        TweenSequenceItem<Offset>(
+          tween: Tween<Offset>(
+            begin: const Offset(0, .055),
+            end: const Offset(0, -.012),
+          ).chain(CurveTween(curve: Curves.easeOutCubic)),
+          weight: 70,
+        ),
+        TweenSequenceItem<Offset>(
+          tween: Tween<Offset>(
+            begin: const Offset(0, -.012),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 30,
+        ),
+      ]).animate(t),
+    );
+  });
+
   /// Search reflow. Where each wallpaper sat before the results changed, so a
   /// tile that survived can start from its old cell and slide into its new one
   /// while the ones that went fade away. Empty except while reflowing.
@@ -160,6 +212,9 @@ class _ContentViewState extends ConsumerState<ContentView>
     _marquee.dispose();
     _topScrollControlActive.dispose();
     _bottomScrollControlActive.dispose();
+    for (final wave in _entranceWaves) {
+      wave.t.dispose();
+    }
     _entranceController.dispose();
     _reflowController.dispose();
     _scrollController.dispose();
@@ -359,7 +414,7 @@ class _ContentViewState extends ConsumerState<ContentView>
   static const double _gridSpacing = 8;
 
   Widget _buildGrid(List<WallpaperInfo> list) {
-    const double width = 180;
+    const double maxExtent = 180;
     const double spacing = _gridSpacing;
     return LayoutBuilder(
       key: _gridTransitionKey,
@@ -369,10 +424,9 @@ class _ContentViewState extends ConsumerState<ContentView>
               0,
               double.infinity,
             );
-        final int columnCount = (gridWidth / (width + spacing)).ceil().clamp(
-          1,
-          1000,
-        );
+        final int columnCount = (gridWidth / (maxExtent + spacing))
+            .ceil()
+            .clamp(1, 1000);
 
         final double tile =
             (gridWidth - (spacing * (columnCount - 1))) / columnCount;
@@ -430,74 +484,42 @@ class _ContentViewState extends ConsumerState<ContentView>
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   crossAxisSpacing: spacing,
                   mainAxisSpacing: spacing,
-                  maxCrossAxisExtent: width,
+                  maxCrossAxisExtent: maxExtent,
                 ),
                 scrollCacheExtent: const ScrollCacheExtent.pixels(500),
+                // No tile keeps itself alive, so the wrapper is pure overhead.
+                addAutomaticKeepAlives: false,
                 itemBuilder: (context, index) {
                   final WallpaperInfo wallpaper = list[index];
-                  final Widget tile = ImageItem(
+                  // The laid-out extent, not maxCrossAxisExtent: the tile is
+                  // narrower than 180 whenever the columns do not divide the
+                  // window evenly, and this is what the preview decodes at.
+                  final Widget item = ImageItem(
                     key: ValueKey(wallpaper.id),
-                    width: width,
+                    width: tile,
                     index: index,
                     wallpaper: wallpaper,
                   );
-                  final Widget reflowed = _reflowed(tile, wallpaper.id, index);
+                  final Widget reflowed = _reflowed(item, wallpaper.id, index);
                   if (_entranceComplete) return reflowed;
 
                   // Tiles on the same diagonal move together. Capped, or
                   // off-screen rows sit waiting their turn.
-                  final int row = index ~/ columnCount;
-                  final int column = index % columnCount;
-                  final int wave = (row + column).clamp(0, 11);
-                  final double start = (wave * .06).clamp(0, .66);
-                  final double end = (start + .34).clamp(0, 1);
-                  final Animation<double> entrance = CurvedAnimation(
-                    parent: _entranceController,
-                    curve: Interval(start, end, curve: Curves.easeOutCubic),
-                  );
-                  final Animation<double> scale = TweenSequence<double>([
-                    TweenSequenceItem<double>(
-                      tween: Tween<double>(
-                        begin: .88,
-                        end: 1.04,
-                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
-                      weight: 70,
-                    ),
-                    TweenSequenceItem<double>(
-                      tween: Tween<double>(
-                        begin: 1.04,
-                        end: 1,
-                      ).chain(CurveTween(curve: Curves.easeInOut)),
-                      weight: 30,
-                    ),
-                  ]).animate(entrance);
-                  final Animation<Offset> position = TweenSequence<Offset>([
-                    TweenSequenceItem<Offset>(
-                      tween: Tween<Offset>(
-                        begin: const Offset(0, .055),
-                        end: const Offset(0, -.012),
-                      ).chain(CurveTween(curve: Curves.easeOutCubic)),
-                      weight: 70,
-                    ),
-                    TweenSequenceItem<Offset>(
-                      tween: Tween<Offset>(
-                        begin: const Offset(0, -.012),
-                        end: Offset.zero,
-                      ).chain(CurveTween(curve: Curves.easeInOut)),
-                      weight: 30,
-                    ),
-                  ]).animate(entrance);
+                  final wave =
+                      _entranceWaves[((index ~/ columnCount) +
+                              (index % columnCount))
+                          .clamp(0, _entranceWaves.length - 1)];
 
                   return FadeTransition(
-                    opacity: entrance,
+                    opacity: wave.t,
                     // Now that this replays on every search, a fade to zero
                     // dropping tiles from the accessibility tree would upset
                     // Windows' bridge far more often.
                     alwaysIncludeSemantics: true,
                     child: ScaleTransition(
-                      scale: scale,
+                      scale: wave.scale,
                       child: SlideTransition(
-                        position: position,
+                        position: wave.position,
                         child: reflowed,
                       ),
                     ),

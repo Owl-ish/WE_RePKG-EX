@@ -17,12 +17,9 @@ class ImageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Image preview = Image(
-      // Decode at the tile's real pixel size, and constrain the height rather
-      // than the width. The tile is square and the fit is cover, so the
-      // image's shorter side has to reach the tile edge, and previews are
-      // nearly always landscape. Capping width instead decoded a 16:9 preview
-      // to 270x152 for a 270x270 tile and cover upscaled it 1.8x, which left
-      // every landscape preview in the grid soft.
+      // Decode at the tile's real pixel size. Height rather than width, so a
+      // preview that is not square still reaches the tile edge on its shorter
+      // side rather than being upscaled by cover.
       image: previewImage(
         wallpaper.previews,
         cacheHeight: (size * MediaQuery.devicePixelRatioOf(context)).round(),
