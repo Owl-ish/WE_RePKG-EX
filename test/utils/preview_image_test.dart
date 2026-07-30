@@ -20,6 +20,22 @@ Uint8List gif(List<int> greys) {
   return img.encodeGif(anim, dither: img.DitherKernel.none);
 }
 
+/// Two frames, the first black but for one lit column. Width 8, so a 16-pixel
+/// stride would divide the row and sample column 0 for ever, which is the
+/// mistake the real 17 avoids on previews whose widths are multiples of 16.
+Uint8List gifWithLitColumn(int column) {
+  final img.Image anim = img.Image(width: 8, height: 8, numChannels: 3);
+  img.fill(anim, color: img.ColorRgb8(0, 0, 0));
+  for (int y = 0; y < 8; y++) {
+    anim.setPixel(column, y, img.ColorRgb8(200, 200, 200));
+  }
+  img.fill(anim.addFrame(), color: img.ColorRgb8(200, 200, 200));
+  for (final img.Image frame in anim.frames) {
+    frame.frameDuration = 40;
+  }
+  return img.encodeGif(anim, dither: img.DitherKernel.none);
+}
+
 Future<ui.Codec> decode(Uint8List bytes) async {
   final descriptor = await ui.ImageDescriptor.encoded(
     await ui.ImmutableBuffer.fromUint8List(bytes),
@@ -141,6 +157,24 @@ void main() {
     expect(codec.frameCount, 2);
     expect(await play(codec, 4), <int>[0, 0, 0, 0]);
     codec.dispose();
+  });
+
+  // Pins the sampling stride against dividing the row width. An 8x8 frame gets
+  // four samples, at columns 0 to 3, so those are the columns worth lighting;
+  // reaching further would fail against a stride that is perfectly fine.
+  test('a frame lit in a single column is not taken for black', () async {
+    for (int column = 1; column < 4; column++) {
+      final ui.Codec codec = await trimBlackLead(
+        await decode(gifWithLitColumn(column)),
+      );
+
+      expect(
+        codec.frameCount,
+        2,
+        reason: 'column $column is lit, so nothing should be trimmed',
+      );
+      codec.dispose();
+    }
   });
 
   test('a still image is handed straight back', () async {

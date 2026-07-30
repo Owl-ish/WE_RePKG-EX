@@ -64,6 +64,21 @@ void main() {
     expect(current().readAsStringSync(), contains('newer'));
   });
 
+  test('a half-copied file left behind is replaced', () async {
+    writeLegacy('{"flutter.toolPath":"C:/RePKG.exe"}');
+    // What an interrupted copy leaves: truncated JSON under the staging name.
+    final File stale = File('${current().path}.part');
+    stale
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('{"flutter.tool');
+
+    expect(await StorageUtil.moveSettingsFile(appData.path), current().path);
+
+    expect(current().readAsStringSync(), contains('C:/RePKG.exe'));
+    expect(stale.existsSync(), isFalse);
+    expect(current().parent.listSync(), hasLength(1));
+  });
+
   test('a fresh install reports the path without creating anything', () async {
     expect(await StorageUtil.moveSettingsFile(appData.path), current().path);
     expect(current().existsSync(), isFalse);
