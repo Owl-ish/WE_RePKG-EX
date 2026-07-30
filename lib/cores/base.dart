@@ -298,7 +298,7 @@ Future<String?> deleteOther(
   try {
     Directory folder = Directory(outPath);
     List<FileSystemEntity> files = await folder.list().toList();
-    await Future.wait(
+    final List<String?> results = await Future.wait(
       files
           .where((file) {
             if (file is File) {
@@ -318,7 +318,11 @@ Future<String?> deleteOther(
             return null;
           }),
     );
-    return null; // 没有错误时返回null
+    // 每个文件的失败都要上报: 调用方在返回null时会显示成功提示
+    final List<String> failed = results.whereType<String>().toList();
+    if (failed.isEmpty) return null;
+    final String named = failed.take(5).join('\n');
+    return failed.length > 5 ? '$named\n(+${failed.length - 5})' : named;
   } catch (e) {
     String errorMsg = '${tr(AppI10n.dialogDeleteFailed)} $e';
     debugPrint(errorMsg);
@@ -360,7 +364,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
       folderDeletionFutures.add(
         Directory(tempPath).delete(recursive: true).catchError((e) {
           debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');
-          throw 'tempPath ${tr(AppI10n.dialogDeleteFailed)} $e';
+          throw '$tempPath ${tr(AppI10n.dialogDeleteFailed)} $e';
         }),
       );
     }
