@@ -16,16 +16,20 @@ class WallpaperCheckbox extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final Color primaryColor = Theme.of(context).primaryColor;
+    // select, so ticking another wallpaper does not rebuild this one.
+    final bool checked = ref.watch(
+      checkedIdsProvider.select((ids) => ids.contains(wallpaper.id)),
+    );
     return Align(
       alignment: Alignment.topRight,
       child: FadeTransition(
         // A checked wallpaper stays visible after the pointer leaves. Otherwise
         // this shares the tile's one hover controller with the zoom and hint.
-        opacity: wallpaper.checked
+        opacity: checked
             ? const AlwaysStoppedAnimation<double>(1)
             : hoverOpacity,
         child: Checkbox(
-          value: wallpaper.checked,
+          value: checked,
           mouseCursor: SystemMouseCursors.click,
           fillColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
@@ -36,7 +40,7 @@ class WallpaperCheckbox extends ConsumerWidget {
           checkColor: Colors.white,
           side: BorderSide(color: primaryColor),
           onChanged: (v) =>
-              ref.read(wallpaperListProvider.notifier).toggleChecked(wallpaper),
+              ref.read(checkedIdsProvider.notifier).toggle(wallpaper.id),
         ),
       ),
     );

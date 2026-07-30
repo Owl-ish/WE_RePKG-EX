@@ -41,7 +41,7 @@ final class WallpaperListProvider
   }
 }
 
-String _$wallpaperListHash() => r'55c0e42d8ef1632c96e2eb95e0b1db044f59e22b';
+String _$wallpaperListHash() => r'48f35f33e5386b90c1bd4da7699d573dc8c0a79a';
 
 abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -54,6 +54,80 @@ abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
             as $ClassProviderElement<
               AnyNotifier<List<WallpaperInfo>, List<WallpaperInfo>>,
               List<WallpaperInfo>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+/// Which wallpapers are selected, by id.
+///
+/// Held apart from the library so ticking one does not rewrite two thousand
+/// elements and send filterWallpaperList through a fresh filter and sort. Ids
+/// rather than objects, so nothing here can hold a stale copy of a wallpaper.
+
+@ProviderFor(CheckedIds)
+final checkedIdsProvider = CheckedIdsProvider._();
+
+/// Which wallpapers are selected, by id.
+///
+/// Held apart from the library so ticking one does not rewrite two thousand
+/// elements and send filterWallpaperList through a fresh filter and sort. Ids
+/// rather than objects, so nothing here can hold a stale copy of a wallpaper.
+final class CheckedIdsProvider
+    extends $NotifierProvider<CheckedIds, Set<String>> {
+  /// Which wallpapers are selected, by id.
+  ///
+  /// Held apart from the library so ticking one does not rewrite two thousand
+  /// elements and send filterWallpaperList through a fresh filter and sort. Ids
+  /// rather than objects, so nothing here can hold a stale copy of a wallpaper.
+  CheckedIdsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'checkedIdsProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$checkedIdsHash();
+
+  @$internal
+  @override
+  CheckedIds create() => CheckedIds();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(Set<String> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<Set<String>>(value),
+    );
+  }
+}
+
+String _$checkedIdsHash() => r'3a62cdd25c2b97a01a80352aad3e8a560f25b394';
+
+/// Which wallpapers are selected, by id.
+///
+/// Held apart from the library so ticking one does not rewrite two thousand
+/// elements and send filterWallpaperList through a fresh filter and sort. Ids
+/// rather than objects, so nothing here can hold a stale copy of a wallpaper.
+
+abstract class _$CheckedIds extends $Notifier<Set<String>> {
+  Set<String> build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<Set<String>, Set<String>>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<Set<String>, Set<String>>,
+              Set<String>,
               Object?,
               Object?
             >;
@@ -159,7 +233,7 @@ final class CheckedWallpaperListProvider
 }
 
 String _$checkedWallpaperListHash() =>
-    r'4c7bf098f7f0aed51024ef02b829de1f0f3bcfbd';
+    r'3458e30140cff65c5520778bfff201100ea6029f';
 
 @ProviderFor(filterWallpaperList)
 final filterWallpaperListProvider = FilterWallpaperListProvider._();

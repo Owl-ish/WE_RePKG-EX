@@ -101,7 +101,7 @@ class _ImageItemState extends ConsumerState<ImageItem>
     final WallpaperInfo wallpaper = widget.wallpaper;
     if (isCtrlPressed) {
       await StorageUtil.setInt(AppKeys.ctrlPressedIndex, widget.index);
-      ref.read(wallpaperListProvider.notifier).toggleChecked(wallpaper);
+      ref.read(checkedIdsProvider.notifier).toggle(wallpaper.id);
     } else if (isShiftPressed) {
       int beginIndex = 0, endIndex = widget.index;
       List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
@@ -125,16 +125,16 @@ class _ImageItemState extends ConsumerState<ImageItem>
           .sublist(beginIndex, endIndex + 1)
           .map((e) => e.id)
           .toSet();
-      ref.read(wallpaperListProvider.notifier).setCheckedByIds(ids, true);
+      ref.read(checkedIdsProvider.notifier).setAll(ids, true);
     } else {
       // Plain click: this one only. Ctrl adds, Shift extends.
       //
       // Both clicks of a double click arrive here, because Listener sits
       // outside the gesture arena and never loses to the double tap
-      // recogniser. setExclusiveChecked clears the selection when the target is
-      // already the only one selected, so running it twice would select on the
-      // way down and deselect on the way back up, leaving the detail dialog
-      // open over a tile that just blanked its checkbox.
+      // recogniser. setExclusive clears the selection when the target is already
+      // the only one selected, so running it twice would select on the way down
+      // and deselect on the way back up, leaving the detail dialog open over a
+      // tile that just blanked its checkbox.
       final DateTime now = DateTime.now();
       final bool isSecondClick =
           _lastClickId == wallpaper.id &&
@@ -144,9 +144,7 @@ class _ImageItemState extends ConsumerState<ImageItem>
       _lastClickAt = now;
 
       if (!isSecondClick) {
-        ref
-            .read(wallpaperListProvider.notifier)
-            .setExclusiveChecked(wallpaper.id);
+        ref.read(checkedIdsProvider.notifier).setExclusive(wallpaper.id);
       }
       ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
     }
@@ -154,6 +152,10 @@ class _ImageItemState extends ConsumerState<ImageItem>
 
   @override
   Widget build(BuildContext context) {
+    // select, so selecting elsewhere in the grid does not rebuild this tile.
+    final bool checked = ref.watch(
+      checkedIdsProvider.select((ids) => ids.contains(widget.wallpaper.id)),
+    );
     return Listener(
       key: Key(widget.wallpaper.id),
       onPointerDown: _onPointerDown,
@@ -197,11 +199,11 @@ class _ImageItemState extends ConsumerState<ImageItem>
                   ),
                   if (_hoverHintBuilt) HoverHint(opacity: _hoverOpacity!),
                   ImageTitle(title: widget.wallpaper.title),
-                  if (_hoverHintBuilt || widget.wallpaper.checked)
+                  if (_hoverHintBuilt || checked)
                     IgnorePointer(
                       // Opacity does not affect hit testing. Once the pointer
                       // exits, the fading checkbox must not intercept a click.
-                      ignoring: !_isHovered && !widget.wallpaper.checked,
+                      ignoring: !_isHovered && !checked,
                       child: WallpaperCheckbox(
                         wallpaper: widget.wallpaper,
                         hoverOpacity:

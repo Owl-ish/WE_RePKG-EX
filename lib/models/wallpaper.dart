@@ -11,12 +11,6 @@ class WallpaperInfo {
   final String folder;
   final int size;
 
-  /// Selection state. Final like every other field: the list provider replaces
-  /// elements through copyWith rather than mutating them in place, and `==`
-  /// deliberately ignores this field (identity is the id alone), so a mutable
-  /// copy would let two instances compare equal while disagreeing on selection.
-  final bool checked;
-
   WallpaperInfo({
     required this.id,
     required this.title,
@@ -29,7 +23,6 @@ class WallpaperInfo {
     required this.target,
     required this.folder,
     required this.size,
-    this.checked = false,
   });
 
   WallpaperInfo copyWith({
@@ -44,7 +37,6 @@ class WallpaperInfo {
     String? target,
     String? folder,
     int? size,
-    bool? checked,
   }) {
     return WallpaperInfo(
       id: id ?? this.id,
@@ -58,7 +50,6 @@ class WallpaperInfo {
       target: target ?? this.target,
       folder: folder ?? this.folder,
       size: size ?? this.size,
-      checked: checked ?? this.checked,
     );
   }
 
@@ -73,6 +64,6 @@ class WallpaperInfo {
 
   @override
   String toString() {
-    return 'WallpaperInfo{id: $id, title: $title, contentRating: $contentRating, tags: $tags, previews: $previews, type: $type, updateTime: $updateTime, createTime: $createTime, target: $target, folder: $folder, size: $size, checked: $checked}\n';
+    return 'WallpaperInfo{id: $id, title: $title, contentRating: $contentRating, tags: $tags, previews: $previews, type: $type, updateTime: $updateTime, createTime: $createTime, target: $target, folder: $folder, size: $size}\n';
   }
 }

@@ -112,11 +112,7 @@ void main() {
     );
   }
 
-  Set<String> checkedIds() => container
-      .read(wallpaperListProvider)
-      .where((e) => e.checked)
-      .map((e) => e.id)
-      .toSet();
+  Set<String> checkedIds() => container.read(checkedIdsProvider);
 
   /// Ids of the cells at the given positions in the grid. The grid draws the
   /// sorted list, which is not the order the wallpapers were seeded in, so the
@@ -185,9 +181,7 @@ void main() {
     await pumpGrid(tester, 8);
     // Top right cell, well clear of the rectangle the drag below sweeps.
     final Set<String> before = idsAt([3]);
-    container
-        .read(wallpaperListProvider.notifier)
-        .setCheckedByIds(before, true);
+    container.read(checkedIdsProvider.notifier).setAll(before, true);
     await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);

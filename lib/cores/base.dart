@@ -205,6 +205,9 @@ Future<String?> deleteChecked(WidgetRef ref) async {
         ref.read(selectedWallpaperProvider.notifier).update(null);
       }
       ref.read(wallpaperListProvider.notifier).removeAll(gone);
+      // Selection is held by id, so a deleted wallpaper would otherwise stay in
+      // the set and come back with anything that reused its id.
+      ref.read(checkedIdsProvider.notifier).forget(gone);
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteCheckedFailed)} $e');

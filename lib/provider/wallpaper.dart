@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/content_rating.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
@@ -28,61 +29,49 @@ class WallpaperList extends _$WallpaperList {
   }
 
   void clear() => state = [];
+}
 
-  /// Reads `checked` off the stored element, not off [value]. Callers can pass
-  /// a stale instance, and `==` compares ids only, so a stale copy looks
-  /// current and would flip the wrong way.
-  void toggleChecked(WallpaperInfo value) => state = [
-    for (final e in state)
-      e.id == value.id ? e.copyWith(checked: !e.checked) : e,
-  ];
+/// Which wallpapers are selected, by id.
+///
+/// Held apart from the library so ticking one does not rewrite two thousand
+/// elements and send filterWallpaperList through a fresh filter and sort. Ids
+/// rather than objects, so nothing here can hold a stale copy of a wallpaper.
+@Riverpod(keepAlive: true)
+class CheckedIds extends _$CheckedIds {
+  @override
+  Set<String> build() => const <String>{};
 
-  void updateChecked(WallpaperInfo value, bool checked) =>
-      setCheckedByIds({value.id}, checked);
+  void toggle(String id) => state = state.contains(id)
+      ? (state.toSet()..remove(id))
+      : (state.toSet()..add(id));
 
-  /// One O(N) pass however many ids there are. Doing it per id costs a full
-  /// filter-and-sort through filterWallpaperList each time.
-  void setCheckedByIds(Set<String> ids, bool checked) {
+  void setAll(Set<String> ids, bool checked) {
     if (ids.isEmpty) return;
-    state = [
-      for (final e in state)
-        ids.contains(e.id) && e.checked != checked
-            ? e.copyWith(checked: checked)
-            : e,
-    ];
+    final next = state.toSet();
+    checked ? next.addAll(ids) : next.removeAll(ids);
+    if (next.length != state.length) state = next;
   }
 
-  /// Selects [ids] and deselects everything else, in one pass. What a drag over
-  /// the grid needs; a clear plus a set would rebuild the list twice a frame.
-  void setCheckedExactly(Set<String> ids) {
-    state = [
-      for (final e in state)
-        if (ids.contains(e.id) == e.checked)
-          e
-        else
-          e.copyWith(checked: !e.checked),
-    ];
+  /// Selects [ids] and nothing else. What a drag over the grid needs.
+  void setExactly(Set<String> ids) {
+    if (setEquals(ids, state)) return;
+    state = ids.toSet();
   }
 
-  /// What a plain left click does. Selects only [id], and clears it if it was
+  /// What a plain left click does. Selects only [id], and clears it when it was
   /// already the only one selected, so you can deselect without aiming at the
   /// checkbox.
-  void setExclusiveChecked(String id) {
-    int checkedCount = 0;
-    bool targetChecked = false;
-    for (final e in state) {
-      if (e.checked) checkedCount++;
-      if (e.id == id) targetChecked = e.checked;
-    }
-    final bool select = !(targetChecked && checkedCount == 1);
-    state = [
-      for (final e in state)
-        if (e.id == id)
-          (e.checked == select ? e : e.copyWith(checked: select))
-        else
-          (e.checked ? e.copyWith(checked: false) : e),
-    ];
+  void setExclusive(String id) {
+    final bool only = state.length == 1 && state.contains(id);
+    state = only ? const <String>{} : <String>{id};
   }
+
+  void clear() {
+    if (state.isNotEmpty) state = const <String>{};
+  }
+
+  /// Drops ids whose wallpaper is gone, so a deleted selection cannot linger.
+  void forget(Set<String> ids) => setAll(ids, false);
 }
 
 @Riverpod(keepAlive: true)
@@ -93,8 +82,14 @@ class SelectedWallpaper extends _$SelectedWallpaper {
 }
 
 @riverpod
-List<WallpaperInfo> checkedWallpaperList(Ref ref) =>
-    ref.watch(filterWallpaperListProvider).where((e) => e.checked).toList();
+List<WallpaperInfo> checkedWallpaperList(Ref ref) {
+  final Set<String> checked = ref.watch(checkedIdsProvider);
+  if (checked.isEmpty) return const <WallpaperInfo>[];
+  return ref
+      .watch(filterWallpaperListProvider)
+      .where((e) => checked.contains(e.id))
+      .toList();
+}
 
 @riverpod
 List<WallpaperInfo> filterWallpaperList(Ref ref) {

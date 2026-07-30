@@ -287,6 +287,9 @@ Future<void> refreshWallpaper(WidgetRef ref) async {
   // widget owning `ref` is unmounted mid-scan.
   final wallpaperListNotifier = ref.read(wallpaperListProvider.notifier);
   wallpaperListNotifier.clear();
+  // The library is about to be replaced, so ids selected against the old one
+  // mean nothing.
+  ref.read(checkedIdsProvider.notifier).clear();
   List<WallpaperInfo> wallpapers = await getAllFile(ref);
   wallpaperListNotifier.addAll(wallpapers);
 }

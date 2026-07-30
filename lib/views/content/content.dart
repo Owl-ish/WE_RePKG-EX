@@ -367,7 +367,7 @@ class _ContentViewState extends ConsumerState<ContentView>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dragWriteQueued = false;
       if (mounted) {
-        ref.read(wallpaperListProvider.notifier).setCheckedExactly(_dragWanted);
+        ref.read(checkedIdsProvider.notifier).setExactly(_dragWanted);
       }
     });
   }
@@ -453,14 +453,11 @@ class _ContentViewState extends ConsumerState<ContentView>
                 // Cleared per drag, or repeating a rectangle matches the last
                 // drag's set and writes nothing.
                 _dragIds = <String>{};
-                // The whole library, not checkedWallpaperListProvider: that one
+                // Every selected id, not checkedWallpaperListProvider: that one
                 // is filtered, and anything selected before the filter changed
                 // would be missing from the baseline and get deselected.
                 _dragBaseline = isCtrlPressed
-                    ? <String>{
-                        for (final e in ref.read(wallpaperListProvider))
-                          if (e.checked) e.id,
-                      }
+                    ? ref.read(checkedIdsProvider)
                     : <String>{};
               },
               onPanUpdate: (d) {

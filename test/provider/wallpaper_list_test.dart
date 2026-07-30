@@ -20,7 +20,6 @@ WallpaperInfo makeWallpaper(
   int size = 0,
   int? updateTime,
   DateTime? createTime,
-  bool checked = false,
 }) {
   return WallpaperInfo(
     id: id,
@@ -34,7 +33,7 @@ WallpaperInfo makeWallpaper(
     target: target,
     folder: 'C:\\wallpapers\\$id',
     size: size,
-  ).copyWith(checked: checked);
+  );
 }
 
 /// Prefs that switch every filter off, so filterWallpaperList tests only see the
@@ -65,57 +64,6 @@ void main() {
   }
 
   group('WallpaperList batch mutators', () {
-    test('setCheckedByIds selects a range in one state write', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([for (int i = 0; i < 200; i++) makeWallpaper('$i')]);
-
-      int emissions = 0;
-      container.listen(wallpaperListProvider, (_, _) => emissions++);
-
-      final ids = {for (int i = 10; i < 160; i++) '$i'};
-      notifier.setCheckedByIds(ids, true);
-
-      expect(
-        emissions,
-        1,
-        reason: '150 ids must cost one state write, not 150',
-      );
-      final checked = container
-          .read(wallpaperListProvider)
-          .where((e) => e.checked)
-          .map((e) => e.id)
-          .toSet();
-      expect(checked, ids);
-    });
-
-    test('setCheckedByIds ignores ids that are not in the list', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([makeWallpaper('a'), makeWallpaper('b')]);
-
-      notifier.setCheckedByIds({'a', 'ghost'}, true);
-
-      final list = container.read(wallpaperListProvider);
-      expect(list.length, 2);
-      expect(list.firstWhere((e) => e.id == 'a').checked, isTrue);
-      expect(list.firstWhere((e) => e.id == 'b').checked, isFalse);
-    });
-
-    test('setCheckedByIds with an empty set does not touch state', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([makeWallpaper('a')]);
-      final before = container.read(wallpaperListProvider);
-
-      int emissions = 0;
-      container.listen(wallpaperListProvider, (_, _) => emissions++);
-      notifier.setCheckedByIds({}, true);
-
-      expect(emissions, 0);
-      expect(identical(container.read(wallpaperListProvider), before), isTrue);
-    });
-
     test('removeAll drops many wallpapers in one state write', () async {
       await boot();
       final notifier = container.read(wallpaperListProvider.notifier);
@@ -142,127 +90,138 @@ void main() {
     });
   });
 
-  group('setExclusiveChecked', () {
-    test('selects one and clears the rest', () async {
+  group('CheckedIds', () {
+    // The whole point of holding selection apart from the library: ticking a
+    // wallpaper must not rewrite two thousand elements and send
+    // filterWallpaperList through a fresh filter and sort.
+    test('selecting does not touch the library at all', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([
-        makeWallpaper('a', checked: true),
-        makeWallpaper('b', checked: true),
-        makeWallpaper('c'),
+      container.read(wallpaperListProvider.notifier).addAll([
+        for (int i = 0; i < 200; i++) makeWallpaper('$i'),
       ]);
+      final before = container.read(wallpaperListProvider);
 
-      notifier.setExclusiveChecked('c');
+      int libraryWrites = 0;
+      container.listen(wallpaperListProvider, (_, _) => libraryWrites++);
+      container.read(checkedIdsProvider.notifier).setAll({
+        for (int i = 10; i < 160; i++) '$i',
+      }, true);
 
-      final checked = container
-          .read(wallpaperListProvider)
-          .where((e) => e.checked)
-          .map((e) => e.id);
-      expect(checked, ['c']);
+      expect(libraryWrites, 0);
+      expect(identical(container.read(wallpaperListProvider), before), isTrue);
     });
 
-    test('clicking the only selected wallpaper clears it', () async {
+    // The filtered list is what the grid draws. Before selection moved out, a
+    // tick rewrote the library and sent this through a fresh filter and sort.
+    test('selecting does not rebuild the filtered list', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([makeWallpaper('a', checked: true), makeWallpaper('b')]);
+      container.read(wallpaperListProvider.notifier).addAll([
+        for (int i = 0; i < 200; i++) makeWallpaper('$i'),
+      ]);
+      final before = container.read(filterWallpaperListProvider);
 
-      notifier.setExclusiveChecked('a');
+      int rebuilds = 0;
+      container.listen(filterWallpaperListProvider, (_, _) => rebuilds++);
+      container.read(checkedIdsProvider.notifier).setAll({'7'}, true);
+      await pumpEventQueue();
 
+      expect(rebuilds, 0);
       expect(
-        container.read(wallpaperListProvider).every((e) => !e.checked),
+        identical(container.read(filterWallpaperListProvider), before),
         isTrue,
+        reason: 'the same list instance, not an equal one',
       );
     });
 
-    test('clicking one of several selected keeps just that one', () async {
+    test('setAll adds and removes', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([
-        makeWallpaper('a', checked: true),
-        makeWallpaper('b', checked: true),
-      ]);
+      final notifier = container.read(checkedIdsProvider.notifier);
 
-      notifier.setExclusiveChecked('a');
+      notifier.setAll({'a', 'b', 'c'}, true);
+      expect(container.read(checkedIdsProvider), {'a', 'b', 'c'});
 
-      final checked = container
-          .read(wallpaperListProvider)
-          .where((e) => e.checked)
-          .map((e) => e.id);
-      expect(checked, ['a'], reason: 'replaces the range, does not clear');
+      notifier.setAll({'b'}, false);
+      expect(container.read(checkedIdsProvider), {'a', 'c'});
     });
 
-    test('clicking twice selects then clears', () async {
+    test('an empty set does not touch state', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([makeWallpaper('a'), makeWallpaper('b')]);
+      int emissions = 0;
+      container.listen(checkedIdsProvider, (_, _) => emissions++);
 
-      notifier.setExclusiveChecked('a');
-      expect(container.read(wallpaperListProvider).first.checked, isTrue);
-      notifier.setExclusiveChecked('a');
-      expect(container.read(wallpaperListProvider).first.checked, isFalse);
+      container.read(checkedIdsProvider.notifier).setAll({}, true);
+
+      expect(emissions, 0);
     });
 
-    test('costs one state write', () async {
+    test('toggle flips one id', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      notifier.addAll([
-        for (int i = 0; i < 300; i++) makeWallpaper('$i', checked: true),
-      ]);
+      final notifier = container.read(checkedIdsProvider.notifier);
+
+      notifier.toggle('a');
+      expect(container.read(checkedIdsProvider), {'a'});
+      notifier.toggle('a');
+      expect(container.read(checkedIdsProvider), isEmpty);
+    });
+
+    group('setExclusive', () {
+      test('selects one and clears the rest', () async {
+        await boot();
+        final notifier = container.read(checkedIdsProvider.notifier);
+        notifier.setAll({'a', 'b'}, true);
+
+        notifier.setExclusive('c');
+
+        expect(container.read(checkedIdsProvider), {'c'});
+      });
+
+      test('clicking the only selected wallpaper clears it', () async {
+        await boot();
+        final notifier = container.read(checkedIdsProvider.notifier);
+        notifier.setAll({'a'}, true);
+
+        notifier.setExclusive('a');
+
+        expect(container.read(checkedIdsProvider), isEmpty);
+      });
+
+      test('clicking one of several keeps just that one', () async {
+        await boot();
+        final notifier = container.read(checkedIdsProvider.notifier);
+        notifier.setAll({'a', 'b'}, true);
+
+        notifier.setExclusive('a');
+
+        expect(
+          container.read(checkedIdsProvider),
+          {'a'},
+          reason: 'replaces the range, does not clear',
+        );
+      });
+    });
+
+    // A drag reports a rectangle a frame; repeating one must write nothing.
+    test('setExactly ignores a repeat of the same set', () async {
+      await boot();
+      final notifier = container.read(checkedIdsProvider.notifier);
+      notifier.setExactly({'a', 'b'});
 
       int emissions = 0;
-      container.listen(wallpaperListProvider, (_, _) => emissions++);
-      notifier.setExclusiveChecked('7');
+      container.listen(checkedIdsProvider, (_, _) => emissions++);
+      notifier.setExactly({'b', 'a'});
 
-      expect(emissions, 1);
-    });
-  });
-
-  group('WallpaperList stale-instance safety', () {
-    // == compares ids only, so a stale WallpaperInfo looks
-    // current. The mutators must read state, never the caller's copy.
-    test('toggleChecked flips the stored value, not the caller copy', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      final original = makeWallpaper('a', title: 'current');
-      notifier.addAll([original]);
-      notifier.toggleChecked(original); // now checked
-
-      // A snapshot taken before the toggle: same id, still reports unchecked.
-      final stale = original.copyWith(checked: false, title: 'stale');
-      notifier.toggleChecked(stale);
-
-      final stored = container.read(wallpaperListProvider).single;
-      expect(
-        stored.checked,
-        isFalse,
-        reason: 'must flip stored true -> false, not stale false -> true',
-      );
+      expect(emissions, 0);
+      expect(container.read(checkedIdsProvider), {'a', 'b'});
     });
 
-    test('toggleChecked does not overwrite fields from a stale copy', () async {
+    test('setExactly replaces rather than adds', () async {
       await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      final original = makeWallpaper('a', title: 'current', size: 500);
-      notifier.addAll([original]);
+      final notifier = container.read(checkedIdsProvider.notifier);
+      notifier.setAll({'a', 'b'}, true);
 
-      notifier.toggleChecked(original.copyWith(title: 'stale', size: 1));
+      notifier.setExactly({'c'});
 
-      final stored = container.read(wallpaperListProvider).single;
-      expect(stored.title, 'current');
-      expect(stored.size, 500);
-    });
-
-    test('updateChecked sets an absolute value from a stale copy', () async {
-      await boot();
-      final notifier = container.read(wallpaperListProvider.notifier);
-      final original = makeWallpaper('a', title: 'current');
-      notifier.addAll([original]);
-
-      notifier.updateChecked(original.copyWith(title: 'stale'), true);
-
-      final stored = container.read(wallpaperListProvider).single;
-      expect(stored.checked, isTrue);
-      expect(stored.title, 'current');
+      expect(container.read(checkedIdsProvider), {'c'});
     });
   });
 
@@ -610,10 +569,11 @@ void main() {
     test('reports only selected wallpapers that pass the filter', () async {
       await boot();
       container.read(wallpaperListProvider.notifier).addAll([
-        makeWallpaper('a', type: WallpaperType.scene, checked: true),
-        makeWallpaper('b', type: WallpaperType.video, checked: true),
+        makeWallpaper('a', type: WallpaperType.scene),
+        makeWallpaper('b', type: WallpaperType.video),
         makeWallpaper('c', type: WallpaperType.scene),
       ]);
+      container.read(checkedIdsProvider.notifier).setAll({'a', 'b'}, true);
       container.read(filterStateProvider.notifier).updateHideVideo(true);
 
       final ids = container.read(checkedWallpaperListProvider).map((e) => e.id);
@@ -629,7 +589,9 @@ void main() {
 
       int emissions = 0;
       container.listen(checkedWallpaperListProvider, (_, _) => emissions++);
-      notifier.setCheckedByIds({for (int i = 0; i < 40; i++) '$i'}, true);
+      container.read(checkedIdsProvider.notifier).setAll({
+        for (int i = 0; i < 40; i++) '$i',
+      }, true);
       // Riverpod marks dependents dirty and notifies on a later microtask, so
       // the count is only meaningful after draining the queue.
       await pumpEventQueue();
