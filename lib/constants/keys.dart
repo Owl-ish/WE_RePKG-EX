@@ -36,4 +36,5 @@ class AppKeys {
   static const String windowWidth = 'windowWidth';
   static const String windowHeight = 'windowHeight';
   static const String extractConcurrency = 'extractConcurrency';
+  static const String extractMemoryLimit = 'extractMemoryLimit';
 }

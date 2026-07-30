@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/provider/setting.dart';
 
 List<String> argsFor({
   bool excludeTexture = false,
@@ -8,6 +9,7 @@ List<String> argsFor({
   bool detailedProgress = false,
   bool newFlags = true,
   int? threads,
+  int? maxMemoryMb,
 }) => wallpaperExtractArgs(
   target: r'C:\wallpapers\1\scene.pkg',
   outPath: r'C:\out',
@@ -17,6 +19,7 @@ List<String> argsFor({
   detailedProgress: detailedProgress,
   newFlags: newFlags,
   threads: threads,
+  maxMemoryMb: maxMemoryMb,
 );
 
 void main() {
@@ -92,6 +95,12 @@ void main() {
     expect(argsFor(), isNot(contains('--threads')));
   });
 
+  test('passes the memory ceiling only when one is given', () {
+    final args = argsFor(maxMemoryMb: 768);
+    expect(args.indexOf('--max-memory') + 1, args.indexOf('768'));
+    expect(argsFor(), isNot(contains('--max-memory')));
+  });
+
   group('splitting the machine between the two levels of concurrency', () {
     // 4 wallpapers at once, each converting 16 textures at once, would put 64
     // conversions on a 16 core machine and cost about 7GB.
@@ -121,46 +130,55 @@ void main() {
   });
 
   group('sizing extraction against the machine', () {
-    const int gb = 1024 * 1024 * 1024;
-
-    test('a roomy machine gets what it asked for', () {
-      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 32 * gb);
+    test('the memory ceiling is split between the wallpapers in flight', () {
+      final plan = extractPlan(requested: 4, cores: 16, totalMemoryMb: 4096);
       expect(plan.concurrency, 4);
       expect(plan.threads, 4);
+      expect(plan.memoryMb, 1024);
     });
 
-    // 4 at once would be about 5GB against an 8GB budget of 4GB.
-    test('a small machine runs fewer at once', () {
-      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 8 * gb);
-      expect(plan.concurrency, lessThan(4));
-      expect(plan.peakBytes, lessThanOrEqualTo(4 * gb));
+    test('one wallpaper gets the whole ceiling', () {
+      final plan = extractPlan(requested: 1, cores: 16, totalMemoryMb: 4096);
+      expect(plan.memoryMb, 4096);
     });
 
-    test('one wallpaper is the floor, however little memory there is', () {
-      final plan = extractPlan(requested: 4, cores: 16, ramBytes: 1 * gb);
-      expect(plan.concurrency, 1);
-    });
-
-    test('an unreadable machine is bounded by cores alone', () {
-      final plan = extractPlan(requested: 4, cores: 16);
-      expect(plan.concurrency, 4);
-      expect(plan.threads, 4);
+    // Below a floor every texture is bigger than the share and conversions
+    // serialise, which is slower without saving anything.
+    test('a share never drops below what one texture needs', () {
+      final plan = extractPlan(requested: 16, cores: 16, totalMemoryMb: 512);
+      expect(plan.memoryMb, greaterThanOrEqualTo(192));
     });
 
     // The pool and each worker call this separately rather than passing the
     // answer around, so the same inputs have to give the same plan.
     test('is deterministic', () {
-      for (final int ram in <int>[4 * gb, 8 * gb, 16 * gb, 64 * gb]) {
-        final a = extractPlan(requested: 6, cores: 12, ramBytes: ram);
-        final b = extractPlan(requested: 6, cores: 12, ramBytes: ram);
+      for (final int mb in <int>[512, 2048, 8192]) {
+        final a = extractPlan(requested: 6, cores: 12, totalMemoryMb: mb);
+        final b = extractPlan(requested: 6, cores: 12, totalMemoryMb: mb);
         expect(a, b);
       }
     });
+  });
 
-    test('the estimate rises with what is actually run', () {
-      final small = extractPlan(requested: 1, cores: 16, ramBytes: 32 * gb);
-      final large = extractPlan(requested: 4, cores: 16, ramBytes: 32 * gb);
-      expect(large.peakBytes, greaterThan(small.peakBytes));
+  group('suggesting a ceiling for the machine', () {
+    const int gb = 1024 * 1024 * 1024;
+
+    test('a quarter of what is installed', () {
+      expect(ExtractMemoryLimit.suggestedFor(32 * gb), 8192);
+      expect(ExtractMemoryLimit.suggestedFor(16 * gb), 4096);
+      expect(ExtractMemoryLimit.suggestedFor(8 * gb), 2048);
+    });
+
+    test('stays inside the range the slider offers', () {
+      expect(ExtractMemoryLimit.suggestedFor(1 * gb), ExtractMemoryLimit.min);
+      expect(ExtractMemoryLimit.suggestedFor(256 * gb), ExtractMemoryLimit.max);
+    });
+
+    test('falls back when the machine cannot be asked', () {
+      expect(
+        ExtractMemoryLimit.suggestedFor(null),
+        ExtractMemoryLimit.fallback,
+      );
     });
   });
 }

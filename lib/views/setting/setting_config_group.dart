@@ -6,6 +6,7 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/views/setting/concurrency_slider.dart';
+import 'package:we_repkg/views/setting/memory_limit_slider.dart';
 import 'package:we_repkg/views/setting/project_path_input.dart';
 import 'package:we_repkg/widgets/double_title_checked.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
@@ -96,6 +97,7 @@ class SettingConfigGroup extends ConsumerWidget {
           subTitle: tr(AppI10n.settingConfigAutoUpdateAcfPathTip),
         ),
         ConcurrencySlider(),
+        MemoryLimitSlider(),
         SizedBox(height: 8),
         WallpaperPathInput(),
         SizedBox(height: 4),

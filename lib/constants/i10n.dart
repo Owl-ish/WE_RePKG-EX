@@ -119,10 +119,9 @@ class AppI10n {
   static const String settingConfigConcurrency = 'setting.configConcurrency';
   static const String settingConfigConcurrencyTip =
       'setting.configConcurrencyTip';
-  static const String settingConfigConcurrencyMemory =
-      'setting.configConcurrencyMemory';
-  static const String settingConfigConcurrencyCapped =
-      'setting.configConcurrencyCapped';
+  static const String settingConfigMemoryLimit = 'setting.configMemoryLimit';
+  static const String settingConfigMemoryLimitTip =
+      'setting.configMemoryLimitTip';
   static const String settingConfigAutoUpdateAcfPathTip =
       'setting.config.autoUpdateAcfPathTip';
   static const String settingConfigMaximizeOpen = 'setting.config.maximizeOpen';

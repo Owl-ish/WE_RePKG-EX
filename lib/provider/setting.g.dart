@@ -757,3 +757,82 @@ abstract class _$ExtractConcurrency extends $Notifier<int> {
     element.handleCreate(ref, build);
   }
 }
+
+/// Total megabytes extraction may hold at once, shared between however many
+/// wallpapers run side by side.
+///
+/// A quarter of the machine by default. Nothing predicts what a wallpaper will
+/// cost, so this is a ceiling RePKG is held to rather than an estimate: too low
+/// only makes extraction slower, never wrong.
+
+@ProviderFor(ExtractMemoryLimit)
+final extractMemoryLimitProvider = ExtractMemoryLimitProvider._();
+
+/// Total megabytes extraction may hold at once, shared between however many
+/// wallpapers run side by side.
+///
+/// A quarter of the machine by default. Nothing predicts what a wallpaper will
+/// cost, so this is a ceiling RePKG is held to rather than an estimate: too low
+/// only makes extraction slower, never wrong.
+final class ExtractMemoryLimitProvider
+    extends $NotifierProvider<ExtractMemoryLimit, int> {
+  /// Total megabytes extraction may hold at once, shared between however many
+  /// wallpapers run side by side.
+  ///
+  /// A quarter of the machine by default. Nothing predicts what a wallpaper will
+  /// cost, so this is a ceiling RePKG is held to rather than an estimate: too low
+  /// only makes extraction slower, never wrong.
+  ExtractMemoryLimitProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'extractMemoryLimitProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$extractMemoryLimitHash();
+
+  @$internal
+  @override
+  ExtractMemoryLimit create() => ExtractMemoryLimit();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(int value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<int>(value),
+    );
+  }
+}
+
+String _$extractMemoryLimitHash() =>
+    r'46520cce7dfefb9c51dbbb9b57f9a10f9b997b54';
+
+/// Total megabytes extraction may hold at once, shared between however many
+/// wallpapers run side by side.
+///
+/// A quarter of the machine by default. Nothing predicts what a wallpaper will
+/// cost, so this is a ceiling RePKG is held to rather than an estimate: too low
+/// only makes extraction slower, never wrong.
+
+abstract class _$ExtractMemoryLimit extends $Notifier<int> {
+  int build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<int, int>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<int, int>,
+              int,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

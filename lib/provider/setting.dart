@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/utils/system_memory.dart';
 
 part 'setting.g.dart';
 
@@ -158,5 +159,36 @@ class ExtractConcurrency extends _$ExtractConcurrency {
   void update(int value) async {
     state = value.clamp(min, max);
     await StorageUtil.setInt(AppKeys.extractConcurrency, state);
+  }
+}
+
+/// Total megabytes extraction may hold at once, shared between however many
+/// wallpapers run side by side.
+///
+/// A quarter of the machine by default. Nothing predicts what a wallpaper will
+/// cost, so this is a ceiling RePKG is held to rather than an estimate: too low
+/// only makes extraction slower, never wrong.
+@riverpod
+class ExtractMemoryLimit extends _$ExtractMemoryLimit {
+  static const int min = 256;
+  static const int max = 16384;
+  static const int fallback = 1024;
+
+  /// What to suggest on a machine this size, before the user says otherwise.
+  static int suggestedFor(int? installedBytes) {
+    if (installedBytes == null) return fallback;
+    final int quarter = installedBytes ~/ 4 ~/ (1024 * 1024);
+    return quarter.clamp(min, max);
+  }
+
+  @override
+  int build() {
+    final stored = StorageUtil.getInt(AppKeys.extractMemoryLimit);
+    return (stored ?? suggestedFor(installedMemoryBytes())).clamp(min, max);
+  }
+
+  void update(int value) async {
+    state = value.clamp(min, max);
+    await StorageUtil.setInt(AppKeys.extractMemoryLimit, state);
   }
 }

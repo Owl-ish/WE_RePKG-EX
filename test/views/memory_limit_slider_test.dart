@@ -4,10 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/utils/storage.dart';
-import 'package:we_repkg/views/setting/concurrency_slider.dart';
+import 'package:we_repkg/views/setting/memory_limit_slider.dart';
 
-// The estimate reads the machine's memory over FFI. A throw there would take the
-// whole settings page with it, and no other test builds this widget.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -18,42 +16,48 @@ void main() {
     await StorageUtil.init();
   });
 
-  Future<void> pump(WidgetTester tester, int concurrency) async {
+  Future<ProviderContainer> pump(WidgetTester tester, int limit) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    container.read(extractConcurrencyProvider.notifier).update(concurrency);
+    container.read(extractMemoryLimitProvider.notifier).update(limit);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: ConcurrencySlider())),
+        child: const MaterialApp(home: Scaffold(body: MemoryLimitSlider())),
       ),
     );
-    // Riverpod schedules its propagation on a zero length timer, which outlives
-    // the test unless it is let run.
+    // Riverpod schedules its propagation on a zero length timer.
     await tester.pump(const Duration(milliseconds: 1));
+    return container;
   }
 
   testWidgets('builds', (tester) async {
-    await pump(tester, 4);
+    await pump(tester, 2048);
 
     expect(tester.takeException(), isNull);
     expect(find.byType(Slider), findsOneWidget);
-    // Label, tip, and the value.
-    expect(find.byType(Text), findsNWidgets(3));
+    expect(find.text('2048 MB'), findsOneWidget);
   });
 
-  // One container per test: disposing two of them schedules timers that outlive
-  // the last frame.
-  for (final int value in <int>[
-    ExtractConcurrency.min,
-    ExtractConcurrency.max,
-  ]) {
-    testWidgets('survives concurrency $value', (tester) async {
-      await pump(tester, value);
+  // A value stored before the range existed, or edited by hand, must not throw
+  // the assertion Slider makes about value being inside min..max.
+  testWidgets('a stored value outside the range still draws', (tester) async {
+    final container = await pump(tester, ExtractMemoryLimit.max);
+    expect(tester.takeException(), isNull);
+    expect(
+      container.read(extractMemoryLimitProvider),
+      lessThanOrEqualTo(ExtractMemoryLimit.max),
+    );
+  });
 
+  for (final int value in <int>[
+    ExtractMemoryLimit.min,
+    ExtractMemoryLimit.max,
+  ]) {
+    testWidgets('survives a limit of $value', (tester) async {
+      await pump(tester, value);
       expect(tester.takeException(), isNull);
-      expect(find.byType(Slider), findsOneWidget);
     });
   }
 }

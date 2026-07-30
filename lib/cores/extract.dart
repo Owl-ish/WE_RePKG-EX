@@ -17,7 +17,6 @@ import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/repkg_output.dart';
-import 'package:we_repkg/utils/system_memory.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
@@ -165,11 +164,7 @@ Future<void> extractProject(
         overwrite: overwrite,
         token: token,
       ),
-      concurrency: extractPlan(
-        requested: ref.read(extractConcurrencyProvider),
-        cores: Platform.numberOfProcessors,
-        ramBytes: installedMemoryBytes(),
-      ).concurrency,
+      concurrency: plan(ref).concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -324,11 +319,7 @@ Future<void> extractWallpapers(
         // Only a single-wallpaper run can own the progress line.
         detailedProgress: wallpapers.length == 1,
       ),
-      concurrency: extractPlan(
-        requested: ref.read(extractConcurrencyProvider),
-        cores: Platform.numberOfProcessors,
-        ramBytes: installedMemoryBytes(),
-      ).concurrency,
+      concurrency: plan(ref).concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -609,15 +600,14 @@ Future<String> keepUnmovedFiles(
   }
 }
 
-/// Builds RePKG's arguments for wallpaper mode.
-///
-/// [newFlags] false means an older tool that rejects an unknown option and then
-/// exits 0 having written nothing, so every flag added since must hang off it.
-/// Ceiling on the textures one RePKG converts at once. Each in-flight
-/// conversion costs roughly 100MB, so a 15 texture scene measured 347MB on one
-/// thread and 1.9GB on sixteen. Past this the machine runs out of memory long
-/// before it runs out of cores.
+/// Ceiling on the textures one RePKG converts at once. Past this, more threads
+/// bought almost nothing: a 15 texture scene ran 8.3s on eight and 4.8s on
+/// sixteen, for twice the memory.
 const int _maxTextureThreads = 8;
+
+/// Smallest share worth giving a worker. Below roughly this, every texture is
+/// larger than the whole share and conversions serialise.
+const int _minProcessMemoryMb = 192;
 
 /// How many textures one RePKG may convert at once, given how many wallpapers
 /// are already running side by side. Dividing keeps the two levels from
@@ -626,52 +616,40 @@ const int _maxTextureThreads = 8;
 int textureThreads({required int cores, required int concurrency}) =>
     max(1, cores ~/ max(1, concurrency)).clamp(1, _maxTextureThreads);
 
-const int _mb = 1024 * 1024;
-
-/// Rough peak for one RePKG. Measured on a 70MB scene of 15 textures: 347MB on
-/// one thread, about 1.1GB from four through eight, 1.9GB at sixteen. It does
-/// not rise smoothly because most of it is .NET's heap, and it is rounded up
-/// because a scene with more or larger textures costs more.
-int estimatedProcessBytes(int threads) {
-  if (threads <= 1) return 400 * _mb;
-  if (threads <= 2) return 700 * _mb;
-  if (threads <= _maxTextureThreads) return 1300 * _mb;
-  return 2100 * _mb;
-}
-
-/// How many wallpapers to extract at once and how many textures each of them may
-/// convert, given what the machine has.
+/// How many wallpapers to extract at once, how many textures each may convert,
+/// and how much memory each is allowed to hold.
 ///
-/// One function rather than two, so the pool and the workers cannot disagree:
-/// both derive the answer from the same inputs instead of one passing it to the
-/// other. [ramBytes] null means the machine could not be asked, and only the
-/// core count bounds the result.
-({int concurrency, int threads, int peakBytes}) extractPlan({
+/// One function rather than three, so the pool and the workers cannot disagree:
+/// each derives the answer from the same inputs instead of one passing it to the
+/// other. Nothing here predicts what a wallpaper will cost, because nothing can:
+/// peak follows the size of the largest texture, and only RePKG sees that. It
+/// hands RePKG a ceiling and RePKG keeps to it.
+({int concurrency, int threads, int memoryMb}) extractPlan({
   required int requested,
   required int cores,
-  int? ramBytes,
+  required int totalMemoryMb,
 }) {
-  ({int concurrency, int threads, int peakBytes}) at(int c) {
-    final int threads = textureThreads(cores: cores, concurrency: c);
-    return (
-      concurrency: c,
-      threads: threads,
-      peakBytes: c * estimatedProcessBytes(threads),
-    );
-  }
-
-  final int wanted = max(1, requested);
-  if (ramBytes == null) return at(wanted);
-
-  // Half the machine. The grid still holds a 256MB preview cache, and pushing
-  // Windows into swap costs more than the extra wallpaper ever wins back.
-  final int budget = ramBytes ~/ 2;
-  for (int c = wanted; c > 1; c--) {
-    final plan = at(c);
-    if (plan.peakBytes <= budget) return plan;
-  }
-  return at(1);
+  final int concurrency = max(1, requested);
+  return (
+    concurrency: concurrency,
+    threads: textureThreads(cores: cores, concurrency: concurrency),
+    memoryMb: max(_minProcessMemoryMb, totalMemoryMb ~/ concurrency),
+  );
 }
+
+/// The plan for this machine and these settings. Read rather than passed, so the
+/// pool and every worker reach the same answer.
+({int concurrency, int threads, int memoryMb}) plan(WidgetRef ref) =>
+    extractPlan(
+      requested: ref.read(extractConcurrencyProvider),
+      cores: Platform.numberOfProcessors,
+      totalMemoryMb: ref.read(extractMemoryLimitProvider),
+    );
+
+/// Builds RePKG's arguments for wallpaper mode.
+///
+/// [newFlags] false means an older tool that rejects an unknown option and then
+/// exits 0 having written nothing, so every flag added since must hang off it.
 
 List<String> wallpaperExtractArgs({
   required String target,
@@ -682,6 +660,7 @@ List<String> wallpaperExtractArgs({
   required bool detailedProgress,
   required bool newFlags,
   int? threads,
+  int? maxMemoryMb,
 }) {
   // Either cleanup pass deletes the raw .tex straight after anyway.
   final String? onlyImages = newFlags && (excludeTexture || onlySaveImage)
@@ -698,6 +677,9 @@ List<String> wallpaperExtractArgs({
   final List<String>? threadCount = threads != null
       ? <String>['--threads', '$threads']
       : null;
+  final List<String>? memoryCeiling = maxMemoryMb != null
+      ? <String>['--max-memory', '$maxMemoryMb']
+      : null;
 
   return <String>[
     'extract',
@@ -710,6 +692,7 @@ List<String> wallpaperExtractArgs({
     ?progress,
     ...?skipMasks,
     ...?threadCount,
+    ...?memoryCeiling,
     '-o',
     outPath,
     target,
@@ -761,13 +744,8 @@ Future<String?> extractPKG(
       overwrite: ref.read(replaceFileProvider),
       detailedProgress: detailedProgress,
       newFlags: repkgSupportsExtractFlags(version),
-      threads: repkgSupportsThreads(version)
-          ? extractPlan(
-              requested: ref.read(extractConcurrencyProvider),
-              cores: Platform.numberOfProcessors,
-              ramBytes: installedMemoryBytes(),
-            ).threads
-          : null,
+      threads: repkgSupportsThreads(version) ? plan(ref).threads : null,
+      maxMemoryMb: repkgSupportsThreads(version) ? plan(ref).memoryMb : null,
     );
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
