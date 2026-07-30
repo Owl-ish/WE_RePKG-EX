@@ -69,6 +69,9 @@ class _ContentViewState extends ConsumerState<ContentView>
   /// rather than replaces. A click that twitches a pixel starts a drag, so
   /// replacing here is how a ctrl-click loses everything picked so far.
   Set<String> _dragBaseline = <String>{};
+
+  /// Latest set the drag has worked out, waiting for the queued write.
+  Set<String> _dragWanted = <String>{};
   bool _dragWriteQueued = false;
 
   /// A ticker, not a timer: a 16ms timer beats against vsync, so twice a second
@@ -293,18 +296,20 @@ class _ContentViewState extends ConsumerState<ContentView>
     ).map((i) => _tiles[i].id).toSet();
     if (setEquals(ids, _dragIds)) return;
     _dragIds = ids;
-    final Set<String> wanted = _dragBaseline.isEmpty
+    _dragWanted = _dragBaseline.isEmpty
         ? ids
         : <String>{..._dragBaseline, ...ids};
 
     // One write per frame. Each one refilters and re-sorts the whole library,
-    // and a fast mouse reports twice a frame.
+    // and a fast mouse reports twice a frame. The callback reads the field
+    // rather than closing over a set, or the second report of a frame would be
+    // dropped and the selection would sit a rectangle behind the marquee.
     if (_dragWriteQueued) return;
     _dragWriteQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dragWriteQueued = false;
       if (mounted) {
-        ref.read(wallpaperListProvider.notifier).setCheckedExactly(wanted);
+        ref.read(wallpaperListProvider.notifier).setCheckedExactly(_dragWanted);
       }
     });
   }
