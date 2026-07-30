@@ -43,9 +43,9 @@ class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
           onPressed: () async {
             bool isMinimized = await windowManager.isMinimized();
             if (isMinimized) {
-              windowManager.restore();
+              await windowManager.restore();
             } else {
-              windowManager.minimize();
+              await windowManager.minimize();
             }
           },
         ),

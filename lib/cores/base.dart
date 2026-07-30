@@ -119,15 +119,14 @@ Future<void> setAcfPath(WidgetRef ref) async {
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
   if (file != null) {
     ref.read(acfPathProvider.notifier).update(file.path);
-    // await StorageUtil.setString(AppKeys.acfPath, file.path);
-    refreshWallpaperPath(ref);
+    await refreshWallpaperPath(ref);
   }
 }
 
 Future<void> refreshAcfPath(WidgetRef ref) async {
   await StorageUtil.remove(AppKeys.acfPath);
   ref.read(acfPathProvider.notifier).update(getAcfPath());
-  refreshWallpaperPath(ref);
+  await refreshWallpaperPath(ref);
 }
 
 Future<void> playVideo(WallpaperInfo wallpaper) async {

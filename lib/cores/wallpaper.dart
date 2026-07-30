@@ -120,7 +120,7 @@ Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
     wallpapers = result.wallpapers;
     final earliest = result.earliestDate;
     if (earliest != null) {
-      earliestTimeNotifier.update(earliest.toString().substring(0, 10));
+      await earliestTimeNotifier.update(earliest.toString().substring(0, 10));
     }
     currentState.update(RunState.complete);
   } catch (e) {
