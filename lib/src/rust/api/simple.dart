@@ -10,9 +10,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AlphaHint`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `eq`, `fmt`
 
-String greet({required String name}) =>
-    RustLib.instance.api.crateApiSimpleGreet(name: name);
-
 Future<String?> deleteToTrash({required String filePath}) =>
     RustLib.instance.api.crateApiSimpleDeleteToTrash(filePath: filePath);
 
