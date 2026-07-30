@@ -51,8 +51,6 @@ extension LanguageTypeExtension on LanguageType {
     }
   }
 
-  bool get isEnglish => this == LanguageType.en;
-  bool get isChinese => this == LanguageType.zh;
 }
 
 enum ThemeType { light, dark, system }

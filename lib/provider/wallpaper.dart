@@ -183,14 +183,6 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
   return list;
 }
 
-@Riverpod(keepAlive: true)
-class ExtractList extends _$ExtractList {
-  @override
-  List<WallpaperInfo> build() => [];
-  void addAll(List<WallpaperInfo> value) => state = [...value];
-  void clear() => state = [];
-}
-
 /// How many wallpapers in the batch have finished, 0..total. A count, not a
 /// cursor: with several in flight, completions arrive out of order.
 @Riverpod(keepAlive: true)

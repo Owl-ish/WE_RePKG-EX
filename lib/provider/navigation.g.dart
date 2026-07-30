@@ -8,27 +8,18 @@ part of 'navigation.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Which top level area the window is showing.
-///
-/// Deliberately not persisted: a launch should land on the wallpaper grid,
-/// which is what the app is for, rather than reopening on whatever page the
-/// last session happened to close on.
+/// Which area the window is showing. Not persisted: a launch should land on the
+/// wallpaper grid, not wherever the last session closed.
 
 @ProviderFor(CurrentSection)
 final currentSectionProvider = CurrentSectionProvider._();
 
-/// Which top level area the window is showing.
-///
-/// Deliberately not persisted: a launch should land on the wallpaper grid,
-/// which is what the app is for, rather than reopening on whatever page the
-/// last session happened to close on.
+/// Which area the window is showing. Not persisted: a launch should land on the
+/// wallpaper grid, not wherever the last session closed.
 final class CurrentSectionProvider
     extends $NotifierProvider<CurrentSection, NavSection> {
-  /// Which top level area the window is showing.
-  ///
-  /// Deliberately not persisted: a launch should land on the wallpaper grid,
-  /// which is what the app is for, rather than reopening on whatever page the
-  /// last session happened to close on.
+  /// Which area the window is showing. Not persisted: a launch should land on the
+  /// wallpaper grid, not wherever the last session closed.
   CurrentSectionProvider._()
     : super(
         from: null,
@@ -58,11 +49,8 @@ final class CurrentSectionProvider
 
 String _$currentSectionHash() => r'5f03bc1287e204b092079d5607dd50545838806c';
 
-/// Which top level area the window is showing.
-///
-/// Deliberately not persisted: a launch should land on the wallpaper grid,
-/// which is what the app is for, rather than reopening on whatever page the
-/// last session happened to close on.
+/// Which area the window is showing. Not persisted: a launch should land on the
+/// wallpaper grid, not wherever the last session closed.
 
 abstract class _$CurrentSection extends $Notifier<NavSection> {
   NavSection build();

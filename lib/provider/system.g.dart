@@ -467,58 +467,6 @@ abstract class _$CurrentTheme extends $Notifier<ThemeType> {
   }
 }
 
-@ProviderFor(CurrentLanguage)
-final currentLanguageProvider = CurrentLanguageProvider._();
-
-final class CurrentLanguageProvider
-    extends $NotifierProvider<CurrentLanguage, LanguageType?> {
-  CurrentLanguageProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'currentLanguageProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$currentLanguageHash();
-
-  @$internal
-  @override
-  CurrentLanguage create() => CurrentLanguage();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(LanguageType? value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<LanguageType?>(value),
-    );
-  }
-}
-
-String _$currentLanguageHash() => r'f51b7b30609cb46419d5d0374017565f5edc8641';
-
-abstract class _$CurrentLanguage extends $Notifier<LanguageType?> {
-  LanguageType? build();
-  @$mustCallSuper
-  @override
-  void runBuild() {
-    final ref = this.ref as $Ref<LanguageType?, LanguageType?>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<LanguageType?, LanguageType?>,
-              LanguageType?,
-              Object?,
-              Object?
-            >;
-    element.handleCreate(ref, build);
-  }
-}
-
 @ProviderFor(LoadingText)
 final loadingTextProvider = LoadingTextProvider._();
 

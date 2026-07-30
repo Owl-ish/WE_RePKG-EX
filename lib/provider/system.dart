@@ -99,13 +99,6 @@ class CurrentTheme extends _$CurrentTheme {
 }
 
 @Riverpod(keepAlive: true)
-class CurrentLanguage extends _$CurrentLanguage {
-  @override
-  LanguageType? build() => null;
-  void update(LanguageType value) => state = value;
-}
-
-@Riverpod(keepAlive: true)
 class LoadingText extends _$LoadingText {
   @override
   String build() => tr(AppI10n.dialogProcessingWallpaper);
