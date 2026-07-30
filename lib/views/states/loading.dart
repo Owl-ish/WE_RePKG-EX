@@ -80,16 +80,18 @@ class _LoadingViewState extends ConsumerState<LoadingView>
     final WallpaperInfo current =
         ref.watch(processingWallpaperProvider) ?? widget.list.first;
 
-    // 当处理的壁纸或进度改变时触发动画
-    if (_previousId != current.id) {
-      _previousId = current.id;
-      _imageController.forward(from: 0);
-      _textController.forward(from: 0);
-      // 为进度条添加动画
+    // 进度和壁纸各自触发动画: 一次只提取一张壁纸时预览图不会变化,
+    // 若共用同一个条件, 进度条将永远停在起点
+    if (_progressController.value != newProgress) {
       _progressController.animateTo(
         newProgress,
         duration: const Duration(milliseconds: 500),
       );
+    }
+    if (_previousId != current.id) {
+      _previousId = current.id;
+      _imageController.forward(from: 0);
+      _textController.forward(from: 0);
     }
     return Material(
       elevation: 2,
