@@ -69,7 +69,6 @@ List<String> _generateWallpaperPaths(List<String> disks) {
   for (final disk in disks) {
     tempPaths.add('$disk${AppStrings.baseWallpaperPath1}');
     tempPaths.add('$disk${AppStrings.baseWallpaperPath2}');
-    tempPaths.add('$disk${AppStrings.baseWallpaperPath3}');
   }
   return tempPaths;
 }

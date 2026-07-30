@@ -6,8 +6,6 @@ enum RunState { initial, empty, complete }
 
 extension RunStateExtension on RunState {
   bool get isInitial => this == RunState.initial;
-  bool get isEmpty => this == RunState.empty;
-  // bool get isLoading => this == RunState.loading;
   bool get isComplete => this == RunState.complete;
 }
 
@@ -25,8 +23,6 @@ extension SortTypeExtension on SortType {
     }
   }
 
-  bool get isTime => this == SortType.time;
-  bool get isSize => this == SortType.size;
   bool get isUpdate => this == SortType.update;
 }
 
@@ -117,8 +113,6 @@ extension NotificationTypeExtension on NotificationType {
     }
   }
 
-  bool get isSystem => this == NotificationType.system;
-  bool get isApp => this == NotificationType.app;
 }
 
 enum ExtractType { wallpaper, project }

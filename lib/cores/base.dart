@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/setting.dart';
@@ -113,7 +114,7 @@ void updateOtherFolder(WidgetRef ref, String wallpaperPath) {
 
 Future<void> setAcfPath(WidgetRef ref) async {
   final xType = XTypeGroup(
-    label: 'appworkshop_431960.acf',
+    label: AppStrings.acfName,
     extensions: ['acf'],
   );
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
