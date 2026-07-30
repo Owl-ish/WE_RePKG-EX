@@ -301,8 +301,6 @@ Future<void> extractWallpapers(
   String outPath = ref.read(exportPathProvider)!;
   if (!await ensureOutputDir(outPath)) return;
   await sweepStaleSceneDirs(outPath);
-  final Directory outDir = Directory(outPath);
-  List<FileSystemEntity> oldFiles = await outDir.list().toList();
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
@@ -322,24 +320,18 @@ Future<void> extractWallpapers(
     onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
   );
 
-  // OR, not assignment, or a batch ending in a video skips the cleanup an
-  // earlier .pkg asked for.
-  bool needClear = false;
   for (int i = 0; i < results.length; i++) {
     final result = results[i];
     if (result == null) continue; // never started: the batch was cancelled
-    final (err, wantsClear) = result;
-    needClear = needClear || wantsClear;
+    // No cleanup pass over the export folder: each scene cleans up inside the
+    // private directory it extracted into, before anything is published. A pass
+    // out here cannot tell this run's output from what the user already had.
+    final (err, _) = result;
     if (err != null) {
       errList.add(ErrorInfo(wallpaper: wallpapers[i], message: err));
     }
   }
 
-  if (needClear && !token.isCancelled) {
-    changeLoadingText(ref, tr(AppI10n.dialogProcessingDelete));
-    String? err2 = await deleteUselessFiles(ref, outPath, oldFiles);
-    if (err2 != null) errList.add(ErrorInfo(wallpaper: null, message: err2));
-  }
   final bool wasCancelled = token.isCancelled;
   endBatch(ref);
   cancel.call();

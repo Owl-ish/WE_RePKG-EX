@@ -42,4 +42,20 @@ void main() {
   test('succeeds on an output folder that has nothing to clean', () async {
     expect(await deleteOtherAndTexture(out.path), isNull);
   });
+
+  // Why this may only ever be pointed at a directory the app created and owns.
+  // It takes no record of what was there first, so given the user's export
+  // folder it would delete an unpacked wallpaper sitting in it. Extraction calls
+  // it on the private per-scene directory for exactly this reason.
+  test('deletes a wallpaper it never created', () async {
+    touch('models\\mine.mdl');
+    touch('sounds\\mine.ogg');
+    touch('scene.json');
+
+    expect(await deleteOtherAndTexture(out.path), isNull);
+
+    expect(Directory('${out.path}\\models').existsSync(), isFalse);
+    expect(Directory('${out.path}\\sounds').existsSync(), isFalse);
+    expect(File('${out.path}\\scene.json').existsSync(), isFalse);
+  });
 }
