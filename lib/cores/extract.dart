@@ -485,6 +485,8 @@ Future<String?> moveExtractedInto(
   // Per file, because the caller deletes the source directory afterwards:
   // stopping at the first failure would throw away everything behind it.
   final List<String> failed = <String>[];
+  // Tracked so each directory is created once, not once per file in it.
+  final Set<String> createdDirs = <String>{to};
   try {
     await for (final entity in Directory(
       from,
@@ -492,7 +494,11 @@ Future<String?> moveExtractedInto(
       if (entity is! File) continue;
       final String dest = path.join(to, path.relative(entity.path, from: from));
       try {
-        await Directory(path.dirname(dest)).create(recursive: true);
+        final String parent = path.dirname(dest);
+        // list() can hand back a child before its parent.
+        if (createdDirs.add(parent)) {
+          await Directory(parent).create(recursive: true);
+        }
         await entity.rename(await claims.claim(dest));
       } catch (e) {
         debugPrint('${tr(AppI10n.logMoveFileFailed)} ${entity.path} $e');
