@@ -169,9 +169,13 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
       list.sort((a, b) => b.size.compareTo(a.size));
       break;
     case SortType.update:
+      // Undated last. Comparing them equal to everything makes the comparator
+      // intransitive, and the sort then misplaces the dated items as well.
       list.sort((a, b) {
-        if (a.updateTime == null || b.updateTime == null) return 0;
-        return b.updateTime!.compareTo(a.updateTime!);
+        final int? x = a.updateTime, y = b.updateTime;
+        if (x == null) return y == null ? 0 : 1;
+        if (y == null) return -1;
+        return y.compareTo(x);
       });
       break;
   }

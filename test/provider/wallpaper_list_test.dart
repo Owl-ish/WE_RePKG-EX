@@ -515,6 +515,38 @@ void main() {
       expect(ids, ['new', 'old']);
     });
 
+    // A wallpaper missing from the ACF has no updateTime, which is the norm for
+    // anything self-made. Comparing those as equal to everything makes the
+    // comparator intransitive, and Dart's sort then misplaces the dated items
+    // too, so the damage is not confined to the undated ones.
+    test('update sort keeps dates in order around undated wallpapers', () async {
+      await boot({
+        ...permissivePrefs(),
+        AppKeys.sortType: SortType.update.index,
+      });
+      container.read(wallpaperListProvider.notifier).addAll([
+        makeWallpaper('a', updateTime: 500),
+        makeWallpaper('undated1', updateTime: null),
+        makeWallpaper('b', updateTime: 9000),
+        makeWallpaper('c', updateTime: 100),
+        makeWallpaper('undated2', updateTime: null),
+        makeWallpaper('d', updateTime: 7000),
+      ]);
+
+      final list = container.read(filterWallpaperListProvider);
+      final dated = list
+          .where((e) => e.updateTime != null)
+          .map((e) => e.updateTime!)
+          .toList();
+
+      expect(dated, [9000, 7000, 500, 100], reason: 'newest first');
+      expect(
+        list.sublist(list.length - 2).every((e) => e.updateTime == null),
+        isTrue,
+        reason: 'undated wallpapers belong at the end, not scattered',
+      );
+    });
+
     test('time sort pushes the earliest import day to the end', () async {
       // The bulk first import all shares one createTime day; newer additions
       // belong on top, and the bulk day sorts ascending behind them.
