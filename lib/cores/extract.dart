@@ -164,7 +164,7 @@ Future<void> extractProject(
         overwrite: overwrite,
         token: token,
       ),
-      concurrency: plan(ref).concurrency,
+      concurrency: planFor(ref, wallpapers.length).concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -306,6 +306,7 @@ Future<void> extractWallpapers(
   // One set for the whole batch: with overwrite on, a name may replace an
   // earlier run's file but must not be handed to two wallpapers here.
   final claims = FileNameClaims(overwrite: ref.read(replaceFileProvider));
+  final batchPlan = planFor(ref, wallpapers.length);
 
   List<String?> results = const <String?>[];
   try {
@@ -316,10 +317,11 @@ Future<void> extractWallpapers(
         wallpaper,
         outPath,
         claims,
+        batchPlan,
         // Only a single-wallpaper run can own the progress line.
         detailedProgress: wallpapers.length == 1,
       ),
-      concurrency: plan(ref).concurrency,
+      concurrency: batchPlan.concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -377,7 +379,8 @@ Future<String?> extractBranch(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath,
-  FileNameClaims claims, {
+  FileNameClaims claims,
+  ({int concurrency, int threads, int memoryMb}) batchPlan, {
   bool detailedProgress = false,
 }) async {
   final target = wallpaper.target;
@@ -389,6 +392,7 @@ Future<String?> extractBranch(
       wallpaper,
       outPath,
       claims,
+      batchPlan,
       detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('.mp4')) {
@@ -532,7 +536,8 @@ Future<String?> extractSceneToShared(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath,
-  FileNameClaims claims, {
+  FileNameClaims claims,
+  ({int concurrency, int threads, int memoryMb}) batchPlan, {
   bool detailedProgress = false,
 }) async {
   final Directory temp = Directory(
@@ -552,6 +557,7 @@ Future<String?> extractSceneToShared(
       ref,
       wallpaper,
       temp.path,
+      batchPlan,
       detailedProgress: detailedProgress,
     );
     if (err != null) return err;
@@ -625,17 +631,21 @@ int textureThreads({required int cores, required int concurrency}) =>
 /// How many wallpapers to extract at once, how many textures each may convert,
 /// and how much memory each is allowed to hold.
 ///
-/// One function rather than three, so the pool and the workers cannot disagree:
-/// each derives the answer from the same inputs instead of one passing it to the
-/// other. Nothing here predicts what a wallpaper will cost, because nothing can:
-/// peak follows the size of the largest texture, and only RePKG sees that. It
-/// hands RePKG a ceiling and RePKG keeps to it.
+/// Decided once per batch and passed to the workers. It cannot be re-derived
+/// down there: the pool runs no more workers than there are wallpapers, so a
+/// worker that only knew the setting would size itself for company it does not
+/// have and take a fraction of the machine it actually owns.
+///
+/// Nothing here predicts what a wallpaper will cost, because nothing can: peak
+/// follows the size of the largest texture, and only RePKG sees that. It hands
+/// RePKG a ceiling and RePKG keeps to it.
 ({int concurrency, int threads, int memoryMb}) extractPlan({
   required int requested,
+  required int batchSize,
   required int cores,
   required int totalMemoryMb,
 }) {
-  final int concurrency = max(1, requested);
+  final int concurrency = max(1, min(max(1, requested), batchSize));
   return (
     concurrency: concurrency,
     threads: textureThreads(cores: cores, concurrency: concurrency),
@@ -643,14 +653,16 @@ int textureThreads({required int cores, required int concurrency}) =>
   );
 }
 
-/// The plan for this machine and these settings. Read rather than passed, so the
-/// pool and every worker reach the same answer.
-({int concurrency, int threads, int memoryMb}) plan(WidgetRef ref) =>
-    extractPlan(
-      requested: ref.read(extractConcurrencyProvider),
-      cores: Platform.numberOfProcessors,
-      totalMemoryMb: ref.read(extractMemoryLimitProvider),
-    );
+/// The plan for this batch on this machine.
+({int concurrency, int threads, int memoryMb}) planFor(
+  WidgetRef ref,
+  int batchSize,
+) => extractPlan(
+  requested: ref.read(extractConcurrencyProvider),
+  batchSize: batchSize,
+  cores: Platform.numberOfProcessors,
+  totalMemoryMb: ref.read(extractMemoryLimitProvider),
+);
 
 /// Builds RePKG's arguments for wallpaper mode.
 ///
@@ -731,7 +743,8 @@ void Function(String) _sceneProgressReporter(WidgetRef ref) {
 Future<String?> extractPKG(
   WidgetRef ref,
   WallpaperInfo wallpaper,
-  String outPath, {
+  String outPath,
+  ({int concurrency, int threads, int memoryMb}) batchPlan, {
   bool detailedProgress = false,
 }) async {
   // No text write here: it set the same string the batch already set, and with
@@ -750,8 +763,8 @@ Future<String?> extractPKG(
       overwrite: ref.read(replaceFileProvider),
       detailedProgress: detailedProgress,
       newFlags: repkgSupportsExtractFlags(version),
-      threads: repkgSupportsThreads(version) ? plan(ref).threads : null,
-      maxMemoryMb: repkgSupportsThreads(version) ? plan(ref).memoryMb : null,
+      threads: repkgSupportsThreads(version) ? batchPlan.threads : null,
+      maxMemoryMb: repkgSupportsThreads(version) ? batchPlan.memoryMb : null,
     );
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');

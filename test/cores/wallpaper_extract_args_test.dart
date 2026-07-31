@@ -131,32 +131,52 @@ void main() {
 
   group('sizing extraction against the machine', () {
     test('the memory ceiling is split between the wallpapers in flight', () {
-      final plan = extractPlan(requested: 4, cores: 16, totalMemoryMb: 4096);
+      final plan = extractPlan(
+        requested: 4,
+        batchSize: 20,
+        cores: 16,
+        totalMemoryMb: 4096,
+      );
       expect(plan.concurrency, 4);
       expect(plan.threads, 4);
       expect(plan.memoryMb, 1024);
     });
 
-    test('one wallpaper gets the whole ceiling', () {
-      final plan = extractPlan(requested: 1, cores: 16, totalMemoryMb: 4096);
+    // The pool runs no more workers than there are wallpapers, so extracting one
+    // owns the machine. Sizing off the setting alone handed it a quarter of the
+    // ceiling and half the threads for company it did not have.
+    test('a batch smaller than the setting gets the whole machine', () {
+      final plan = extractPlan(
+        requested: 4,
+        batchSize: 1,
+        cores: 16,
+        totalMemoryMb: 4096,
+      );
+      expect(plan.concurrency, 1);
+      expect(plan.threads, 8);
       expect(plan.memoryMb, 4096);
+    });
+
+    test('a batch larger than the setting is bounded by the setting', () {
+      final plan = extractPlan(
+        requested: 2,
+        batchSize: 50,
+        cores: 16,
+        totalMemoryMb: 4096,
+      );
+      expect(plan.concurrency, 2);
     });
 
     // Below a floor every texture is bigger than the share and conversions
     // serialise, which is slower without saving anything.
     test('a share never drops below what one texture needs', () {
-      final plan = extractPlan(requested: 16, cores: 16, totalMemoryMb: 512);
+      final plan = extractPlan(
+        requested: 16,
+        batchSize: 40,
+        cores: 16,
+        totalMemoryMb: 512,
+      );
       expect(plan.memoryMb, greaterThanOrEqualTo(192));
-    });
-
-    // The pool and each worker call this separately rather than passing the
-    // answer around, so the same inputs have to give the same plan.
-    test('is deterministic', () {
-      for (final int mb in <int>[512, 2048, 8192]) {
-        final a = extractPlan(requested: 6, cores: 12, totalMemoryMb: mb);
-        final b = extractPlan(requested: 6, cores: 12, totalMemoryMb: mb);
-        expect(a, b);
-      }
     });
   });
 
