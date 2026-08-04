@@ -28,20 +28,6 @@ import 'toast.dart';
 /// test without pumping a frame.
 typedef StatusSink = void Function(String text);
 
-/// The token is published so the loading overlay's cancel button can reach it.
-CancelToken startBatch(WidgetRef ref) {
-  ref.read(currentIndexProvider.notifier).reset();
-  ref.read(processingWallpaperProvider.notifier).update(null);
-  final token = CancelToken();
-  ref.read(activeCancelTokenProvider.notifier).update(token);
-  return token;
-}
-
-void endBatch(WidgetRef ref) {
-  ref.read(processingWallpaperProvider.notifier).update(null);
-  ref.read(activeCancelTokenProvider.notifier).update(null);
-}
-
 /// Runs RePKG through Process.start so a cancelled batch can kill it, rather
 /// than waiting for a large scene to finish unpacking.
 Future<({int exitCode, String stdout, String stderr})> runRePKG(
@@ -139,15 +125,22 @@ Future<void> _runBatch(
   int concurrency,
   Future<String?> Function(WallpaperInfo wallpaper, CancelToken token) work,
 ) async {
-  // Taken before the first await: the widget owning `ref` can be gone by the
-  // time a worker reports, and reading through it then throws.
+  // Every notifier taken before the first await: the widget owning `ref` can be
+  // gone by the time a worker reports or the batch retires, and reading through
+  // it then throws.
   final processing = ref.read(processingWallpaperProvider.notifier);
   final index = ref.read(currentIndexProvider.notifier);
+  final activeToken = ref.read(activeCancelTokenProvider.notifier);
   ref
       .read(loadingTextProvider.notifier)
       .update(tr(AppI10n.dialogProcessingWallpaper));
+
   final cancel = showLoadingView(wallpapers);
-  final token = startBatch(ref);
+  index.reset();
+  processing.update(null);
+  // Published so the loading overlay's cancel button can reach it.
+  final token = CancelToken();
+  activeToken.update(token);
 
   final List<ErrorInfo> errList = [];
   List<String?> results = const <String?>[];
@@ -165,7 +158,8 @@ Future<void> _runBatch(
   } finally {
     // The pool rethrows a worker's error, so without this the loading overlay
     // and its barrier stay up for good and the token is never retired.
-    endBatch(ref);
+    processing.update(null);
+    activeToken.update(null);
     cancel.call();
   }
 
