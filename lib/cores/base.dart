@@ -18,6 +18,7 @@ import 'package:we_repkg/src/rust/api/simple.dart';
 import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/widgets/confirm_dialog.dart';
 
 import 'toast.dart';
@@ -340,7 +341,13 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
       if (file is File &&
           (isImage(file.path) || file.path.toLowerCase().endsWith('mp4'))) {
         try {
-          await file.rename('$outPath/${path.basename(file.path)}');
+          // Claimed, not renamed straight up: a scene can hold both
+          // materials/foo.png and a root foo.png, and rename replaces whatever
+          // is already at the destination.
+          final String dest = await claimFilePath(
+            path.join(outPath, path.basename(file.path)),
+          );
+          await file.rename(dest);
         } catch (e) {
           debugPrint('${tr(AppI10n.logMoveFileFailed)} $e');
           return e.toString();

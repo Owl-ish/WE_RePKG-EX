@@ -30,6 +30,18 @@ void main() {
     expect(File('${out.path}\\scene.json').existsSync(), isFalse);
   });
 
+  // A scene can hold a texture and a root file of the same name. Renaming the
+  // promoted one straight up replaced the other and lost it silently.
+  test('a promoted image does not replace one already at the root', () async {
+    touch('art.png').writeAsStringSync('root');
+    touch('materials\\art.png').writeAsStringSync('promoted');
+
+    expect(await deleteOtherAndTexture(out.path), isNull);
+
+    expect(File('${out.path}\\art.png').readAsStringSync(), 'root');
+    expect(File('${out.path}\\art-1.png').readAsStringSync(), 'promoted');
+  });
+
   // Wallpaper mode extracts tex entries only, so there is no scene.json to
   // remove. Deleting it unconditionally reported a failure over a clean run.
   test('succeeds when scene.json was never extracted', () async {

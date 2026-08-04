@@ -59,6 +59,15 @@ bool repkgSupportsExtractFlags(String? version) =>
 bool repkgSupportsThreads(String? version) =>
     _atLeast(version, const <int>[0, 5, 4]);
 
+/// How long to wait for RePKG to report its version.
+///
+/// Generous because the answer is cached for the session and a timeout is
+/// indistinguishable from an old tool: both drop `--threads`, `--max-memory`
+/// and the rest of the gated flags with nothing on screen to say so. A 4MB
+/// ILRepack'd exe being scanned by Defender on first run blew a 2 second
+/// budget, which cost the memory ceiling for the whole session.
+const Duration _versionProbeTimeout = Duration(seconds: 10);
+
 /// Reads the version reported by the active RePKG executable.
 ///
 /// About must remain usable if the configured tool is missing or broken, so
@@ -68,7 +77,7 @@ Future<String?> readRepkgVersion(String? toolPath) async {
   try {
     final ProcessResult result = await Process.run(toolPath, const <String>[
       'version',
-    ]).timeout(const Duration(seconds: 2));
+    ]).timeout(_versionProbeTimeout);
     if (result.exitCode != 0) return null;
     return parseRepkgVersionOutput(result.stdout, result.stderr);
   } catch (_) {
