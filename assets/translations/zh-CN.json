@@ -56,7 +56,6 @@
   "dialog": {
     "operationCompleted": "操作完成",
     "ProcessingWallpaper": "正在处理壁纸",
-    "ProcessingDelete": "正在删除无用的文件",
     "errorTitle": "错误信息",
     "extractImageInfo": "正在复制第 {index}/{count} 张图片",
     "extractVideoInfo": "正在复制视频 {copied} / {total}",

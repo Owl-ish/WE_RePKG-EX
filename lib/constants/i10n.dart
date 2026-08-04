@@ -56,7 +56,6 @@ class AppI10n {
   // 弹窗相关
   static const String dialogOperationCompleted = 'dialog.operationCompleted';
   static const String dialogProcessingWallpaper = 'dialog.ProcessingWallpaper';
-  static const String dialogProcessingDelete = 'dialog.ProcessingDelete';
   static const String dialogErrorTitle = 'dialog.errorTitle';
   static const String dialogExtractImageInfo = 'dialog.extractImageInfo';
   static const String dialogExtractVideoInfo = 'dialog.extractVideoInfo';

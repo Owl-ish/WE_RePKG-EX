@@ -56,7 +56,6 @@
   "dialog": {
     "operationCompleted": "Operation completed",
     "ProcessingWallpaper": "Processing wallpaper",
-    "ProcessingDelete": "Deleting useless files",
     "errorTitle": "Error message",
     "extractImageInfo": "Copying image {index}/{count}",
     "extractVideoInfo": "Copying video {copied} / {total}",
