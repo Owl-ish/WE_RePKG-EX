@@ -24,8 +24,8 @@ class _LoadingViewState extends ConsumerState<LoadingView>
   late AnimationController _textController;
   late Animation<double> _textAnimation;
   late AnimationController _progressController;
-  late Animation<double> _progressAnimation;
   String? _previousId;
+  double _progressTarget = 0;
 
   @override
   void initState() {
@@ -51,10 +51,6 @@ class _LoadingViewState extends ConsumerState<LoadingView>
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
-    );
-    _progressAnimation = CurvedAnimation(
-      parent: _progressController,
-      curve: Curves.easeInOut,
     );
   }
 
@@ -82,10 +78,18 @@ class _LoadingViewState extends ConsumerState<LoadingView>
 
     // 进度和壁纸各自触发动画: 一次只提取一张壁纸时预览图不会变化,
     // 若共用同一个条件, 进度条将永远停在起点
-    if (_progressController.value != newProgress) {
+    //
+    // Compared against where the bar is heading, not where it currently is: a
+    // rebuild mid-tween would otherwise restart it from part way and the bar
+    // would trail the count.
+    if (_progressTarget != newProgress) {
+      _progressTarget = newProgress;
       _progressController.animateTo(
         newProgress,
         duration: const Duration(milliseconds: 500),
+        // The easing belongs on the movement. Curving the value instead had the
+        // bar read 13% with a quarter of the batch done.
+        curve: Curves.easeInOut,
       );
     }
     if (_previousId != current.id) {
@@ -156,10 +160,10 @@ class _LoadingViewState extends ConsumerState<LoadingView>
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: AnimatedBuilder(
-                animation: _progressAnimation,
+                animation: _progressController,
                 builder: (context, child) {
                   return LinearProgressIndicator(
-                    value: _progressAnimation.value,
+                    value: _progressController.value,
                     minHeight: 8,
                     color: Colors.blue,
                     backgroundColor: Colors.grey[200],

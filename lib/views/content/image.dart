@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/utils/preview_image.dart';
 
+/// Decode heights are rounded up to this, so resizing the window reuses cache
+/// slots instead of minting one per pixel. Never down: a tile decoded smaller
+/// than it draws would be upscaled.
+const int _decodeQuantum = 32;
+
+int _decodeStep(double pixels) =>
+    (pixels / _decodeQuantum).ceil() * _decodeQuantum;
+
 class ImageView extends StatelessWidget {
   const ImageView({
     super.key,
@@ -17,12 +25,16 @@ class ImageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Image preview = Image(
-      // Decode at the tile's real pixel size. Height rather than width, so a
-      // preview that is not square still reaches the tile edge on its shorter
-      // side rather than being upscaled by cover.
+      // Decode at the tile's size, rounded up to a step. Previews are square in
+      // practice, and height is the safe axis for any that are not, since cover
+      // would upscale a landscape one decoded to the tile's width.
+      //
+      // Stepped because the tile grows continuously with the window: an exact
+      // size gives every drag of the window edge a new cache slot, which
+      // re-decodes the visible grid dozens of times and evicts everything warm.
       image: previewImage(
         wallpaper.previews,
-        cacheHeight: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+        cacheHeight: _decodeStep(size * MediaQuery.devicePixelRatioOf(context)),
       ),
       width: size,
       height: size,
