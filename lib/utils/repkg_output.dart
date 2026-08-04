@@ -8,6 +8,13 @@ class RePKGOutputSummary {
   final int extractedFiles;
   final int skippedFiles;
   final String details;
+
+  /// RePKG exits 0 on an unrecognised option having written nothing, so a
+  /// CLI older than the flags we sent it lands as a silent success. Complaining
+  /// on its way out while touching no file is that signature. A run that
+  /// legitimately matches nothing prints no complaint, so it stays a success.
+  bool get claimedSuccessWithoutWriting =>
+      extractedFiles == 0 && skippedFiles == 0 && details.isNotEmpty;
 }
 
 final RegExp _progressPattern = RegExp(

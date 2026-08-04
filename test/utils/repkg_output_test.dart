@@ -44,6 +44,52 @@ void main() {
     expect(summary.details, isEmpty);
   });
 
+  group('claimedSuccessWithoutWriting', () {
+    // Verbatim from RePKG 0.5.3-ex handed a flag it does not know, which is
+    // what a released build bundles today. It exits 0 having written nothing.
+    const String unknownOption =
+        'RePKG 0.5.3-ex+e69a76dc\n'
+        'ERROR(S):\n'
+        "  Option 'max-memory' is unknown.";
+
+    test('an unknown option is caught even though RePKG exits 0', () {
+      expect(
+        summarizeRePKGOutput(unknownOption, '').claimedSuccessWithoutWriting,
+        isTrue,
+      );
+    });
+
+    test('a run that extracted files is a success', () {
+      final summary = summarizeRePKGOutput(
+        '* Extracting: scene.json\nError: one texture is locked',
+        '',
+      );
+
+      expect(summary.claimedSuccessWithoutWriting, isFalse);
+    });
+
+    test('a run that only skipped files is a success', () {
+      final summary = summarizeRePKGOutput(
+        '* Skipping, already exists: materials/a.tex\nError: noise',
+        '',
+      );
+
+      expect(summary.claimedSuccessWithoutWriting, isFalse);
+    });
+
+    test('matching nothing without complaining stays a success', () {
+      // Every entry filtered out by --ignore-dirs. No files, but no error
+      // either, so this must not be reported as a failure.
+      expect(
+        summarizeRePKGOutput(
+          'RePKG 0.5.4-ex\n',
+          '',
+        ).claimedSuccessWithoutWriting,
+        isFalse,
+      );
+    });
+  });
+
   test('reads a progress line', () {
     expect(parseRePKGProgress('{"pos":7,"total":128}'), (
       position: 7,

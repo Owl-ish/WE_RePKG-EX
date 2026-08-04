@@ -744,8 +744,8 @@ Future<String?> extractPKG(
       onStdoutLine: detailedProgress ? _sceneProgressReporter(ref) : null,
     );
     if (token.isCancelled) return null;
-    if (result.exitCode != 0) {
-      final summary = summarizeRePKGOutput(result.stdout, result.stderr);
+    final summary = summarizeRePKGOutput(result.stdout, result.stderr);
+    if (result.exitCode != 0 || summary.claimedSuccessWithoutWriting) {
       return _formatRePKGFailure(
         wallpaper,
         outPath,
