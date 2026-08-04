@@ -241,6 +241,16 @@ Future<void> browserCurrent(WallpaperInfo wallpaper) async {
   }
 }
 
+/// Drops [wallpaper] from the library, the selection and the checked set.
+///
+/// Selection is held by id, so leaving the id behind keeps it counted as
+/// checked, and it would come back checked if a later scan reused the id.
+void forgetWallpaper(WidgetRef ref, WallpaperInfo wallpaper) {
+  ref.read(wallpaperListProvider.notifier).remove(wallpaper);
+  ref.read(selectedWallpaperProvider.notifier).update(null);
+  ref.read(checkedIdsProvider.notifier).forget({wallpaper.id});
+}
+
 Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
   final bool confirmed = await showConfirmDialog(
     title: tr(AppI10n.dialogDeleteConfirmTitle),
@@ -259,8 +269,7 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
       debugPrint('${tr(AppI10n.logDeleteFileFailed)} $trashErr');
       return showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $trashErr');
     }
-    ref.read(wallpaperListProvider.notifier).remove(wallpaper);
-    ref.read(selectedWallpaperProvider.notifier).update(null);
+    forgetWallpaper(ref, wallpaper);
     showDeleteToast();
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteFileFailed)} $e');
