@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/constants/keys.dart';
@@ -20,7 +21,14 @@ class AppConfig {
     // submits the replacement surface.
     final bool windowAlreadyVisible = await windowManager.isVisible();
 
-    await RustLib.init();
+    // By name, not by path: the generated loader config points at
+    // rust/target/release/, resolved against the working directory, so a DLL
+    // left there by a direct `cargo build --release` shadows the bundled one
+    // and kills startup on a content-hash mismatch. The Windows loader search
+    // order starts at the exe's directory, which is where cargokit puts it.
+    await RustLib.init(
+      externalLibrary: ExternalLibrary.open('rust_lib_we_repkg.dll'),
+    );
     await PackInfo.init();
     await StorageUtil.init();
     await EasyLocalization.ensureInitialized();
