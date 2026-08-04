@@ -39,10 +39,10 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Windows only, but rust_builder declares android and ios as ffi plugin
+# platforms, so pub get keeps writing plugin registrants into both.
+/android/
+/ios/
 
 # Local test fixtures
 /test/scene/
