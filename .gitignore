@@ -47,3 +47,4 @@ app.*.map.json
 # Local test fixtures
 /test/scene/
 release.txt
+we_repkg.code-workspace
