@@ -15,6 +15,7 @@ import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/src/rust/api/simple.dart';
+import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/widgets/confirm_dialog.dart';
@@ -264,13 +265,13 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
 }
 
 Future<String?> deleteUselessFiles(
-  WidgetRef ref,
+  ExtractSettings settings,
   String outPath,
   List<FileSystemEntity> oldFiles,
 ) async {
-  bool onlySaveImage = ref.read(onlySaveImageProvider);
-  bool excludeTexture = ref.read(excludeTextureProvider);
-  bool deleteTransparency = ref.read(deleteTransparencyProvider);
+  final bool onlySaveImage = settings.onlySaveImage;
+  final bool excludeTexture = settings.excludeTexture;
+  final bool deleteTransparency = settings.deleteTransparency;
   String? err;
   if (onlySaveImage && !excludeTexture) {
     err = await deleteOther(outPath, oldFiles);

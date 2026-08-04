@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/error.dart';
+import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
@@ -23,8 +23,7 @@ import 'package:we_repkg/utils/work_pool.dart';
 import 'base.dart';
 import 'toast.dart';
 
-/// Resets batch progress and publishes a fresh cancel token, which the loading
-/// overlay's cancel button reaches through activeCancelTokenProvider.
+/// The token is published so the loading overlay's cancel button can reach it.
 CancelToken startBatch(WidgetRef ref) {
   ref.read(currentIndexProvider.notifier).reset();
   ref.read(processingWallpaperProvider.notifier).update(null);
@@ -33,7 +32,6 @@ CancelToken startBatch(WidgetRef ref) {
   return token;
 }
 
-/// Clears the preview and retires the token once a run finishes.
 void endBatch(WidgetRef ref) {
   ref.read(processingWallpaperProvider.notifier).update(null);
   ref.read(activeCancelTokenProvider.notifier).update(null);
@@ -114,57 +112,39 @@ Future<void> copyProjectPreviewImage(
   }
 }
 
-Future<void> extractProject(
+/// Only scenes (.pkg) need RePKG, so a batch without any skips the check.
+/// Returns false having already told the user.
+Future<bool> _rePKGAvailable(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
 ) async {
-  bool useProjectPath = ref.read(useProjectPathProvider);
-  ExtractType extractType = ref.read(currentExtractTypeProvider);
-  if (useProjectPath || extractType.isProject) {
-    if (!await checkProjectPath(ref, true)) return;
-  } else {
-    if (!await checkExportPath(ref, true)) return;
+  if (!wallpapers.any((w) => w.target.toLowerCase().endsWith('pkg'))) {
+    return true;
   }
-  // Only scenes (.pkg) need RePKG; skip the check for a batch without any.
-  final needsRePKG = wallpapers.any(
-    (w) => w.target.toLowerCase().endsWith('pkg'),
-  );
-  String? rePKGPath = ref.read(toolPathProvider);
-  if (needsRePKG && !await toolExist(rePKGPath)) {
-    return showToolNoExistToast();
-  }
-  List<ErrorInfo> errList = [];
-  String outPath = useProjectPath || extractType.isProject
-      ? ref.read(projectPathProvider)!
-      : ref.read(exportPathProvider)!;
-  if (!await ensureOutputDir(outPath)) return;
+  if (await toolExist(ref.read(toolPathProvider))) return true;
+  showToolNoExistToast();
+  return false;
+}
+
+/// Runs [work] over [wallpapers] behind the loading overlay and reports how it
+/// went. Both extraction modes share this; only the setup before it differs.
+Future<void> _runBatch(
+  WidgetRef ref,
+  List<WallpaperInfo> wallpapers,
+  int concurrency,
+  Future<String?> Function(WallpaperInfo wallpaper, CancelToken token) work,
+) async {
   changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
-  final basePath = outPath;
-  // Read once rather than per wallpaper; neither changes mid-batch.
-  final bool useTitleName = ref.read(useTitleNameProvider);
-  final bool overwrite = ref.read(replaceFileProvider);
-  // Assigned before any worker starts, so the folder choice cannot race.
-  final Map<String, String> outDirs = resolveProjectFolders(
-    wallpapers,
-    basePath,
-    useTitleName: useTitleName,
-  );
   final token = startBatch(ref);
 
-  List<ErrorInfo?> results = const <ErrorInfo?>[];
+  final List<ErrorInfo> errList = [];
+  List<String?> results = const <String?>[];
   try {
-    // Parallel is safe here: every wallpaper owns a distinct subfolder.
-    results = await runBounded<WallpaperInfo, ErrorInfo?>(
+    results = await runBounded<WallpaperInfo, String?>(
       wallpapers,
-      (wallpaper) => _extractProjectOne(
-        wallpaper: wallpaper,
-        outPath: outDirs[wallpaper.id]!,
-        rePKGPath: rePKGPath,
-        overwrite: overwrite,
-        token: token,
-      ),
-      concurrency: planFor(ref, wallpapers.length).concurrency,
+      (wallpaper) => work(wallpaper, token),
+      concurrency: concurrency,
       cancelToken: token,
       onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
       onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
@@ -177,9 +157,59 @@ Future<void> extractProject(
     endBatch(ref);
     cancel.call();
   }
-  errList.addAll(results.whereType<ErrorInfo>());
+
+  for (int i = 0; i < results.length; i++) {
+    final String? message = results[i];
+    if (message != null) {
+      errList.add(ErrorInfo(wallpaper: wallpapers[i], message: message));
+    }
+  }
+
   if (token.isCancelled) return showCancelledToast();
   errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
+}
+
+Future<void> extractProject(
+  WidgetRef ref,
+  List<WallpaperInfo> wallpapers,
+) async {
+  final bool toProjectFolder =
+      ref.read(useProjectPathProvider) ||
+      ref.read(currentExtractTypeProvider).isProject;
+  final bool pathOk = toProjectFolder
+      ? await checkProjectPath(ref, true)
+      : await checkExportPath(ref, true);
+  if (!pathOk) return;
+  if (!await _rePKGAvailable(ref, wallpapers)) return;
+
+  final String outPath = (toProjectFolder
+      ? ref.read(projectPathProvider)
+      : ref.read(exportPathProvider))!;
+  if (!await ensureOutputDir(outPath)) return;
+
+  // Read once rather than per wallpaper; neither changes mid-batch.
+  final String? rePKGPath = ref.read(toolPathProvider);
+  final bool overwrite = ref.read(replaceFileProvider);
+  // Assigned before any worker starts, so the folder choice cannot race.
+  final Map<String, String> outDirs = resolveProjectFolders(
+    wallpapers,
+    outPath,
+    useTitleName: ref.read(useTitleNameProvider),
+  );
+
+  // Parallel is safe here: every wallpaper owns a distinct subfolder.
+  await _runBatch(
+    ref,
+    wallpapers,
+    planFor(ref, wallpapers.length).concurrency,
+    (wallpaper, token) => _extractProjectOne(
+      wallpaper: wallpaper,
+      outPath: outDirs[wallpaper.id]!,
+      rePKGPath: rePKGPath,
+      overwrite: overwrite,
+      token: token,
+    ),
+  );
 }
 
 /// Assigns each wallpaper a distinct output folder under [basePath].
@@ -212,7 +242,7 @@ Map<String, String> resolveProjectFolders(
 
 /// Extracts one wallpaper into [outPath]. Returns the failure, or null on
 /// success, so a bad item never aborts the batch.
-Future<ErrorInfo?> _extractProjectOne({
+Future<String?> _extractProjectOne({
   required WallpaperInfo wallpaper,
   required String outPath,
   required String? rePKGPath,
@@ -225,20 +255,12 @@ Future<ErrorInfo?> _extractProjectOne({
     await Directory(outPath).create(recursive: true);
   } catch (e) {
     debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
-    return ErrorInfo(
-      wallpaper: wallpaper,
-      message: '${tr(AppI10n.errorCreatedFolderFailed)} $e',
-    );
+    return '${tr(AppI10n.errorCreatedFolderFailed)} $e';
   }
 
   // Non-scene wallpaper: copy the whole folder (re-importable) instead of RePKG.
   if (!wallpaper.target.toLowerCase().endsWith('pkg')) {
-    final String? err = await copyWallpaperFolderTo(
-      wallpaper,
-      outPath,
-      overwrite: overwrite,
-    );
-    return err == null ? null : ErrorInfo(wallpaper: wallpaper, message: err);
+    return copyWallpaperFolderTo(wallpaper, outPath, overwrite: overwrite);
   }
 
   try {
@@ -257,96 +279,64 @@ Future<ErrorInfo?> _extractProjectOne({
     // skipped some entries and carried on, so the folder still wants a preview.
     await copyProjectPreviewImage(wallpaper, outPath);
     if (result.exitCode != 0) {
-      return ErrorInfo(
-        wallpaper: wallpaper,
-        message: _formatRePKGFailure(
-          wallpaper,
-          outPath,
-          exitCode: result.exitCode,
-          summary: summarizeRePKGOutput(result.stdout, result.stderr),
-        ),
+      return _formatRePKGFailure(
+        wallpaper,
+        outPath,
+        exitCode: result.exitCode,
+        summary: summarizeRePKGOutput(result.stdout, result.stderr),
       );
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.errorExtractFailed)} $e');
-    return ErrorInfo(
-      wallpaper: wallpaper,
-      message: _formatRePKGFailure(
-        wallpaper,
-        outPath,
-        exitCode: null,
-        details: e.toString(),
-      ),
+    return _formatRePKGFailure(
+      wallpaper,
+      outPath,
+      exitCode: null,
+      details: e.toString(),
     );
   }
   return null;
 }
 
 // 新增的通用提取方法
+//
+// Each scene cleans up inside its own private directory before publishing, so
+// nothing sweeps the export folder afterwards: it could not tell this run's
+// output from the user's own files.
 Future<void> extractWallpapers(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
 ) async {
   if (!await checkExportPath(ref, true)) return;
-  // Only scenes (.pkg) need RePKG; skip the check for a batch without any.
-  final needsRePKG = wallpapers.any(
-    (w) => w.target.toLowerCase().endsWith('pkg'),
-  );
-  String? rePKGPath = ref.read(toolPathProvider);
-  if (needsRePKG && !await toolExist(rePKGPath)) {
-    return showToolNoExistToast();
-  }
-  List<ErrorInfo> errList = [];
-  String outPath = ref.read(exportPathProvider)!;
+  if (!await _rePKGAvailable(ref, wallpapers)) return;
+
+  final String outPath = ref.read(exportPathProvider)!;
   if (!await ensureOutputDir(outPath)) return;
   await sweepStaleSceneDirs(outPath);
-  changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
-  final cancel = showLoadingView(wallpapers);
-  final token = startBatch(ref);
+
+  final ExtractSettings settings = await readExtractSettings(
+    ref,
+    wallpapers.length,
+  );
   // One set for the whole batch: with overwrite on, a name may replace an
   // earlier run's file but must not be handed to two wallpapers here.
-  final claims = FileNameClaims(overwrite: ref.read(replaceFileProvider));
-  final batchPlan = planFor(ref, wallpapers.length);
+  final claims = FileNameClaims(overwrite: settings.overwrite);
 
-  List<String?> results = const <String?>[];
-  try {
-    results = await runBounded<WallpaperInfo, String?>(
-      wallpapers,
-      (wallpaper) => extractBranch(
-        ref,
-        wallpaper,
-        outPath,
-        claims,
-        batchPlan,
-        // Only a single-wallpaper run can own the progress line.
-        detailedProgress: wallpapers.length == 1,
-      ),
-      concurrency: batchPlan.concurrency,
-      cancelToken: token,
-      onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
-      onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+  await _runBatch(ref, wallpapers, settings.plan.concurrency, (
+    wallpaper,
+    token,
+  ) {
+    return extractBranch(
+      ref,
+      settings,
+      wallpaper,
+      outPath,
+      claims,
+      token,
+      // Only a single-wallpaper run can own the progress line.
+      detailedProgress: wallpapers.length == 1,
     );
-  } catch (e) {
-    errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
-  } finally {
-    // The pool rethrows a worker's error, so without this the loading overlay
-    // and its barrier stay up for good and the token is never retired.
-    endBatch(ref);
-    cancel.call();
-  }
-
-  // Each scene cleans up inside its own private directory before publishing, so
-  // there is no sweep out here: it could not tell this run's output from the
-  // user's own files.
-  for (int i = 0; i < results.length; i++) {
-    final err = results[i];
-    if (err != null) {
-      errList.add(ErrorInfo(wallpaper: wallpapers[i], message: err));
-    }
-  }
-
-  if (token.isCancelled) return showCancelledToast();
-  errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
+  });
 }
 
 Future<void> extractCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
@@ -377,10 +367,11 @@ Future<void> extractAll(WidgetRef ref) async {
 /// several workers writing one progress line just makes it flicker.
 Future<String?> extractBranch(
   WidgetRef ref,
+  ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
   FileNameClaims claims,
-  ({int concurrency, int threads, int memoryMb}) batchPlan, {
+  CancelToken token, {
   bool detailedProgress = false,
 }) async {
   final target = wallpaper.target;
@@ -389,10 +380,11 @@ Future<String?> extractBranch(
   if (targetLower.endsWith('pkg')) {
     return extractSceneToShared(
       ref,
+      settings,
       wallpaper,
       outPath,
       claims,
-      batchPlan,
+      token,
       detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('.mp4')) {
@@ -401,6 +393,7 @@ Future<String?> extractBranch(
       wallpaper,
       outPath,
       claims,
+      token,
       detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('customdirectory')) {
@@ -413,20 +406,19 @@ Future<String?> extractBranch(
     );
   }
   // Anything RePKG does not handle: copy the folder into a subfolder of its own.
-  final name = ref.read(useTitleNameProvider)
+  final name = settings.useTitleName
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
   return copyWallpaperFolderTo(
     wallpaper,
     path.join(outPath, name),
-    overwrite: ref.read(replaceFileProvider),
+    overwrite: settings.overwrite,
   );
 }
 
 /// Copies the whole wallpaper folder into [destDir], so the output stays a
 /// re-importable Wallpaper Engine wallpaper. For web, application, and anything
-/// else RePKG does not unpack. Takes [overwrite] rather than a provider so it
-/// can run inside a worker.
+/// else RePKG does not unpack.
 Future<String?> copyWallpaperFolderTo(
   WallpaperInfo wallpaper,
   String destDir, {
@@ -447,7 +439,6 @@ Future<String?> copyWallpaperFolderTo(
           await Directory(dest).create(recursive: true);
         }
       } else if (entity is File) {
-        // Respect the "replace existing" toggle: skip files already present.
         if (!overwrite && await File(dest).exists()) continue;
         final parent = path.dirname(dest);
         // list() can hand back a child before its parent.
@@ -486,6 +477,9 @@ Future<void> sweepStaleSceneDirs(String outPath) async {
   }
 }
 
+/// How many failed files an error message names before summarising the rest.
+const int _namedInError = 5;
+
 /// Moves every file under [from] into [to], keeping relative paths and taking a
 /// free name when another wallpaper already claimed one.
 Future<String?> moveExtractedInto(
@@ -522,8 +516,10 @@ Future<String?> moveExtractedInto(
   }
 
   if (failed.isEmpty) return null;
-  final String named = failed.take(5).join(', ');
-  final String rest = failed.length > 5 ? ' (+${failed.length - 5})' : '';
+  final String named = failed.take(_namedInError).join(', ');
+  final String rest = failed.length > _namedInError
+      ? ' (+${failed.length - _namedInError})'
+      : '';
   return '${tr(AppI10n.logMoveFileFailed)} $named$rest';
 }
 
@@ -534,10 +530,11 @@ Future<String?> moveExtractedInto(
 /// output folder. Giving each its own lets the batch run wallpapers at once.
 Future<String?> extractSceneToShared(
   WidgetRef ref,
+  ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
   FileNameClaims claims,
-  ({int concurrency, int threads, int memoryMb}) batchPlan, {
+  CancelToken token, {
   bool detailedProgress = false,
 }) async {
   final Directory temp = Directory(
@@ -555,18 +552,19 @@ Future<String?> extractSceneToShared(
   try {
     final String? err = await extractPKG(
       ref,
+      settings,
       wallpaper,
       temp.path,
-      batchPlan,
+      token,
       detailedProgress: detailedProgress,
     );
     if (err != null) return err;
     // A cancelled RePKG also returns null, and publishing then would mix a
     // fraction of a scene into the export folder under names indistinguishable
     // from real output. The finally below wipes the temp directory instead.
-    if (ref.read(activeCancelTokenProvider)?.isCancelled ?? false) return null;
+    if (token.isCancelled) return null;
     final String? cleanup = await deleteUselessFiles(
-      ref,
+      settings,
       temp.path,
       const <FileSystemEntity>[],
     );
@@ -612,57 +610,31 @@ Future<String> keepUnmovedFiles(
   }
 }
 
-/// Ceiling on the textures one RePKG converts at once. Past this, more threads
-/// bought almost nothing: a 15 texture scene ran 8.3s on eight and 4.8s on
-/// sixteen, for twice the memory.
-const int _maxTextureThreads = 8;
-
-/// Smallest share worth giving a worker. Below roughly this, every texture is
-/// larger than the whole share and conversions serialise.
-const int _minProcessMemoryMb = 192;
-
-/// How many textures one RePKG may convert at once, given how many wallpapers
-/// are already running side by side. Dividing keeps the two levels from
-/// multiplying, and scales with whatever the machine has: 2 threads each on a
-/// four core box, 8 on a sixteen core one.
-int textureThreads({required int cores, required int concurrency}) =>
-    max(1, cores ~/ max(1, concurrency)).clamp(1, _maxTextureThreads);
-
-/// How many wallpapers to extract at once, how many textures each may convert,
-/// and how much memory each is allowed to hold.
-///
-/// Decided once per batch and passed to the workers. It cannot be re-derived
-/// down there: the pool runs no more workers than there are wallpapers, so a
-/// worker that only knew the setting would size itself for company it does not
-/// have and take a fraction of the machine it actually owns.
-///
-/// Nothing here predicts what a wallpaper will cost, because nothing can: peak
-/// follows the size of the largest texture, and only RePKG sees that. It hands
-/// RePKG a ceiling and RePKG keeps to it.
-({int concurrency, int threads, int memoryMb}) extractPlan({
-  required int requested,
-  required int batchSize,
-  required int cores,
-  required int totalMemoryMb,
-}) {
-  final int concurrency = max(1, min(max(1, requested), batchSize));
-  return (
-    concurrency: concurrency,
-    threads: textureThreads(cores: cores, concurrency: concurrency),
-    memoryMb: max(_minProcessMemoryMb, totalMemoryMb ~/ concurrency),
-  );
-}
-
-/// The plan for this batch on this machine.
-({int concurrency, int threads, int memoryMb}) planFor(
-  WidgetRef ref,
-  int batchSize,
-) => extractPlan(
+ExtractPlan planFor(WidgetRef ref, int batchSize) => extractPlan(
   requested: ref.read(extractConcurrencyProvider),
   batchSize: batchSize,
   cores: Platform.numberOfProcessors,
   totalMemoryMb: ref.read(extractMemoryLimitProvider),
 );
+
+Future<ExtractSettings> readExtractSettings(
+  WidgetRef ref,
+  int batchSize,
+) async {
+  // Awaited once here rather than once per wallpaper.
+  final String? version = await ref.read(toolVersionProvider.future);
+  return ExtractSettings(
+    rePKGPath: ref.read(toolPathProvider),
+    excludeTexture: ref.read(excludeTextureProvider),
+    onlySaveImage: ref.read(onlySaveImageProvider),
+    deleteTransparency: ref.read(deleteTransparencyProvider),
+    overwrite: ref.read(replaceFileProvider),
+    useTitleName: ref.read(useTitleNameProvider),
+    newFlags: repkgSupportsExtractFlags(version),
+    supportsThreads: repkgSupportsThreads(version),
+    plan: planFor(ref, batchSize),
+  );
+}
 
 /// Builds RePKG's arguments for wallpaper mode.
 ///
@@ -742,33 +714,29 @@ void Function(String) _sceneProgressReporter(WidgetRef ref) {
 
 Future<String?> extractPKG(
   WidgetRef ref,
+  ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
-  ({int concurrency, int threads, int memoryMb}) batchPlan, {
+  CancelToken token, {
   bool detailedProgress = false,
 }) async {
   // No text write here: it set the same string the batch already set, and with
   // several workers running it just fought the others for the provider.
-  String rePKGPath = ref.read(toolPathProvider)!;
-  bool excludeTexture = ref.read(excludeTextureProvider);
-  bool onlySaveImage = ref.read(onlySaveImageProvider);
+  final String rePKGPath = settings.rePKGPath!;
   try {
-    final String? version = await ref.read(toolVersionProvider.future);
-    // Unsupported flags make an older RePKG exit 0 having written nothing.
     final List<String> args = wallpaperExtractArgs(
       target: wallpaper.target,
       outPath: outPath,
-      excludeTexture: excludeTexture,
-      onlySaveImage: onlySaveImage,
-      overwrite: ref.read(replaceFileProvider),
+      excludeTexture: settings.excludeTexture,
+      onlySaveImage: settings.onlySaveImage,
+      overwrite: settings.overwrite,
       detailedProgress: detailedProgress,
-      newFlags: repkgSupportsExtractFlags(version),
-      threads: repkgSupportsThreads(version) ? batchPlan.threads : null,
-      maxMemoryMb: repkgSupportsThreads(version) ? batchPlan.memoryMb : null,
+      newFlags: settings.newFlags,
+      threads: settings.supportsThreads ? settings.plan.threads : null,
+      maxMemoryMb: settings.supportsThreads ? settings.plan.memoryMb : null,
     );
     String fullCommand = '$rePKGPath ${args.join(' ')}';
     debugPrint('${tr(AppI10n.logRunCommand)} $fullCommand');
-    final token = ref.read(activeCancelTokenProvider) ?? CancelToken();
     final result = await runRePKG(
       rePKGPath,
       args,
@@ -833,7 +801,8 @@ Future<String?> extractVideo(
   WidgetRef ref,
   WallpaperInfo wallpaper,
   String outPath,
-  FileNameClaims claims, {
+  FileNameClaims claims,
+  CancelToken token, {
   bool detailedProgress = false,
 }) async {
   Stopwatch stopwatch = Stopwatch();
@@ -872,7 +841,7 @@ Future<String?> extractVideo(
           ),
         );
       },
-      cancelToken: ref.read(activeCancelTokenProvider),
+      cancelToken: token,
     );
   } catch (e) {
     // Only the placeholder claimFilePath created, never a file that was already

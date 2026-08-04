@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/provider/setting.dart';
 
 List<String> argsFor({

@@ -14,9 +14,7 @@ class CopyCancelled implements Exception {
 /// whole file has arrived.
 ///
 /// Writing straight to [destination] truncates it the moment the sink opens, so
-/// cancelling partway through replacing a file destroys the copy that was
-/// already there. Rename is atomic on NTFS, so until it runs the old file is
-/// untouched.
+/// a cancel partway through destroys the copy that was already there.
 Future<void> copyFileReplacing(
   File source,
   File destination, {
@@ -68,14 +66,13 @@ Future<void> _deleteQuietly(File file) async {
 /// Streams [source] into [destination], reporting progress at most once per
 /// [throttle], and always once at the end.
 ///
-/// Pass [cancelToken] to stop between chunks. Without one a cancelled batch
-/// still has to copy the whole file before it can report itself cancelled,
-/// which on a multi-gigabyte video is minutes of looking hung.
+/// [cancelToken] stops it between chunks; without one a cancelled batch still
+/// has to copy a multi-gigabyte video before it can say so.
 ///
-/// addStream rather than a listen loop, because IOSink.add never blocks: a fast
-/// read into a slow USB stick would buffer the whole difference in memory.
-/// Throttled because 64KB chunks mean a 3GB video fires ~50,000 events, and a
-/// provider write on each is most of the jank during a video export.
+/// addStream rather than a listen loop, because IOSink.add never blocks and a
+/// fast read into a slow USB stick would buffer the difference in memory.
+/// Throttled because a 3GB video fires ~50,000 chunks, and a provider write on
+/// each is most of the jank during an export.
 Future<void> copyFileWithProgress(
   File source,
   File destination, {
