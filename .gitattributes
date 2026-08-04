@@ -1,0 +1,3 @@
+# The Flutter tool rewrites this with LF on every Windows build, so with
+# core.autocrlf=true it shows as modified forever. Pin it to LF.
+windows/flutter/generated_plugins.cmake text eol=lf
