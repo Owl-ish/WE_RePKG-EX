@@ -20,7 +20,6 @@ class AppKeys {
   static const String toolPath = 'toolPath';
   static const String exportPath = 'exportPath';
   static const String sortType = 'sortType';
-  static const String earliestDate = 'earliestDate';
   static const String ctrlPressedIndex = 'ctrlPressedIndex';
   static const String theme = 'theme';
   static const String notificationType = 'notificationType';

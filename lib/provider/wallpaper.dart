@@ -16,7 +16,6 @@ part 'wallpaper.g.dart';
 class WallpaperList extends _$WallpaperList {
   @override
   List<WallpaperInfo> build() => [];
-  void add(WallpaperInfo value) => state = [...state, value];
 
   void addAll(List<WallpaperInfo> value) => state = [...state, ...value];
 
@@ -184,7 +183,6 @@ List<WallpaperInfo> filterWallpaperList(Ref ref) {
 class CurrentIndex extends _$CurrentIndex {
   @override
   int build() => 0;
-  void update(int value) => state = value;
   void reset() => state = 0;
   void increment() => state = state + 1;
 }

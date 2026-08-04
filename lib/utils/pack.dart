@@ -11,8 +11,6 @@ class PackInfo {
     _packageInfo = await PackageInfo.fromPlatform();
   }
 
-  static String get appName => _packageInfo.appName;
-
   static String getVersion() {
     String number = _packageInfo.buildNumber;
     String version = _packageInfo.version;

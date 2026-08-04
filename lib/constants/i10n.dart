@@ -178,7 +178,6 @@ class AppI10n {
   static const String logEmptyFile = 'log.emptyFile';
   static const String logNoInfo = 'log.noInfo';
   static const String logParseWallpaperSkipped = 'log.parseWallpaperSkipped';
-  static const String logVersion = 'log.version';
   static const String logDeleteCheckedFailed = 'log.deleteCheckedFailed';
   static const String logDeleteFileFailed = 'log.deleteFileFailed';
   static const String logDeletingFile = 'log.deletingFile';

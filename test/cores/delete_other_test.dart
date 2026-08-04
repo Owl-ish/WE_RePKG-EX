@@ -22,18 +22,23 @@ void main() {
     touch('keep.JPEG');
     touch('raw.tex');
 
-    expect(await deleteOther(out.path, const []), isNull);
+    expect(await deleteOther(out.path), isNull);
 
     expect(File('${out.path}\\keep.png').existsSync(), isTrue);
     expect(File('${out.path}\\keep.JPEG').existsSync(), isTrue);
     expect(File('${out.path}\\raw.tex').existsSync(), isFalse);
   });
 
-  test('leaves a file that was already there alone', () async {
-    final File mine = touch('notes.txt');
+  // A path with a dot in a directory name still resolves by its extension.
+  test('judges by the extension, not the rest of the path', () async {
+    Directory('${out.path}\\my.stuff').createSync();
+    File('${out.path}\\my.stuff\\keep.png').writeAsStringSync('x');
+    touch('raw.tex');
 
-    expect(await deleteOther(out.path, <FileSystemEntity>[mine]), isNull);
-    expect(mine.existsSync(), isTrue);
+    expect(await deleteOther(out.path), isNull);
+
+    expect(File('${out.path}\\my.stuff\\keep.png').existsSync(), isTrue);
+    expect(File('${out.path}\\raw.tex').existsSync(), isFalse);
   });
 
   // The caller shows a success toast on null, so a file it could not remove has
@@ -45,7 +50,7 @@ void main() {
     final RandomAccessFile handle = locked.openSync(mode: FileMode.write);
     addTearDown(handle.closeSync);
 
-    final String? err = await deleteOther(out.path, const []);
+    final String? err = await deleteOther(out.path);
 
     expect(err, isNotNull);
     expect(err, contains('locked.tex'));

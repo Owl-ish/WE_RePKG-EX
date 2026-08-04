@@ -71,14 +71,7 @@ class ToolVersion extends _$ToolVersion {
 class EarliestTime extends _$EarliestTime {
   @override
   String? build() => null;
-  Future<void> update(String? value) async {
-    state = value;
-    if (state == null) {
-      await StorageUtil.remove(AppKeys.earliestDate);
-    } else {
-      await StorageUtil.setString(AppKeys.earliestDate, state!);
-    }
-  }
+  void update(String? value) => state = value;
 }
 
 @Riverpod(keepAlive: true)

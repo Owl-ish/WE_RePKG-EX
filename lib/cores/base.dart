@@ -280,14 +280,13 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
 Future<String?> deleteUselessFiles(
   ExtractSettings settings,
   String outPath,
-  List<FileSystemEntity> oldFiles,
 ) async {
   final bool onlySaveImage = settings.onlySaveImage;
   final bool excludeTexture = settings.excludeTexture;
   final bool deleteTransparency = settings.deleteTransparency;
   String? err;
   if (onlySaveImage && !excludeTexture) {
-    err = await deleteOther(outPath, oldFiles);
+    err = await deleteOther(outPath);
   } else if (excludeTexture) {
     err = await deleteOtherAndTexture(outPath);
   }
@@ -299,39 +298,28 @@ Future<String?> deleteUselessFiles(
         .whereType<File>()
         .map((file) => file.path)
         .toList();
-    List<String> oldFilePaths = oldFiles.map((file) => file.path).toList();
-    err = await deleteTransparentPngs(filePaths, excludeFiles: oldFilePaths);
+    err = await deleteTransparentPngs(filePaths);
   }
   return err;
 }
 
-Future<String?> deleteOther(
-  String outPath,
-  List<FileSystemEntity> oldFiles,
-) async {
-  List<String> allFile = oldFiles.map((e) => e.path).toList();
+Future<String?> deleteOther(String outPath) async {
   try {
     Directory folder = Directory(outPath);
     List<FileSystemEntity> files = await folder.list().toList();
     final List<String?> results = await Future.wait(
-      files
-          .where((file) {
-            if (file is File) {
-              String ext = file.path.split('.').last.toLowerCase();
-              return !isImage(ext) && !allFile.contains(file.path);
-            }
-            return false;
-          })
-          .map((file) async {
-            try {
-              debugPrint('${tr(AppI10n.logDeletingFile)} ${file.path}');
-              await file.delete();
-            } catch (e) {
-              debugPrint('${tr(AppI10n.logDeleteFileFailed)} ${file.path}: $e');
-              return '${file.path} ${tr(AppI10n.dialogDeleteFailed)} $e';
-            }
-            return null;
-          }),
+      files.where((file) => file is File && !isImage(file.path)).map((
+        file,
+      ) async {
+        try {
+          debugPrint('${tr(AppI10n.logDeletingFile)} ${file.path}');
+          await file.delete();
+        } catch (e) {
+          debugPrint('${tr(AppI10n.logDeleteFileFailed)} ${file.path}: $e');
+          return '${file.path} ${tr(AppI10n.dialogDeleteFailed)} $e';
+        }
+        return null;
+      }),
     );
     // 每个文件的失败都要上报: 调用方在返回null时会显示成功提示
     final List<String> failed = results.whereType<String>().toList();
@@ -403,17 +391,9 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
   return null;
 }
 
-Future<String?> deleteTransparentPngs(
-  List<String> files, {
-  List<String> excludeFiles = const [],
-}) async {
-  // 使用Set提高排除文件查找性能
-  Set<String> excludeSet = excludeFiles.toSet();
+Future<String?> deleteTransparentPngs(List<String> files) async {
   List<String> pngs = files
-      .where(
-        (file) =>
-            file.toLowerCase().endsWith('.png') && !excludeSet.contains(file),
-      )
+      .where((file) => file.toLowerCase().endsWith('.png'))
       .toList();
   if (pngs.isEmpty) return null;
   // 调用Rust函数进行批量透明度检测和删除

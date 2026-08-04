@@ -526,7 +526,7 @@ void main() {
         makeWallpaper('newer', createTime: DateTime(2024, 2, 2)),
         makeWallpaper('newest', createTime: DateTime(2024, 8, 8)),
       ]);
-      await container.read(earliestTimeProvider.notifier).update('2023-05-01');
+      container.read(earliestTimeProvider.notifier).update('2023-05-01');
 
       final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
       expect(ids, ['newest', 'newer', 'bulkA', 'bulkB']);

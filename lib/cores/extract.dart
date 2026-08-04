@@ -563,11 +563,7 @@ Future<String?> extractSceneToShared(
     // fraction of a scene into the export folder under names indistinguishable
     // from real output. The finally below wipes the temp directory instead.
     if (token.isCancelled) return null;
-    final String? cleanup = await deleteUselessFiles(
-      settings,
-      temp.path,
-      const <FileSystemEntity>[],
-    );
+    final String? cleanup = await deleteUselessFiles(settings, temp.path);
     if (cleanup != null) return cleanup;
 
     final String? moved = await moveExtractedInto(temp.path, outPath, claims);

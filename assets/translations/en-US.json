@@ -156,7 +156,6 @@
     "emptyFile": "Empty file:",
     "noInfo": "has no ACF info",
     "parseWallpaperSkipped": "Failed to parse wallpaper, skipped:",
-    "version": "Version:",
     "deleteCheckedFailed": "Failed to delete selection:",
     "deleteFileFailed": "Failed to delete file:",
     "deletingFile": "Deleting file:",

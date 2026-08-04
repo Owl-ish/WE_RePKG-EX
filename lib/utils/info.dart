@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
@@ -110,17 +109,6 @@ bool isImage(String filePath) {
   List<String> imgs = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   String ext = filePath.split('.').last.toLowerCase();
   return imgs.contains(ext);
-}
-
-IconData getThemeModeIcon(ThemeMode mode) {
-  switch (mode) {
-    case ThemeMode.light:
-      return Icons.light_mode_rounded;
-    case ThemeMode.dark:
-      return Icons.dark_mode_rounded;
-    case ThemeMode.system:
-      return Icons.brightness_4_rounded;
-  }
 }
 
 Future<bool> toolExist(String? toolPath) async {

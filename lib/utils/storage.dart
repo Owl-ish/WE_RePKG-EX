@@ -84,5 +84,4 @@ class StorageUtil {
   static int? getInt(String key) => _prefs.getInt(key);
 
   static Future<bool> remove(String key) => _prefs.remove(key);
-  static Future<bool> clear() => _prefs.clear();
 }

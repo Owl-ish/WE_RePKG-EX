@@ -41,7 +41,7 @@ final class WallpaperListProvider
   }
 }
 
-String _$wallpaperListHash() => r'48f35f33e5386b90c1bd4da7699d573dc8c0a79a';
+String _$wallpaperListHash() => r'56442ba8dea795b612487b4deaeb19ea84d68cc9';
 
 abstract class _$WallpaperList extends $Notifier<List<WallpaperInfo>> {
   List<WallpaperInfo> build();
@@ -321,7 +321,7 @@ final class CurrentIndexProvider extends $NotifierProvider<CurrentIndex, int> {
   }
 }
 
-String _$currentIndexHash() => r'67cf7267bd4b3f62e23625c6b2a7f56de369077c';
+String _$currentIndexHash() => r'ca6669ca239f0ac46f386125140680c52ffacf3c';
 
 /// How many wallpapers in the batch have finished, 0..total. A count, not a
 /// cursor: with several in flight, completions arrive out of order.

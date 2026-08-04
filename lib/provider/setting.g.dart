@@ -688,6 +688,11 @@ abstract class _$MaximizeOpen extends $Notifier<bool> {
 /// Four by default rather than the core count: RePKG is as much disk-bound as
 /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
 /// Users on fast NVMe can raise it.
+///
+/// Eight at the top. A batch takes as long as its slowest wallpaper, so past a
+/// handful the extra workers finish early and wait, and the cores each RePKG
+/// gets for its own textures are divided by this number: at sixteen every one
+/// of them is down to a single thread.
 
 @ProviderFor(ExtractConcurrency)
 final extractConcurrencyProvider = ExtractConcurrencyProvider._();
@@ -697,6 +702,11 @@ final extractConcurrencyProvider = ExtractConcurrencyProvider._();
 /// Four by default rather than the core count: RePKG is as much disk-bound as
 /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
 /// Users on fast NVMe can raise it.
+///
+/// Eight at the top. A batch takes as long as its slowest wallpaper, so past a
+/// handful the extra workers finish early and wait, and the cores each RePKG
+/// gets for its own textures are divided by this number: at sixteen every one
+/// of them is down to a single thread.
 final class ExtractConcurrencyProvider
     extends $NotifierProvider<ExtractConcurrency, int> {
   /// How many wallpapers extract at once.
@@ -704,6 +714,11 @@ final class ExtractConcurrencyProvider
   /// Four by default rather than the core count: RePKG is as much disk-bound as
   /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
   /// Users on fast NVMe can raise it.
+  ///
+  /// Eight at the top. A batch takes as long as its slowest wallpaper, so past a
+  /// handful the extra workers finish early and wait, and the cores each RePKG
+  /// gets for its own textures are divided by this number: at sixteen every one
+  /// of them is down to a single thread.
   ExtractConcurrencyProvider._()
     : super(
         from: null,
@@ -732,13 +747,18 @@ final class ExtractConcurrencyProvider
 }
 
 String _$extractConcurrencyHash() =>
-    r'cc93bc7511d6048f76b2209ebb641706d429f36d';
+    r'7c5121c3aeb338d637503012201c28ed99fd2d25';
 
 /// How many wallpapers extract at once.
 ///
 /// Four by default rather than the core count: RePKG is as much disk-bound as
 /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
 /// Users on fast NVMe can raise it.
+///
+/// Eight at the top. A batch takes as long as its slowest wallpaper, so past a
+/// handful the extra workers finish early and wait, and the cores each RePKG
+/// gets for its own textures are divided by this number: at sixteen every one
+/// of them is down to a single thread.
 
 abstract class _$ExtractConcurrency extends $Notifier<int> {
   int build();
@@ -810,7 +830,7 @@ final class ExtractMemoryLimitProvider
 }
 
 String _$extractMemoryLimitHash() =>
-    r'46520cce7dfefb9c51dbbb9b57f9a10f9b997b54';
+    r'76cfb26d6d8afa2ece7f220ab1a18334975d837f';
 
 /// Total megabytes extraction may hold at once, shared between however many
 /// wallpapers run side by side.

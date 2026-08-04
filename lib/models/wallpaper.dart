@@ -25,34 +25,6 @@ class WallpaperInfo {
     required this.size,
   });
 
-  WallpaperInfo copyWith({
-    String? id,
-    String? title,
-    String? contentRating,
-    List<String>? tags,
-    String? previews,
-    String? type,
-    int? updateTime,
-    DateTime? createTime,
-    String? target,
-    String? folder,
-    int? size,
-  }) {
-    return WallpaperInfo(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      contentRating: contentRating ?? this.contentRating,
-      tags: tags ?? this.tags,
-      previews: previews ?? this.previews,
-      type: type ?? this.type,
-      updateTime: updateTime ?? this.updateTime,
-      createTime: createTime ?? this.createTime,
-      target: target ?? this.target,
-      folder: folder ?? this.folder,
-      size: size ?? this.size,
-    );
-  }
-
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
