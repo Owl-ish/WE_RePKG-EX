@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
-import 'package:we_repkg/utils/tool.dart';
 
 /// Body of the top level function named [name], up to the next declaration in
 /// column 0. Nothing here depends on the return type or on which function is
@@ -26,10 +25,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tmp;
-  setUp(() {
-    resetClaimCache();
-    tmp = Directory.systemTemp.createTempSync('preview_policy');
-  });
+  setUp(() => tmp = Directory.systemTemp.createTempSync('preview_policy'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   WallpaperInfo wallpaper({required String previews}) => WallpaperInfo(

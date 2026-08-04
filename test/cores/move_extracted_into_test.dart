@@ -10,7 +10,6 @@ void main() {
   late Directory to;
 
   setUp(() {
-    resetClaimCache();
     root = Directory.systemTemp.createTempSync('move_extracted');
     from = Directory('${root.path}\\from')..createSync();
     to = Directory('${root.path}\\to')..createSync();

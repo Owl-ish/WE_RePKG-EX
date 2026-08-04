@@ -55,8 +55,12 @@ class FileNameClaims {
   /// Lower-cased, because Windows resolves two spellings to the same file.
   final Set<String> _taken = <String>{};
 
+  /// Where probing for a free name last stopped, so exporting N colliding files
+  /// costs N attempts rather than N^2.
+  final Map<String, int> _resume = <String, int>{};
+
   Future<String> claim(String filePath) async {
-    if (!overwrite) return claimFilePath(filePath);
+    if (!overwrite) return claimFilePath(filePath, resume: _resume);
 
     final String dirPath = path.dirname(filePath);
     final String fileName = path.basename(filePath);
@@ -73,27 +77,22 @@ class FileNameClaims {
   }
 }
 
-/// Highest suffix index already claimed, keyed by directory + stem + extension.
-/// Lets [claimFilePath] resume probing instead of restarting at 1.
-final Map<String, int> _claimIndexCache = {};
-
-/// Clears the suffix cache. For tests, and for any caller that deletes output
-/// files behind [claimFilePath]'s back and wants low indices reconsidered.
-void resetClaimCache() => _claimIndexCache.clear();
-
 // 写一个重命名文件名的方法，先检测文件是否已存在，存在就在文件名后面加“-1”，如果“-1”也存在，就加“-2”，以此类推
 /// Atomically reserves a free filename near [filePath] and returns it.
 ///
 /// Creates a zero-byte placeholder with `exclusive: true`, so testing the name
-/// and taking it are a single filesystem operation. The previous version probed
-/// for a free name and returned it without creating anything, which is a
-/// time-of-check to time-of-use race: once extraction runs several wallpapers at
-/// once into one shared export folder, two workers can both be handed
-/// "cover.png" and one silently overwrites the other.
+/// and taking it are a single filesystem operation. Probing for a free name and
+/// returning it without creating anything is a time-of-check to time-of-use
+/// race: with several wallpapers extracting into one export folder, two workers
+/// can both be handed "cover.png" and one silently overwrites the other.
 ///
-/// The suffix cache resumes where the last claim for this name stopped, so
-/// exporting N colliding files costs N attempts rather than N^2.
-Future<String> claimFilePath(String filePath) async {
+/// Pass [resume] to carry the last suffix reached between calls. Callers that
+/// delete output behind this function's back should not, or low indices are
+/// never reconsidered.
+Future<String> claimFilePath(
+  String filePath, {
+  Map<String, int>? resume,
+}) async {
   final String dirPath = path.dirname(filePath);
   final String fileName = path.basename(filePath);
   // Split off only the last extension so multi-dot names ("a.b.c.mp4") and
@@ -104,14 +103,14 @@ Future<String> claimFilePath(String filePath) async {
   // in a space cannot collide with a stem that starts with one.
   final String cacheKey = '$dirPath|$stem|$ext';
 
-  int index = _claimIndexCache[cacheKey] ?? 0;
+  int index = resume?[cacheKey] ?? 0;
   while (true) {
     final String candidate = index == 0
         ? path.join(dirPath, fileName)
         : path.join(dirPath, '$stem-$index$ext');
     try {
       await File(candidate).create(exclusive: true);
-      _claimIndexCache[cacheKey] = index;
+      resume?[cacheKey] = index;
       return candidate;
     } on FileSystemException {
       // Distinguish "name already taken" from a real failure such as a missing

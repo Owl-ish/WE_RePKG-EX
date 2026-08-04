@@ -58,12 +58,7 @@ void main() {
 
   group('claimFilePath', () {
     late Directory tmp;
-    setUp(() {
-      // claimFilePath keeps a module-level suffix cache, so tests must not
-      // inherit indices from each other.
-      resetClaimCache();
-      tmp = Directory.systemTemp.createTempSync('we_repkg_test');
-    });
+    setUp(() => tmp = Directory.systemTemp.createTempSync('we_repkg_test'));
     tearDown(() => tmp.deleteSync(recursive: true));
 
     test('returns the same path when nothing exists there', () async {
@@ -162,6 +157,22 @@ void main() {
         claimFilePath(missing),
         throwsA(isA<FileSystemException>()),
       );
+    });
+
+    // The batch carries a resume map so N colliding files cost N probes rather
+    // than N^2. The exclusive create is what keeps names unique, so what this
+    // guards is the map staying in step: resuming past the last index taken
+    // would leave gaps in the run.
+    test('resuming between claims still gives each one its own name', () async {
+      final claims = FileNameClaims(overwrite: false);
+      final source = p.join(tmp.path, 'frame.png');
+
+      final handed = <String>[
+        for (int i = 0; i < 50; i++) await claims.claim(source),
+      ];
+
+      expect(handed.toSet().length, 50);
+      expect(handed.last, p.join(tmp.path, 'frame-49.png'));
     });
   });
 }
