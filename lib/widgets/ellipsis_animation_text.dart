@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 省略号动画文本组件
-class EllipsisAnimationText extends ConsumerStatefulWidget {
+class EllipsisAnimationText extends StatefulWidget {
   final String text;
   final TextStyle? style;
   final Duration animationDuration;
@@ -15,14 +14,14 @@ class EllipsisAnimationText extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<EllipsisAnimationText> createState() =>
-      _EllipsisAnimationTextState();
+  State<EllipsisAnimationText> createState() => _EllipsisAnimationTextState();
 }
 
-class _EllipsisAnimationTextState extends ConsumerState<EllipsisAnimationText>
-    with TickerProviderStateMixin {
-  late AnimationController _ellipsisController;
-  late Animation<int> _ellipsisAnimation;
+class _EllipsisAnimationTextState extends State<EllipsisAnimationText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ellipsisController;
+  late final Animation<int> _ellipsisAnimation;
+  int _dots = 0;
 
   @override
   void initState() {
@@ -31,13 +30,22 @@ class _EllipsisAnimationTextState extends ConsumerState<EllipsisAnimationText>
     _ellipsisController = AnimationController(
       duration: widget.animationDuration,
       vsync: this,
-    )..repeat();
+    );
 
     // 整数动画，范围从0到6，表示省略号的数量
     _ellipsisAnimation = IntTween(
       begin: 0,
       end: 6,
     ).animate(_ellipsisController);
+    // Rebuilt on the seven values it actually shows, not on all ~72 ticks of
+    // the cycle. This runs throughout a scan and an extraction, when the CPU
+    // has better things to do.
+    _ellipsisAnimation.addListener(() {
+      if (_ellipsisAnimation.value != _dots) {
+        setState(() => _dots = _ellipsisAnimation.value);
+      }
+    });
+    _ellipsisController.repeat();
   }
 
   @override
@@ -48,14 +56,9 @@ class _EllipsisAnimationTextState extends ConsumerState<EllipsisAnimationText>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ellipsisAnimation,
-      builder: (context, child) {
-        return Text(
-          '${widget.text}${'.' * _ellipsisAnimation.value}',
-          style: widget.style ?? Theme.of(context).textTheme.bodyMedium,
-        );
-      },
+    return Text(
+      '${widget.text}${'.' * _dots}',
+      style: widget.style ?? Theme.of(context).textTheme.bodyMedium,
     );
   }
 }

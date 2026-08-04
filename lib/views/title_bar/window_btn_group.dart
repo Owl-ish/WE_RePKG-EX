@@ -10,10 +10,19 @@ class WindowBtnGroup extends StatefulWidget {
 }
 
 class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
+  // Kept here rather than asked for in build. A FutureBuilder over
+  // isMaximized() fired a method channel call on every rebuild and had no
+  // answer for the first frame of each one, so the restore button flashed
+  // back to the maximize icon whenever anything above it rebuilt.
+  bool _maximized = false;
+
   @override
   void initState() {
     windowManager.addListener(this);
     super.initState();
+    windowManager.isMaximized().then((value) {
+      if (mounted) setState(() => _maximized = value);
+    });
   }
 
   @override
@@ -23,14 +32,10 @@ class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
   }
 
   @override
-  void onWindowMaximize() {
-    setState(() {});
-  }
+  void onWindowMaximize() => setState(() => _maximized = true);
 
   @override
-  void onWindowUnmaximize() {
-    setState(() {});
-  }
+  void onWindowUnmaximize() => setState(() => _maximized = false);
 
   @override
   Widget build(BuildContext context) {
@@ -49,28 +54,14 @@ class _WindowBtnGroupState extends State<WindowBtnGroup> with WindowListener {
             }
           },
         ),
-        FutureBuilder<bool>(
-          future: windowManager.isMaximized(),
-          builder: (BuildContext context, AsyncSnapshot<bool> snapshot) {
-            IconData icon = snapshot.data == true
-                ? Icons.filter_none
-                : Icons.crop_square;
-            double size = snapshot.data == true ? 14 : 16;
-            void Function() onTap = snapshot.data == true
-                ? () {
-                    windowManager.unmaximize();
-                  }
-                : () {
-                    windowManager.maximize();
-                  };
-            return AppIconButton(
-              width: 40,
-              height: 32,
-              iconSize: size,
-              icon: icon,
-              onPressed: onTap,
-            );
-          },
+        AppIconButton(
+          width: 40,
+          height: 32,
+          iconSize: _maximized ? 14 : 16,
+          icon: _maximized ? Icons.filter_none : Icons.crop_square,
+          onPressed: _maximized
+              ? windowManager.unmaximize
+              : windowManager.maximize,
         ),
         AppIconButton(
           width: 40,
