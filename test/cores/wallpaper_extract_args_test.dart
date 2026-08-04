@@ -179,6 +179,25 @@ void main() {
       );
       expect(plan.memoryMb, greaterThanOrEqualTo(192));
     });
+
+    // The floor used to be applied after the split, so a small ceiling and a
+    // high concurrency handed out more in total than the user had allowed:
+    // 8 workers on a 256MB ceiling took the 192MB floor each, 1.5GB in all.
+    test('the workers together stay inside the ceiling', () {
+      for (final int limit in <int>[256, 512, 1024, 4096, 16384]) {
+        final plan = extractPlan(
+          requested: 8,
+          batchSize: 50,
+          cores: 16,
+          totalMemoryMb: limit,
+        );
+        expect(
+          plan.concurrency * plan.memoryMb,
+          lessThanOrEqualTo(limit),
+          reason: 'ceiling of $limit',
+        );
+      }
+    });
   });
 
   group('suggesting a ceiling for the machine', () {

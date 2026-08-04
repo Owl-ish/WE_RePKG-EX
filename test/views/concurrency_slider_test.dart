@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/setting/concurrency_slider.dart';
 
-// The estimate reads the machine's memory over FFI. A throw there would take the
-// whole settings page with it, and no other test builds this widget.
+// Slider asserts its value sits inside min..max, and no other test builds this
+// widget, so a stored value the range no longer covers would first show up as a
+// blank settings page.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -33,6 +35,38 @@ void main() {
     // the test unless it is let run.
     await tester.pump(const Duration(milliseconds: 1));
   }
+
+  // The range used to reach 16, so anyone who moved the slider up before this
+  // has a stored value the Slider would now assert on. Seeded through prefs
+  // because the notifier clamps on the way in and could never store one.
+  group('a value stored under the old wider range', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        AppKeys.extractConcurrency: 16,
+      });
+      await StorageUtil.init();
+    });
+
+    testWidgets('still draws, pulled back to the top of the range', (
+      tester,
+    ) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: ConcurrencySlider())),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        container.read(extractConcurrencyProvider),
+        ExtractConcurrency.max,
+      );
+    });
+  });
 
   testWidgets('builds', (tester) async {
     await pump(tester, 4);

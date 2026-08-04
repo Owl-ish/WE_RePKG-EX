@@ -144,10 +144,15 @@ class MaximizeOpen extends _$MaximizeOpen {
 /// Four by default rather than the core count: RePKG is as much disk-bound as
 /// CPU-bound, and on a spinning disk more parallelism makes a batch slower.
 /// Users on fast NVMe can raise it.
+///
+/// Eight at the top. A batch takes as long as its slowest wallpaper, so past a
+/// handful the extra workers finish early and wait, and the cores each RePKG
+/// gets for its own textures are divided by this number: at sixteen every one
+/// of them is down to a single thread.
 @riverpod
 class ExtractConcurrency extends _$ExtractConcurrency {
   static const int min = 1;
-  static const int max = 16;
+  static const int max = 8;
   static const int defaultValue = 4;
 
   @override

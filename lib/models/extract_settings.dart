@@ -42,7 +42,14 @@ ExtractPlan extractPlan({
   required int cores,
   required int totalMemoryMb,
 }) {
-  final int concurrency = max(1, min(max(1, requested), batchSize));
+  // Bounded by the ceiling as well as the setting. A share stops shrinking at
+  // the floor, so beyond this many workers the total they hold climbs back
+  // above what the user asked for.
+  final int affordable = totalMemoryMb ~/ _minProcessMemoryMb;
+  final int concurrency = max(
+    1,
+    <int>[max(1, requested), batchSize, affordable].reduce(min),
+  );
   return ExtractPlan(
     concurrency: concurrency,
     threads: textureThreads(cores: cores, concurrency: concurrency),
