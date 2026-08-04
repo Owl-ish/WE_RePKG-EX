@@ -23,9 +23,7 @@ class ToolPathInput extends ConsumerWidget {
           child: FolderInput(
             height: 32,
             fontSize: 13,
-            controller: TextEditingController(
-              text: ref.watch(toolPathProvider),
-            ),
+            text: ref.watch(toolPathProvider),
             hintText: tr(AppI10n.settingConfigToolPathTip),
             onPressed: () async => await setToolPath(ref),
           ),

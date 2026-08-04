@@ -21,7 +21,7 @@ class ToggleInput extends ConsumerWidget {
         : AppI10n.settingConfigProjectPathTip;
     return Expanded(
       child: FolderInput(
-        controller: TextEditingController(text: text),
+        text: text,
         hintText: tr(hintText),
         onPressed: () async => extractType.isWallpaper
             ? await setExportPath(ref)

@@ -23,7 +23,7 @@ class AcfPathInput extends ConsumerWidget {
           child: FolderInput(
             height: 32,
             fontSize: 13,
-            controller: TextEditingController(text: ref.watch(acfPathProvider)),
+            text: ref.watch(acfPathProvider),
             hintText: tr(AppI10n.settingConfigAcfPathTip),
             onPressed: () async => await setAcfPath(ref),
           ),

@@ -43,9 +43,7 @@ class EmptyView extends ConsumerWidget {
                     width: double.infinity,
                     height: 40,
                     fontSize: 14,
-                    controller: TextEditingController(
-                      text: ref.watch(wallpaperPathProvider),
-                    ),
+                    text: ref.watch(wallpaperPathProvider),
                     hintText: tr(AppI10n.settingConfigWallpapersPathTip),
                     onPressed: () async => await setWallpaperPath(ref),
                   ),

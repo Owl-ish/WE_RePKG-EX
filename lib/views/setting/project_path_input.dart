@@ -23,9 +23,7 @@ class ProjectPathInput extends ConsumerWidget {
           child: FolderInput(
             height: 32,
             fontSize: 13,
-            controller: TextEditingController(
-              text: ref.watch(projectPathProvider),
-            ),
+            text: ref.watch(projectPathProvider),
             hintText: tr(AppI10n.settingConfigProjectPathTip),
             onPressed: () => setProjectPath(ref),
           ),

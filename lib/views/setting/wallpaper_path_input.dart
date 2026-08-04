@@ -23,9 +23,7 @@ class WallpaperPathInput extends ConsumerWidget {
           child: FolderInput(
             height: 32,
             fontSize: 13,
-            controller: TextEditingController(
-              text: ref.watch(wallpaperPathProvider),
-            ),
+            text: ref.watch(wallpaperPathProvider),
             hintText: tr(AppI10n.settingConfigWallpapersPathTip),
             onPressed: () => setWallpaperPath(ref),
           ),
