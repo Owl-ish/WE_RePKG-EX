@@ -5,7 +5,6 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/system.dart';
-import 'package:we_repkg/widgets/circular_progress.dart';
 import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 
@@ -23,7 +22,13 @@ class EmptyView extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: runState.isInitial
             ? [
-                EasyCircularProgress(size: 80),
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: CircularProgressIndicator(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
                 EllipsisAnimationText(text: tr(AppI10n.loading)),
               ]
             : [

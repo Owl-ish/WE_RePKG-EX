@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:we_repkg/config/custom_theme.dart';
 
 /// A labelled slider over a whole-number setting, with its current value shown
 /// beside the title and an explanatory line underneath.
@@ -26,7 +27,8 @@ class SettingSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextStyle? bodyMedium = Theme.of(context).textTheme.bodyMedium;
+    final ThemeData theme = Theme.of(context);
+    final TextStyle? bodyMedium = theme.textTheme.bodyMedium;
     final String display = '$value$unit';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -39,7 +41,7 @@ class SettingSlider extends StatelessWidget {
               Text(display, style: bodyMedium),
             ],
           ),
-          Text(tip, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          Text(tip, style: theme.meta.captionStyle),
           Slider(
             value: value.toDouble(),
             min: min.toDouble(),

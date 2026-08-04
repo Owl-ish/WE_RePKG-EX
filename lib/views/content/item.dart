@@ -7,6 +7,7 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
@@ -103,26 +104,22 @@ class _ImageItemState extends ConsumerState<ImageItem>
       await StorageUtil.setInt(AppKeys.ctrlPressedIndex, widget.index);
       ref.read(checkedIdsProvider.notifier).toggle(wallpaper.id);
     } else if (isShiftPressed) {
-      int beginIndex = 0, endIndex = widget.index;
-      List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
-      List<WallpaperInfo> checkedList = ref.read(checkedWallpaperListProvider);
-      if (checkedList.isNotEmpty) {
-        beginIndex =
-            StorageUtil.getInt(AppKeys.ctrlPressedIndex) ??
-            list.indexOf(checkedList.last);
-        if (widget.index < beginIndex) {
-          endIndex = beginIndex;
-          beginIndex = widget.index;
-        }
-      }
+      final List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
+      final List<WallpaperInfo> checked = ref.read(
+        checkedWallpaperListProvider,
+      );
+      final int? anchor = checked.isEmpty
+          ? null
+          : StorageUtil.getInt(AppKeys.ctrlPressedIndex) ??
+                list.indexOf(checked.last);
       await StorageUtil.remove(AppKeys.ctrlPressedIndex);
-      // The stored anchor index can outlive the list it referred to (changing
-      // the filter or the search term reshuffles it), so clamp before slicing
-      // rather than letting sublist throw RangeError.
-      beginIndex = beginIndex.clamp(0, list.length - 1);
-      endIndex = endIndex.clamp(beginIndex, list.length - 1);
+      final range = shiftRange(
+        anchor: anchor,
+        target: widget.index,
+        count: list.length,
+      );
       final ids = list
-          .sublist(beginIndex, endIndex + 1)
+          .sublist(range.begin, range.end + 1)
           .map((e) => e.id)
           .toSet();
       ref.read(checkedIdsProvider.notifier).setAll(ids, true);
@@ -176,7 +173,7 @@ class _ImageItemState extends ConsumerState<ImageItem>
             decoration: BoxDecoration(
               // The shadow has to know the radius too, or it keeps painting
               // square corners behind the rounded tile.
-              borderRadius: BorderRadius.circular(LayoutNums.tileRadius),
+              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: .5),
@@ -188,7 +185,7 @@ class _ImageItemState extends ConsumerState<ImageItem>
             // Clips the whole stack at once, so the preview, the hover scrim
             // and the title strip along the bottom all take the same corners.
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(LayoutNums.tileRadius),
+              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
               clipBehavior: Clip.hardEdge,
               child: Stack(
                 children: [

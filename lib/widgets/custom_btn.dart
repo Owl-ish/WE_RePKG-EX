@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/constants/nums.dart';
 
 class CustomBtn extends StatelessWidget {
   const CustomBtn({super.key, required this.label, this.onPressed})
@@ -41,7 +42,9 @@ class CustomBtn extends StatelessWidget {
         disabledForegroundColor: foreground.withValues(alpha: .5),
         elevation: 0,
         side: BorderSide(color: border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+        ),
         enabledMouseCursor: SystemMouseCursors.click,
       ),
       child: Text(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:we_repkg/constants/nums.dart';
 
 class CustomInput extends StatelessWidget {
   const CustomInput({
@@ -12,8 +13,6 @@ class CustomInput extends StatelessWidget {
     this.leading,
     this.suffix,
     this.readOnly = false,
-    this.onPressed,
-    this.onChanged,
     this.extraIcon,
   });
 
@@ -26,8 +25,6 @@ class CustomInput extends StatelessWidget {
   final Widget? leading;
   final Widget? suffix;
   final bool readOnly;
-  final void Function()? onPressed;
-  final void Function(String)? onChanged;
   final Widget? extraIcon;
 
   @override
@@ -38,7 +35,7 @@ class CustomInput extends StatelessWidget {
       height: height ?? 36,
       padding: padding ?? EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
         color: theme.inputDecorationTheme.fillColor,
       ),
       alignment: Alignment.center,
@@ -57,13 +54,11 @@ class CustomInput extends StatelessWidget {
                 hintText: hintText,
                 hintStyle: theme.inputDecorationTheme.hintStyle,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
                   borderSide: BorderSide.none,
                 ),
-                // contentPadding: EdgeInsets.symmetric(horizontal: 12),
                 isCollapsed: true,
               ),
-              onChanged: onChanged,
             ),
           ),
           ?extraIcon,

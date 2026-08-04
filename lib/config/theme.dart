@@ -15,9 +15,6 @@ class AppTheme {
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
       inputDecorationTheme: InputDecorationTheme(fillColor: Colors.white),
-      // menuStyle: MenuStyle(
-      //   backgroundColor: WidgetStateProperty.all(Colors.white),
-      // ),
     ),
     dividerColor: Color(0xFFE0E0E0),
     iconButtonTheme: IconButtonThemeData(
@@ -42,18 +39,7 @@ class AppTheme {
         foregroundColor: Colors.white,
       ),
       ToastTheme(backgroundColor: Colors.white),
-      MetaTheme(
-        largeStyle: TextStyle(
-          color: Color(0xFF666666),
-          fontSize: 16,
-          fontFamily: 'Microsoft YaHei',
-        ),
-        mediumStyle: TextStyle(
-          color: Color(0xFF666666),
-          fontSize: 14,
-          fontFamily: 'Microsoft YaHei',
-        ),
-      ),
+      MetaTheme.light,
     ],
   );
 
@@ -69,9 +55,6 @@ class AppTheme {
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
       inputDecorationTheme: InputDecorationTheme(fillColor: Color(0xFF2D2D2D)),
-      // menuStyle: MenuStyle(
-      //   backgroundColor: WidgetStateProperty.all(Color(0xFF333333)),
-      // ),
     ),
     dividerColor: Color(0xFF404040),
     iconButtonTheme: IconButtonThemeData(
@@ -96,18 +79,7 @@ class AppTheme {
         foregroundColor: Color(0xFF222222),
       ),
       ToastTheme(backgroundColor: Color(0xFF222222)),
-      MetaTheme(
-        largeStyle: TextStyle(
-          color: Color(0xFFDDDDDD),
-          fontSize: 16,
-          fontFamily: 'Microsoft YaHei',
-        ),
-        mediumStyle: TextStyle(
-          color: Color(0xFFDDDDDD),
-          fontSize: 14,
-          fontFamily: 'Microsoft YaHei',
-        ),
-      ),
+      MetaTheme.dark,
     ],
   );
 }

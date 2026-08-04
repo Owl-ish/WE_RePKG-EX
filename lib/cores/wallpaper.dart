@@ -51,16 +51,12 @@ Future<List<String>> getWindowsDisks({
 Future<String?> getWallpaperPath() async {
   final disks = await getWindowsDisks();
   if (disks.isEmpty) return null;
-  // 生成所有可能的壁纸路径
   final tempPaths = _generateWallpaperPaths(disks);
-  // 查找存在的壁纸路径
   final wallpaperPath = await _findWallpaperPath(tempPaths);
-  // 处理存储逻辑
   await _handleStorageLogic(wallpaperPath);
   return wallpaperPath;
 }
 
-/// 生成所有可能的壁纸路径
 List<String> _generateWallpaperPaths(List<String> disks) {
   final tempPaths = <String>[];
   // 为第一个磁盘（通常是系统盘）添加特殊路径
@@ -73,7 +69,7 @@ List<String> _generateWallpaperPaths(List<String> disks) {
   return tempPaths;
 }
 
-/// 查找存在的壁纸路径
+/// 优先返回有内容的目录，全空时退回第一个存在的。
 Future<String?> _findWallpaperPath(List<String> tempPaths) async {
   String? emptyPath, wallpaperPath;
   for (String tempPath in tempPaths) {
@@ -86,12 +82,10 @@ Future<String?> _findWallpaperPath(List<String> tempPaths) async {
       break;
     }
   }
-  // 如果没有找到有内容的目录，但有空目录，使用空目录
   wallpaperPath ??= emptyPath;
   return wallpaperPath;
 }
 
-/// 处理存储相关的逻辑
 Future<void> _handleStorageLogic(String? wallpaperPath) async {
   if (wallpaperPath != null) {
     String? acfPath = getAcfPath(wallpaperPath);

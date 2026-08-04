@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
@@ -72,7 +73,7 @@ Future<void> showRightMenu(
     entries: entries,
     boxDecoration: BoxDecoration(
       color: Theme.of(context).dialogTheme.backgroundColor,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
       boxShadow: [
         BoxShadow(blurRadius: 4, color: Colors.black.withValues(alpha: .2)),
       ],

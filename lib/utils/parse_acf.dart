@@ -46,30 +46,26 @@ ParseResult _parseObject(String content, int startIndex) {
   while (i < content.length) {
     i = _skipWhitespace(content, i);
 
-    // 遇到 '}' 结束当前对象解析
     if (i < content.length && content[i] == '}') {
       return ParseResult(map, i + 1);
     }
 
-    // 解析键
     if (i < content.length && content[i] == '"') {
       final key = _readString(content, i);
       i = _skipWhitespace(content, key.endIndex);
 
-      // 解析值
       if (i < content.length) {
         if (content[i] == '"') {
-          // 字符串值
           final value = _readString(content, i);
           map[key.value] = value.value;
           i = value.endIndex;
         } else if (content[i] == '{') {
-          // 对象值
           final objResult = _parseObject(content, i + 1);
           map[key.value] = objResult.value;
           i = objResult.endIndex;
         } else {
-          // 跳过其他字符直到找到值
+          // Numbers and bare tokens are not kept, so skip to whatever comes
+          // next rather than parsing them.
           while (i < content.length &&
               content[i] != '"' &&
               content[i] != '{' &&
@@ -80,12 +76,11 @@ ParseResult _parseObject(String content, int startIndex) {
         }
       }
     } else {
-      // 如果当前字符不是引号，跳过
       i++;
     }
   }
 
-  // 如果正常退出循环而没有遇到'}'，说明文件格式可能有问题
+  // 走到这里说明没有遇到收尾的 '}'，文件被截断了
   throw FormatException('Invalid ACF format: missing closing brace');
 }
 

@@ -59,7 +59,6 @@ class _SearchState extends ConsumerState<Search> {
               padding: EdgeInsets.all(4),
               constraints: BoxConstraints(maxWidth: 36, maxHeight: 36),
             ),
-      onChanged: (value) {},
     );
   }
 }

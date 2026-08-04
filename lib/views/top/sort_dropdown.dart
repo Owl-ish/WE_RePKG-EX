@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
 
@@ -31,7 +32,7 @@ class _TopSortState extends ConsumerState<SortDropdown> {
           dropdownMenuItemMouseCursor: SystemMouseCursors.click,
           isDense: true,
           padding: EdgeInsets.only(left: 8, top: 6, bottom: 6),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
           dropdownColor: Theme.of(
             context,
           ).dropdownMenuTheme.inputDecorationTheme?.fillColor,

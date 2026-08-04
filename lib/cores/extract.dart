@@ -14,6 +14,7 @@ import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/cancel_token.dart';
+import 'package:we_repkg/utils/extract_cleanup.dart';
 import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/repkg_output.dart';
@@ -317,7 +318,7 @@ Future<void> extractWallpapers(
 
   final String outPath = ref.read(exportPathProvider)!;
   if (!await ensureOutputDir(outPath)) return;
-  await sweepStaleSceneDirs(outPath);
+  await sweepStaleOutput(outPath);
 
   final ExtractSettings settings = await readExtractSettings(
     ref,
@@ -350,20 +351,17 @@ Future<void> extractCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
   await extractWallpapers(ref, [wallpaper]);
 }
 
-Future<void> extractChecked(WidgetRef ref) async {
-  List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
-  ExtractType extractType = ref.read(currentExtractTypeProvider);
-  if (extractType.isWallpaper) {
-    await extractWallpapers(ref, wallpapers);
-  } else {
-    await extractProject(ref, wallpapers);
-  }
-}
+Future<void> extractChecked(WidgetRef ref) =>
+    _extractInCurrentMode(ref, ref.read(checkedWallpaperListProvider));
 
-Future<void> extractAll(WidgetRef ref) async {
-  List<WallpaperInfo> wallpapers = ref.read(filterWallpaperListProvider);
-  ExtractType extractType = ref.read(currentExtractTypeProvider);
-  if (extractType.isWallpaper) {
+Future<void> extractAll(WidgetRef ref) =>
+    _extractInCurrentMode(ref, ref.read(filterWallpaperListProvider));
+
+Future<void> _extractInCurrentMode(
+  WidgetRef ref,
+  List<WallpaperInfo> wallpapers,
+) async {
+  if (ref.read(currentExtractTypeProvider).isWallpaper) {
     await extractWallpapers(ref, wallpapers);
   } else {
     await extractProject(ref, wallpapers);
@@ -470,14 +468,22 @@ Future<String?> copyWallpaperFolderTo(
 
 const String _sceneTempPrefix = '.werepkg-';
 
-/// Clears scene directories left by a run that was killed outright, which the
-/// per-scene cleanup never got to.
-Future<void> sweepStaleSceneDirs(String outPath) async {
+/// Clears the scene directories and half-copied files a killed run left at the
+/// top of the export folder, which the per-scene cleanup never got to. Both
+/// names are namespaced to this app, so nothing of the user's own matches.
+///
+/// Top level only, so a part file inside a copied wallpaper's own subfolder
+/// survives. Walking the whole export folder every run would cost more than
+/// clearing that leftover is worth.
+Future<void> sweepStaleOutput(String outPath) async {
   try {
     await for (final entity in Directory(outPath).list(followLinks: false)) {
-      if (entity is! Directory) continue;
-      if (!path.basename(entity.path).startsWith(_sceneTempPrefix)) continue;
-      await entity.delete(recursive: true);
+      final String name = path.basename(entity.path);
+      if (entity is Directory && name.startsWith(_sceneTempPrefix)) {
+        await entity.delete(recursive: true);
+      } else if (entity is File && name.endsWith(partSuffix)) {
+        await entity.delete();
+      }
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteFolderFailed)} $e');

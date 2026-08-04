@@ -101,4 +101,47 @@ void main() {
       );
     });
   });
+
+  group('shiftRange', () {
+    test('an anchor above the click extends down to it', () {
+      expect(shiftRange(anchor: 2, target: 7, count: 10), (begin: 2, end: 7));
+    });
+
+    test('an anchor below the click extends up to it', () {
+      expect(shiftRange(anchor: 7, target: 2, count: 10), (begin: 2, end: 7));
+    });
+
+    test('an anchor past the end of a filtered list is pulled back in', () {
+      // 40 wallpapers were showing when the anchor was taken; the filter now
+      // leaves 5. Unclamped this slices past the end and throws RangeError.
+      expect(shiftRange(anchor: 37, target: 1, count: 5), (begin: 1, end: 4));
+    });
+
+    test('a click below an anchor that is past the end still starts at it', () {
+      expect(shiftRange(anchor: 37, target: 4, count: 5), (begin: 4, end: 4));
+    });
+
+    test('nothing checked selects everything up to the click', () {
+      expect(shiftRange(anchor: null, target: 3, count: 10), (
+        begin: 0,
+        end: 3,
+      ));
+    });
+
+    test(
+      'an anchor on a wallpaper the filter dropped selects from the top',
+      () {
+        // indexOf returns -1 for a checked wallpaper no longer in the list.
+        expect(shiftRange(anchor: -1, target: 3, count: 10), (
+          begin: 0,
+          end: 3,
+        ));
+      },
+    );
+
+    test('an empty list yields a range that slices to nothing', () {
+      final range = shiftRange(anchor: 4, target: 0, count: 0);
+      expect(<String>[].sublist(range.begin, range.end + 1), isEmpty);
+    });
+  });
 }

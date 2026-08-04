@@ -10,7 +10,6 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/views/setting/setting_path_input.dart';
 import 'package:we_repkg/widgets/copy.dart';
 import 'package:we_repkg/widgets/link_text.dart';
-import 'package:we_repkg/widgets/setting_info.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
 
 class SettingAboutGroup extends ConsumerWidget {
@@ -30,7 +29,7 @@ class SettingAboutGroup extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SettingLabel(tr(AppI10n.settingAboutLabel)),
-        SettingInfo.text(
+        _SettingInfo.text(
           title: tr(AppI10n.settingAboutOpenSourceLicense),
           content: AppStrings.license,
         ),
@@ -46,14 +45,14 @@ class SettingAboutGroup extends ConsumerWidget {
           uri: AppStrings.repkgRepo,
           version: repkgVersion,
         ),
-        SettingInfo.custom(
+        _SettingInfo.custom(
           title: tr(AppI10n.settingAboutWeRepkgAuthor),
           child: LinkText(
             label: AppStrings.appOriginalRepoLabel,
             uri: AppStrings.appOriginalRepo,
           ),
         ),
-        SettingInfo.custom(
+        _SettingInfo.custom(
           title: tr(AppI10n.settingAboutRepkgAuthor),
           child: LinkText(
             label: AppStrings.repkgOriginalRepoLabel,
@@ -102,6 +101,39 @@ class SettingAboutGroup extends ConsumerWidget {
               CopyBtn(text: file),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One `Title: value` row, where the value is either plain text or a widget.
+class _SettingInfo extends StatelessWidget {
+  const _SettingInfo.text({required this.title, required String content})
+    : _content = content,
+      _child = null;
+
+  const _SettingInfo.custom({required this.title, required Widget child})
+    : _content = null,
+      _child = child;
+
+  final String title;
+  final String? _content;
+  final Widget? _child;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle? textStyle = Theme.of(context).textTheme.bodyMedium;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: _child == null
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          Text('$title:', style: textStyle),
+          const SizedBox(width: 8),
+          _child ?? Text(_content!, style: textStyle),
         ],
       ),
     );

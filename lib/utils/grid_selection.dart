@@ -48,6 +48,24 @@ Set<int> coveredTiles(
   return hit;
 }
 
+/// The inclusive range of tiles a shift-click covers, for `sublist(begin, end + 1)`.
+///
+/// [anchor] is where the range starts, taken from the last ctrl-click or the
+/// last checked tile, and is null when nothing is checked. It can point past
+/// the end, or at -1 for a tile no longer in the list, because changing the
+/// filter or the search term reshuffles the list it was recorded against.
+({int begin, int end}) shiftRange({
+  required int? anchor,
+  required int target,
+  required int count,
+}) {
+  // end below begin, so the caller's sublist comes out empty.
+  if (count <= 0) return (begin: 0, end: -1);
+  final int start = anchor ?? 0;
+  final int begin = min(start, target).clamp(0, count - 1);
+  return (begin: begin, end: max(start, target).clamp(begin, count - 1));
+}
+
 /// Top-left of the cell at [index], relative to the first cell.
 ///
 /// Mirrors the same stride [coveredTiles] walks, so the marquee and the search

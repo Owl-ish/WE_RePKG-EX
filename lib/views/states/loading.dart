@@ -6,6 +6,7 @@ import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
 
 class LoadingView extends ConsumerStatefulWidget {
@@ -99,7 +100,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
     }
     return Material(
       elevation: 2,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
       color: theme.scaffoldBackgroundColor,
       child: Container(
         width: 520,
@@ -108,8 +109,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
         constraints: const BoxConstraints(minHeight: 360),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          // color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
         ),
         // No `alignment` here. A Container with one set expands to fill its
         // parent, which with the fixed height gone stretched the panel down the
@@ -126,7 +126,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
               child: FadeTransition(
                 opacity: _imageAnimation,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
                   child: Image(
                     image: previewImage(current.previews),
                     key: ValueKey(current.id),
@@ -158,7 +158,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
             ),
             // 添加带动画效果的进度条
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
               child: AnimatedBuilder(
                 animation: _progressController,
                 builder: (context, child) {

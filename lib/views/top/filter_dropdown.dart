@@ -83,7 +83,9 @@ class FilterDropdown extends ConsumerWidget {
     return CheckboxTheme(
       data: CheckboxThemeData(
         side: const BorderSide(width: 2, color: Colors.grey),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+        ),
         fillColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
               ? theme.primaryColor
@@ -197,7 +199,7 @@ class _Unfold extends StatelessWidget {
       child: Material(
         color: theme.dropdownMenuTheme.inputDecorationTheme?.fillColor,
         elevation: 8,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
         clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),

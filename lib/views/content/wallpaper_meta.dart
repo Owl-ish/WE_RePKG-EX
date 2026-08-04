@@ -50,7 +50,7 @@ class WallpaperMeta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final MetaTheme meta = theme.extension<MetaTheme>()!;
+    final MetaTheme meta = theme.meta;
     // A halo in the opposite colour. The glass panel is deliberately sheer, so
     // a blurred wallpaper can still leave a patch that matches the text colour
     // closely enough to swallow a letter; the halo keeps the edge regardless.

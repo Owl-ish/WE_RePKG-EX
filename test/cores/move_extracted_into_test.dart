@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/tool.dart';
 
 void main() {
@@ -176,7 +177,7 @@ void main() {
       File('${temp.path}\\stuck.png').writeAsStringSync('x');
       final String kept = await keepUnmovedFiles(temp, to.path, '77');
 
-      await sweepStaleSceneDirs(to.path);
+      await sweepStaleOutput(to.path);
 
       expect(File('$kept\\stuck.png').existsSync(), isTrue);
     });
@@ -202,18 +203,28 @@ void main() {
       write(to, 'keep.png', 'y');
       Directory('${to.path}\\materials').createSync();
 
-      await sweepStaleSceneDirs(to.path);
+      await sweepStaleOutput(to.path);
 
       expect(Directory('${to.path}\\.werepkg-123').existsSync(), isFalse);
       expect(File('${to.path}\\keep.png').existsSync(), isTrue);
       expect(Directory('${to.path}\\materials').existsSync(), isTrue);
     });
 
+    test('clears a half-copied file a killed run left behind', () async {
+      write(to, 'cover.png$partSuffix', 'x');
+      write(to, 'cover.png', 'y');
+
+      await sweepStaleOutput(to.path);
+
+      expect(File('${to.path}\\cover.png$partSuffix').existsSync(), isFalse);
+      expect(File('${to.path}\\cover.png').existsSync(), isTrue);
+    });
+
     test('does nothing to a folder with none, or one that is gone', () async {
       write(to, 'keep.png', 'y');
 
-      await sweepStaleSceneDirs(to.path);
-      await sweepStaleSceneDirs('${to.path}\\missing');
+      await sweepStaleOutput(to.path);
+      await sweepStaleOutput('${to.path}\\missing');
 
       expect(File('${to.path}\\keep.png').existsSync(), isTrue);
     });

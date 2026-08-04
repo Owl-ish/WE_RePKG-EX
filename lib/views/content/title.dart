@@ -11,7 +11,6 @@ class ImageTitle extends StatelessWidget {
       alignment: Alignment.bottomCenter,
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 8),
-        // constraints: BoxConstraints(maxHeight: 40),
         height: 24,
         width: double.infinity,
         decoration: BoxDecoration(color: Colors.black.withValues(alpha: .4)),

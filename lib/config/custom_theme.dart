@@ -164,16 +164,55 @@ class MetaTheme extends ThemeExtension<MetaTheme> {
   final TextStyle largeStyle;
   final TextStyle mediumStyle;
 
-  const MetaTheme({required this.largeStyle, required this.mediumStyle});
+  /// Group headings and the explanatory line under a setting.
+  final TextStyle captionStyle;
+
+  const MetaTheme({
+    required this.largeStyle,
+    required this.mediumStyle,
+    required this.captionStyle,
+  });
+
+  static const TextStyle _caption = TextStyle(color: Colors.grey, fontSize: 13);
+
+  static const MetaTheme light = MetaTheme(
+    largeStyle: TextStyle(
+      color: Color(0xFF666666),
+      fontSize: 16,
+      fontFamily: 'Microsoft YaHei',
+    ),
+    mediumStyle: TextStyle(
+      color: Color(0xFF666666),
+      fontSize: 14,
+      fontFamily: 'Microsoft YaHei',
+    ),
+    captionStyle: _caption,
+  );
+
+  static const MetaTheme dark = MetaTheme(
+    largeStyle: TextStyle(
+      color: Color(0xFFDDDDDD),
+      fontSize: 16,
+      fontFamily: 'Microsoft YaHei',
+    ),
+    mediumStyle: TextStyle(
+      color: Color(0xFFDDDDDD),
+      fontSize: 14,
+      fontFamily: 'Microsoft YaHei',
+    ),
+    captionStyle: _caption,
+  );
 
   @override
   ThemeExtension<MetaTheme> copyWith({
     TextStyle? largeStyle,
     TextStyle? mediumStyle,
+    TextStyle? captionStyle,
   }) {
     return MetaTheme(
       largeStyle: largeStyle ?? this.largeStyle,
       mediumStyle: mediumStyle ?? this.mediumStyle,
+      captionStyle: captionStyle ?? this.captionStyle,
     );
   }
 
@@ -188,6 +227,13 @@ class MetaTheme extends ThemeExtension<MetaTheme> {
     return MetaTheme(
       largeStyle: TextStyle.lerp(largeStyle, other.largeStyle, t)!,
       mediumStyle: TextStyle.lerp(mediumStyle, other.mediumStyle, t)!,
+      captionStyle: TextStyle.lerp(captionStyle, other.captionStyle, t)!,
     );
   }
+}
+
+extension MetaThemeData on ThemeData {
+  MetaTheme get meta =>
+      extension<MetaTheme>() ??
+      (brightness == Brightness.dark ? MetaTheme.dark : MetaTheme.light);
 }

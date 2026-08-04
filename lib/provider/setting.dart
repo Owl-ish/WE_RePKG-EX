@@ -67,12 +67,17 @@ class ReplaceFile extends _$ReplaceFile {
   }
 }
 
+/// The persisted notification choice. Shared with the success toast, which has
+/// no `ref` to read the provider through: it is stored by index, so a second
+/// copy of this lookup would be free to disagree about the default.
+NotificationType storedNotificationType() =>
+    NotificationType.values[StorageUtil.getInt(AppKeys.notificationType) ??
+        NotificationType.app.index];
+
 @riverpod
 class LocalNotificationType extends _$LocalNotificationType {
   @override
-  NotificationType build() =>
-      NotificationType.values[StorageUtil.getInt(AppKeys.notificationType) ??
-          1];
+  NotificationType build() => storedNotificationType();
   void update(NotificationType value) async {
     state = value;
     await StorageUtil.setInt(AppKeys.notificationType, value.index);

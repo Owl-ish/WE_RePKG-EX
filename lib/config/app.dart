@@ -4,6 +4,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/src/rust/frb_generated.dart';
@@ -39,12 +40,11 @@ class AppConfig {
     );
 
     if (!windowAlreadyVisible) {
-      // Restore the saved size, or use a 16:9 default on first launch.
       final int? savedWidth = StorageUtil.getInt(AppKeys.windowWidth);
       final int? savedHeight = StorageUtil.getInt(AppKeys.windowHeight);
       final Size windowSize = (savedWidth != null && savedHeight != null)
           ? Size(savedWidth.toDouble(), savedHeight.toDouble())
-          : const Size(1380, 800);
+          : WindowNums.defaultSize;
 
       final ThemeType savedTheme =
           ThemeType.values[StorageUtil.getInt(AppKeys.theme) ?? 0];
@@ -59,7 +59,7 @@ class AppConfig {
 
       final WindowOptions windowOptions = WindowOptions(
         size: windowSize,
-        minimumSize: const Size(1060, 720),
+        minimumSize: WindowNums.minimumSize,
         center: true,
         title: AppStrings.appName,
         // The app is opaque. An opaque native fallback prevents the desktop

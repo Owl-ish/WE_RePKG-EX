@@ -8,7 +8,6 @@ import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/views/setting/setting_path_input.dart';
 import 'package:we_repkg/views/setting/setting_slider.dart';
-import 'package:we_repkg/widgets/double_title_checked.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
 
@@ -21,45 +20,45 @@ class SettingConfigGroup extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SettingLabel(tr(AppI10n.settingConfigLabel)),
-        SettingCheckbox(
+        SettingCheckbox.text(
           label: tr(AppI10n.settingConfigMaximizeOpen),
           value: ref.watch(maximizeOpenProvider),
           onChanged: (value) =>
               ref.read(maximizeOpenProvider.notifier).update(value!),
         ),
-        SettingCheckbox(
+        SettingCheckbox.text(
           label: tr(AppI10n.settingConfigOnlySaveImage),
           value: ref.watch(onlySaveImageProvider),
           onChanged: (value) =>
               ref.read(onlySaveImageProvider.notifier).update(value!),
         ),
-        SettingCheckbox(
+        SettingCheckbox.text(
           label: tr(AppI10n.settingConfigNoTexture),
           value: ref.watch(excludeTextureProvider),
           onChanged: (value) =>
               ref.read(excludeTextureProvider.notifier).update(value!),
         ),
-        SettingCheckbox(
+        SettingCheckbox.text(
           label: tr(AppI10n.settingConfigOriginalProjectName),
           value: ref.watch(useTitleNameProvider),
           onChanged: (value) =>
               ref.read(useTitleNameProvider.notifier).update(value!),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(deleteTransparencyProvider),
           onChanged: (value) =>
               ref.read(deleteTransparencyProvider.notifier).update(value!),
-          title: tr(AppI10n.settingConfigDeleteTransparency),
+          label: tr(AppI10n.settingConfigDeleteTransparency),
           subTitle: tr(AppI10n.settingConfigDeleteTransparencyTip),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(replaceFileProvider),
           onChanged: (value) =>
               ref.read(replaceFileProvider.notifier).update(value!),
-          title: tr(AppI10n.settingConfigReplaceExistFile),
+          label: tr(AppI10n.settingConfigReplaceExistFile),
           subTitle: tr(AppI10n.settingConfigReplaceExistFileTip),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(useAcfInfoProvider),
           onChanged: (value) {
             ref.read(useAcfInfoProvider.notifier).update(value!);
@@ -70,28 +69,28 @@ class SettingConfigGroup extends ConsumerWidget {
             }
             refreshWallpaperPath(ref);
           },
-          title: tr(AppI10n.settingConfigGetAcfInfo),
+          label: tr(AppI10n.settingConfigGetAcfInfo),
           subTitle: tr(AppI10n.settingConfigGetAcfInfoTip),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(useProjectPathProvider),
           onChanged: (value) =>
               ref.read(useProjectPathProvider.notifier).update(value!),
-          title: tr(AppI10n.settingConfigUseProjectFolder),
+          label: tr(AppI10n.settingConfigUseProjectFolder),
           subTitle: tr(AppI10n.settingConfigUseProjectFolderTip),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(updateProjectPathProvider),
           onChanged: (value) =>
               ref.read(updateProjectPathProvider.notifier).update(value!),
-          title: tr(AppI10n.settingConfigAutoUpdateProjectPath),
+          label: tr(AppI10n.settingConfigAutoUpdateProjectPath),
           subTitle: tr(AppI10n.settingConfigAutoUpdateProjectPathTip),
         ),
-        DoubleTitleChecked(
+        SettingCheckbox.twoLine(
           value: ref.watch(updateAcfPathProvider),
           onChanged: (value) =>
               ref.read(updateAcfPathProvider.notifier).update(value!),
-          title: tr(AppI10n.settingConfigAutoUpdateAcfPath),
+          label: tr(AppI10n.settingConfigAutoUpdateAcfPath),
           subTitle: tr(AppI10n.settingConfigAutoUpdateAcfPathTip),
         ),
         // RePKG is partly disk-bound, so on a spinning disk a high value makes

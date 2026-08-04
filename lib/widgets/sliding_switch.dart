@@ -1,6 +1,7 @@
 import 'package:custom_sliding_segmented_control/custom_sliding_segmented_control.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/constants/nums.dart';
 
 class SlidingSwitch extends StatelessWidget {
   const SlidingSwitch({
@@ -26,7 +27,7 @@ class SlidingSwitch extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: theme.extension<SlidingSegmentedTheme>()!.backgroundColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
       ),
       thumbDecoration: BoxDecoration(
         color: theme.extension<SlidingSegmentedTheme>()!.foregroundColor,

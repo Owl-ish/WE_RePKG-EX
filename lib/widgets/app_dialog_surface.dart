@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:we_repkg/constants/nums.dart';
 
 /// Shared visual shell for the app's non-route modal surfaces.
 ///
@@ -18,7 +19,6 @@ class AppDialogSurface extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final double? maxHeight;
 
-  static const double radius = 8;
   static const double elevation = 16;
 
   @override
@@ -27,7 +27,7 @@ class AppDialogSurface extends StatelessWidget {
     return UnconstrainedBox(
       child: Material(
         elevation: elevation,
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
         clipBehavior: Clip.antiAlias,
         color:
             theme.dialogTheme.backgroundColor ?? theme.scaffoldBackgroundColor,
