@@ -3,23 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/models/wallpaper.dart';
-
-/// Body of the top level function named [name], up to the next declaration in
-/// column 0. Nothing here depends on the return type or on which function is
-/// declared next, so renaming or moving a neighbour cannot break it.
-String functionBody(String source, String name) {
-  final List<String> lines = source.split('\n');
-  final int start = lines.indexWhere(
-    (l) => RegExp('^[A-Za-z_].*\\b$name\\(').hasMatch(l),
-  );
-  expect(start, isNonNegative, reason: '$name was not found');
-  final int after = lines.indexWhere(
-    (l) => l.isNotEmpty && !l.startsWith(RegExp(r'[\s})]')),
-    start + 1,
-  );
-  return lines.sublist(start, after == -1 ? lines.length : after).join('\n');
-}
+import 'package:we_repkg/utils/cancel_token.dart';
+import 'package:we_repkg/utils/tool.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -93,24 +80,58 @@ void main() {
     });
   });
 
-  // Which mode copies the preview cannot be reached from a test, because both
-  // batch functions take a WidgetRef and drive toasts. Reading the source is the
-  // cheap stand-in until that changes.
-  group('only project extraction copies it', () {
-    final String source = File('lib/cores/extract.dart').readAsStringSync();
+  // Wallpaper mode publishes into a folder the user also keeps their own files
+  // in, so it copies only what the wallpaper itself holds. Project mode gets a
+  // folder of its own and adds the preview, which is the only thing naming an
+  // extracted scene.
+  test('the wallpaper branch does not copy the preview in', () async {
+    // Outside the wallpaper folder, so the folder copy cannot bring it along
+    // and anything that arrives came from copyProjectPreviewImage.
+    final File preview = File(p.join(tmp.path, 'preview.jpg'))
+      ..writeAsStringSync('image');
+    final Directory src = Directory(p.join(tmp.path, 'src'))..createSync();
+    File(p.join(src.path, 'index.html')).writeAsStringSync('<html>');
+    final Directory out = Directory(p.join(tmp.path, 'out'))..createSync();
 
-    test('the wallpaper branch does not', () {
-      expect(
-        functionBody(source, 'extractBranch'),
-        isNot(contains('copyProjectPreviewImage(')),
-      );
-    });
+    final String? err = await extractBranch(
+      (_) {},
+      const ExtractSettings(
+        rePKGPath: null,
+        excludeTexture: false,
+        onlySaveImage: false,
+        deleteTransparency: false,
+        overwrite: false,
+        useTitleName: false,
+        newFlags: true,
+        supportsThreads: true,
+        plan: ExtractPlan(concurrency: 1, threads: 1, memoryMb: 1024),
+      ),
+      WallpaperInfo(
+        id: '1',
+        title: 'Wallpaper',
+        contentRating: 'everyone',
+        tags: const [],
+        previews: preview.path,
+        // Not a pkg, mp4 or customdirectory, so this falls through to the
+        // whole-folder copy that web and application wallpapers take.
+        target: p.join(src.path, 'index.html'),
+        type: 'web',
+        updateTime: null,
+        createTime: DateTime(2024, 1, 1),
+        folder: src.path,
+        size: 0,
+      ),
+      out.path,
+      FileNameClaims(overwrite: false),
+      CancelToken(),
+    );
 
-    test('the project worker does', () {
-      expect(
-        functionBody(source, '_extractProjectOne'),
-        contains('copyProjectPreviewImage('),
-      );
-    });
+    expect(err, isNull);
+    final List<String> written = out
+        .listSync(recursive: true)
+        .map((e) => p.basename(e.path))
+        .toList();
+    expect(written, contains('index.html'));
+    expect(written, isNot(contains('preview.jpg')));
   });
 }

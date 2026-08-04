@@ -23,6 +23,11 @@ import 'package:we_repkg/utils/work_pool.dart';
 import 'base.dart';
 import 'toast.dart';
 
+/// Where a worker writes its progress line. Captured from the provider before
+/// the first await, so the workers never touch `ref` and can be called from a
+/// test without pumping a frame.
+typedef StatusSink = void Function(String text);
+
 /// The token is published so the loading overlay's cancel button can reach it.
 CancelToken startBatch(WidgetRef ref) {
   ref.read(currentIndexProvider.notifier).reset();
@@ -134,7 +139,13 @@ Future<void> _runBatch(
   int concurrency,
   Future<String?> Function(WallpaperInfo wallpaper, CancelToken token) work,
 ) async {
-  changeLoadingText(ref, tr(AppI10n.dialogProcessingWallpaper));
+  // Taken before the first await: the widget owning `ref` can be gone by the
+  // time a worker reports, and reading through it then throws.
+  final processing = ref.read(processingWallpaperProvider.notifier);
+  final index = ref.read(currentIndexProvider.notifier);
+  ref
+      .read(loadingTextProvider.notifier)
+      .update(tr(AppI10n.dialogProcessingWallpaper));
   final cancel = showLoadingView(wallpapers);
   final token = startBatch(ref);
 
@@ -146,8 +157,8 @@ Future<void> _runBatch(
       (wallpaper) => work(wallpaper, token),
       concurrency: concurrency,
       cancelToken: token,
-      onStart: (w) => ref.read(processingWallpaperProvider.notifier).update(w),
-      onComplete: (_) => ref.read(currentIndexProvider.notifier).increment(),
+      onStart: processing.update,
+      onComplete: (_) => index.increment(),
     );
   } catch (e) {
     errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
@@ -322,12 +333,14 @@ Future<void> extractWallpapers(
   // earlier run's file but must not be handed to two wallpapers here.
   final claims = FileNameClaims(overwrite: settings.overwrite);
 
+  final StatusSink onStatus = ref.read(loadingTextProvider.notifier).update;
+
   await _runBatch(ref, wallpapers, settings.plan.concurrency, (
     wallpaper,
     token,
   ) {
     return extractBranch(
-      ref,
+      onStatus,
       settings,
       wallpaper,
       outPath,
@@ -366,7 +379,7 @@ Future<void> extractAll(WidgetRef ref) async {
 /// [detailedProgress] turns on the per-file byte counter. Off for batches, where
 /// several workers writing one progress line just makes it flicker.
 Future<String?> extractBranch(
-  WidgetRef ref,
+  StatusSink onStatus,
   ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
@@ -379,7 +392,7 @@ Future<String?> extractBranch(
   final targetLower = target.toLowerCase();
   if (targetLower.endsWith('pkg')) {
     return extractSceneToShared(
-      ref,
+      onStatus,
       settings,
       wallpaper,
       outPath,
@@ -389,7 +402,7 @@ Future<String?> extractBranch(
     );
   } else if (targetLower.endsWith('.mp4')) {
     return extractVideo(
-      ref,
+      onStatus,
       wallpaper,
       outPath,
       claims,
@@ -398,7 +411,7 @@ Future<String?> extractBranch(
     );
   } else if (targetLower.endsWith('customdirectory')) {
     return extractImages(
-      ref,
+      onStatus,
       target,
       outPath,
       claims,
@@ -529,7 +542,7 @@ Future<String?> moveExtractedInto(
 /// RePKG writes fixed names like scene.json, so several of them cannot share an
 /// output folder. Giving each its own lets the batch run wallpapers at once.
 Future<String?> extractSceneToShared(
-  WidgetRef ref,
+  StatusSink onStatus,
   ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
@@ -551,7 +564,7 @@ Future<String?> extractSceneToShared(
   bool keepTemp = false;
   try {
     final String? err = await extractPKG(
-      ref,
+      onStatus,
       settings,
       wallpaper,
       temp.path,
@@ -687,7 +700,7 @@ List<String> wallpaperExtractArgs({
 
 /// Throttled to whole percents: a large scene runs to thousands of entries and
 /// each update rebuilds the loading overlay.
-void Function(String) _sceneProgressReporter(WidgetRef ref) {
+void Function(String) _sceneProgressReporter(StatusSink onStatus) {
   int lastPercent = -1;
   return (String line) {
     final progress = parseRePKGProgress(line);
@@ -695,8 +708,7 @@ void Function(String) _sceneProgressReporter(WidgetRef ref) {
     final int percent = progress.position * 100 ~/ progress.total;
     if (percent == lastPercent) return;
     lastPercent = percent;
-    changeLoadingText(
-      ref,
+    onStatus(
       tr(
         AppI10n.dialogExtractSceneInfo,
         namedArgs: {
@@ -709,7 +721,7 @@ void Function(String) _sceneProgressReporter(WidgetRef ref) {
 }
 
 Future<String?> extractPKG(
-  WidgetRef ref,
+  StatusSink onStatus,
   ExtractSettings settings,
   WallpaperInfo wallpaper,
   String outPath,
@@ -737,7 +749,7 @@ Future<String?> extractPKG(
       rePKGPath,
       args,
       token,
-      onStdoutLine: detailedProgress ? _sceneProgressReporter(ref) : null,
+      onStdoutLine: detailedProgress ? _sceneProgressReporter(onStatus) : null,
     );
     if (token.isCancelled) return null;
     final summary = summarizeRePKGOutput(result.stdout, result.stderr);
@@ -794,7 +806,7 @@ String _formatRePKGFailure(
 }
 
 Future<String?> extractVideo(
-  WidgetRef ref,
+  StatusSink onStatus,
   WallpaperInfo wallpaper,
   String outPath,
   FileNameClaims claims,
@@ -826,8 +838,7 @@ Future<String?> extractVideo(
       destinationFile,
       onProgress: (copied, total) {
         if (!detailedProgress) return;
-        changeLoadingText(
-          ref,
+        onStatus(
           tr(
             AppI10n.dialogExtractVideoInfo,
             namedArgs: {
@@ -860,7 +871,7 @@ Future<String?> extractVideo(
 }
 
 Future<String?> extractImages(
-  WidgetRef ref,
+  StatusSink onStatus,
   String filePath,
   String outPath,
   FileNameClaims claims, {
@@ -882,7 +893,7 @@ Future<String?> extractImages(
           AppI10n.dialogExtractImageInfo,
           namedArgs: {'index': '$index', 'count': '$count'},
         );
-        if (detailedProgress) changeLoadingText(ref, loadingText);
+        if (detailedProgress) onStatus(loadingText);
         String fileName = path.basename(file.path);
         String targetPath = await claims.claim(path.join(outPath, fileName));
         // Through a .part as well: a copy that fails partway would otherwise
@@ -899,8 +910,4 @@ Future<String?> extractImages(
   double seconds = stopwatch.elapsedMilliseconds / 1000;
   debugPrint('${tr(AppI10n.logExtractImageTime)} $seconds');
   return null;
-}
-
-void changeLoadingText(WidgetRef ref, String text) {
-  ref.read(loadingTextProvider.notifier).update(text);
 }
