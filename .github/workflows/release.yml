@@ -81,8 +81,7 @@ jobs:
       - name: Fetch RePKG
         shell: pwsh
         env:
-          # Must stay at or above the version repkgSupportsExtractFlags requires
-          # in lib/utils/info.dart.
+          # Must stay at or above REPKG_FLOOR below, which the next step checks.
           REPKG_TAG: v0.5.3-ex
           REPKG_SHA256: 56798686851a03a53ac74f3afe9ec0e1ff83089abe7b157198a4ba9fa84a9a30
         run: |
@@ -111,6 +110,35 @@ jobs:
           # inherited from notscuffed, whose copyright line it still carries.
           # HEAD resolves to the default branch, so this survives a rename.
           Invoke-WebRequest -Uri 'https://github.com/Owl-ish/RePKG-EX/raw/HEAD/LICENSE' -OutFile 'RePKG-LICENSE.txt'
+
+      # The tag above used to be pinned by a comment asking it to stay at or
+      # above this floor, and it has already drifted below it once. Below the
+      # floor RePKG rejects a flag the app sends and exits 0 having written
+      # nothing, so a release would ship a bundle that extracts nothing and
+      # reports success. Asks the binary rather than trusting the tag name.
+      - name: Check RePKG meets the version floor
+        shell: pwsh
+        env:
+          # repkgSupportsExtractFlags in lib/utils/info.dart.
+          REPKG_FLOOR: '0.5.3'
+        run: |
+          # RePKG prints its version on stderr, as parseRepkgVersionOutput expects.
+          $reported = (& $env:REPKG_EXE version 2>&1 | Out-String)
+          # readRepkgVersion resolves to null on a non-zero exit and then drops
+          # every gated flag, so a binary that prints a version and still fails
+          # is no better than an old one.
+          if ($LASTEXITCODE -ne 0) {
+            throw "RePKG version exited $LASTEXITCODE.`n$reported"
+          }
+          if ($reported -notmatch '(?m)^\s*RePKG\s+(\d+\.\d+\.\d+)-ex') {
+            throw "RePKG did not report an -ex version.`n$reported"
+          }
+          $found = [version]$Matches[1]
+          Write-Host "RePKG $found (floor $env:REPKG_FLOOR)"
+          if ($found -lt [version]$env:REPKG_FLOOR) {
+            throw "REPKG_TAG fetched $found, below the $env:REPKG_FLOOR floor lib/utils/info.dart requires. Bump REPKG_TAG and REPKG_SHA256."
+          }
+
       - name: Package
         id: package
         shell: pwsh

@@ -30,6 +30,15 @@ jobs:
           channel: stable
           cache: true
 
+      # The build step below drives cargokit, which compiles the whole crate
+      # graph. Without these it used the runner's stock toolchain and started
+      # from cold on every push, while the Rust job beside it pinned and cached.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
       - name: Install dependencies
         run: flutter pub get
 
