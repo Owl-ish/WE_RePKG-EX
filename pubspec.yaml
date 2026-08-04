@@ -67,6 +67,9 @@ dev_dependencies:
   riverpod_generator: 4.0.3
   # Only the preview codec tests build images; nothing in lib imports it.
   image: ^4.8.0
+  # Lets the folder picker be stubbed, so the tests can hold a widget open
+  # across one. file_selector pulls it in anyway.
+  file_selector_platform_interface: ^2.7.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

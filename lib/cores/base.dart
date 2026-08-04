@@ -23,26 +23,23 @@ import 'package:we_repkg/widgets/confirm_dialog.dart';
 import 'toast.dart';
 import 'wallpaper.dart';
 
+// The picker below keeps the window open for as long as the user browses, and
+// the widget holding `ref` can be gone by the time it returns. Reading through
+// `ref` then throws; a notifier taken beforehand keeps working.
 Future<bool> setExportPath(WidgetRef ref, [bool show = false]) async {
   if (show) showSelectFolderToast(tr(AppI10n.extractFolderToast));
+  final notifier = ref.read(exportPathProvider.notifier);
   final String? exportPath = await getDirectoryPath();
-  if (exportPath != null) {
-    ref.read(exportPathProvider.notifier).update(exportPath);
-    return true;
-  }
-  return false;
+  if (exportPath == null) return false;
+  notifier.update(exportPath);
+  return true;
 }
 
 Future<void> setToolPath(WidgetRef ref) async {
+  final notifier = ref.read(toolPathProvider.notifier);
   final xType = XTypeGroup(label: 'RePKG', extensions: ['exe']);
   final XFile? file = await openFile(acceptedTypeGroups: [xType]);
-  if (file != null) {
-    ref.read(toolPathProvider.notifier).update(file.path);
-    final String? version = await ref.read(toolVersionProvider.future);
-    if (version != null) {
-      debugPrint('${tr(AppI10n.logVersion)} $version');
-    }
-  }
+  if (file != null) notifier.update(file.path);
 }
 
 Future<void> refreshToolPath(WidgetRef ref) async {
@@ -52,12 +49,11 @@ Future<void> refreshToolPath(WidgetRef ref) async {
 
 Future<bool> setProjectPath(WidgetRef ref, [bool show = false]) async {
   if (show) showSelectFolderToast(tr(AppI10n.projectFolderToast));
-  String? projectPath = await getDirectoryPath();
-  if (projectPath != null) {
-    ref.read(projectPathProvider.notifier).update(projectPath);
-    return true;
-  }
-  return false;
+  final notifier = ref.read(projectPathProvider.notifier);
+  final String? projectPath = await getDirectoryPath();
+  if (projectPath == null) return false;
+  notifier.update(projectPath);
+  return true;
 }
 
 void refreshProjectPath(WidgetRef ref) {
@@ -70,47 +66,55 @@ void refreshProjectPath(WidgetRef ref) {
 
 Future<void> setWallpaperPath(WidgetRef ref) async {
   final String? previousPath = ref.read(wallpaperPathProvider);
+  final section = ref.read(currentSectionProvider.notifier);
+  final selected = ref.read(selectedWallpaperProvider.notifier);
+  final pathNotifier = ref.read(wallpaperPathProvider.notifier);
+  final updateOtherFolder = otherFolderUpdater(ref);
   final String? wallpaperPath = await getDirectoryPath();
-  if (wallpaperPath != null) {
-    if (wallpaperPath != previousPath) {
-      ref.read(currentSectionProvider.notifier).requestExtractEntrance();
-    }
-    ref.read(selectedWallpaperProvider.notifier).update(null);
-    ref.read(wallpaperPathProvider.notifier).update(wallpaperPath);
-    updateOtherFolder(ref, wallpaperPath);
-    await refreshWallpaper(ref);
-  }
+  if (wallpaperPath == null) return;
+
+  if (wallpaperPath != previousPath) section.requestExtractEntrance();
+  selected.update(null);
+  pathNotifier.update(wallpaperPath);
+  updateOtherFolder(wallpaperPath);
+  await refreshWallpaper(ref);
 }
 
 Future<void> refreshWallpaperPath(WidgetRef ref) async {
   // String? before = StorageUtil.getString(AppKeys.wallpaperPathBefore);
   // await StorageUtil.remove(AppKeys.acfPath);
   final String? previousPath = ref.read(wallpaperPathProvider);
-  String? wallpaperPath = await getWallpaperPath();
+  final section = ref.read(currentSectionProvider.notifier);
+  final pathNotifier = ref.read(wallpaperPathProvider.notifier);
+  final updateOtherFolder = otherFolderUpdater(ref);
+  final String? wallpaperPath = await getWallpaperPath();
   if (wallpaperPath != null) {
-    if (wallpaperPath != previousPath) {
-      ref.read(currentSectionProvider.notifier).requestExtractEntrance();
-    }
-    ref.read(wallpaperPathProvider.notifier).update(wallpaperPath);
-    updateOtherFolder(ref, wallpaperPath);
+    if (wallpaperPath != previousPath) section.requestExtractEntrance();
+    pathNotifier.update(wallpaperPath);
+    updateOtherFolder(wallpaperPath);
   }
   await refreshWallpaper(ref);
 }
 
-void updateOtherFolder(WidgetRef ref, String wallpaperPath) {
-  String? projectPath = StorageUtil.getString(AppKeys.projectPath);
-  String? acfPath = StorageUtil.getString(AppKeys.acfPath);
-  if (ref.read(updateProjectPathProvider) || projectPath == null) {
-    ref
-        .read(projectPathProvider.notifier)
-        .update(projectDefaultPath(wallpaperPath));
-  }
-  if (ref.read(updateAcfPathProvider) || acfPath == null) {
-    if (acfPath != null) {
-      StorageUtil.remove(AppKeys.acfPath);
+/// Captures what it needs now and returns the work, so a caller can run it
+/// after a picker await without touching `ref` again.
+void Function(String wallpaperPath) otherFolderUpdater(WidgetRef ref) {
+  final bool alwaysProject = ref.read(updateProjectPathProvider);
+  final bool alwaysAcf = ref.read(updateAcfPathProvider);
+  final projectNotifier = ref.read(projectPathProvider.notifier);
+  final acfNotifier = ref.read(acfPathProvider.notifier);
+
+  return (String wallpaperPath) {
+    final String? projectPath = StorageUtil.getString(AppKeys.projectPath);
+    final String? acfPath = StorageUtil.getString(AppKeys.acfPath);
+    if (alwaysProject || projectPath == null) {
+      projectNotifier.update(projectDefaultPath(wallpaperPath));
     }
-    ref.read(acfPathProvider.notifier).update(getAcfPath(wallpaperPath));
-  }
+    if (alwaysAcf || acfPath == null) {
+      if (acfPath != null) StorageUtil.remove(AppKeys.acfPath);
+      acfNotifier.update(getAcfPath(wallpaperPath));
+    }
+  };
 }
 
 Future<void> setAcfPath(WidgetRef ref) async {
