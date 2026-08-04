@@ -5,14 +5,12 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
-import 'package:we_repkg/views/setting/concurrency_slider.dart';
-import 'package:we_repkg/views/setting/memory_limit_slider.dart';
-import 'package:we_repkg/views/setting/project_path_input.dart';
+import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/views/setting/setting_path_input.dart';
+import 'package:we_repkg/views/setting/setting_slider.dart';
 import 'package:we_repkg/widgets/double_title_checked.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
-
-import 'wallpaper_path_input.dart';
 
 class SettingConfigGroup extends ConsumerWidget {
   const SettingConfigGroup({super.key});
@@ -96,12 +94,47 @@ class SettingConfigGroup extends ConsumerWidget {
           title: tr(AppI10n.settingConfigAutoUpdateAcfPath),
           subTitle: tr(AppI10n.settingConfigAutoUpdateAcfPathTip),
         ),
-        ConcurrencySlider(),
-        MemoryLimitSlider(),
+        // RePKG is partly disk-bound, so on a spinning disk a high value makes
+        // a batch slower, while fast NVMe benefits from more.
+        SettingSlider(
+          label: tr(AppI10n.settingConfigConcurrency),
+          tip: tr(AppI10n.settingConfigConcurrencyTip),
+          value: ref.watch(extractConcurrencyProvider),
+          min: ExtractConcurrency.min,
+          max: ExtractConcurrency.max,
+          onChanged: (v) =>
+              ref.read(extractConcurrencyProvider.notifier).update(v),
+        ),
+        // A ceiling rather than a prediction: nothing can say in advance what a
+        // wallpaper costs, since that follows the size of its largest texture.
+        // Setting this low only makes extraction slower.
+        SettingSlider(
+          label: tr(AppI10n.settingConfigMemoryLimit),
+          tip: tr(AppI10n.settingConfigMemoryLimitTip),
+          value: ref.watch(extractMemoryLimitProvider),
+          min: ExtractMemoryLimit.min,
+          max: ExtractMemoryLimit.max,
+          step: ExtractMemoryLimit.step,
+          unit: ' MB',
+          onChanged: (v) =>
+              ref.read(extractMemoryLimitProvider.notifier).update(v),
+        ),
         SizedBox(height: 8),
-        WallpaperPathInput(),
+        SettingPathInput(
+          label: tr(AppI10n.settingConfigWallpapersPath),
+          path: ref.watch(wallpaperPathProvider),
+          hintText: tr(AppI10n.settingConfigWallpapersPathTip),
+          onPick: () => setWallpaperPath(ref),
+          onRefresh: () => refreshWallpaperPath(ref),
+        ),
         SizedBox(height: 4),
-        ProjectPathInput(),
+        SettingPathInput(
+          label: tr(AppI10n.settingConfigProjectPath),
+          path: ref.watch(projectPathProvider),
+          hintText: tr(AppI10n.settingConfigProjectPathTip),
+          onPick: () => setProjectPath(ref),
+          onRefresh: () => refreshProjectPath(ref),
+        ),
       ],
     );
   }

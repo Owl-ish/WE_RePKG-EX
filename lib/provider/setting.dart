@@ -179,6 +179,9 @@ class ExtractMemoryLimit extends _$ExtractMemoryLimit {
   static const int max = 16384;
   static const int fallback = 1024;
 
+  /// Whole gigabytes read better on a slider than 1536MB does.
+  static const int step = 256;
+
   /// What to suggest on a machine this size, before the user says otherwise.
   static int suggestedFor(int? installedBytes) {
     if (installedBytes == null) return fallback;
