@@ -100,8 +100,8 @@ jobs:
           if (-not $exe) { throw "RePKG.exe not found inside RePKG.zip" }
           "REPKG_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
           # Covers the libraries ILRepack merged into RePKG.exe (ImageSharp,
-          # Newtonsoft.Json, K4os.LZ4, System.Drawing.Common), whose licences
-          # would otherwise ship without their notices.
+          # Newtonsoft.Json, K4os.LZ4, CommandLineParser), whose licences would
+          # otherwise ship without their notices.
           $notices = Get-ChildItem repkg-extracted -Recurse -Filter THIRD-PARTY-NOTICES.txt |
                      Select-Object -First 1
           if (-not $notices) { throw "THIRD-PARTY-NOTICES.txt not found inside RePKG.zip" }
