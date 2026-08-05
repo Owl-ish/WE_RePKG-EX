@@ -82,8 +82,8 @@ jobs:
         shell: pwsh
         env:
           # Must stay at or above REPKG_FLOOR below, which the next step checks.
-          REPKG_TAG: v0.5.3-ex
-          REPKG_SHA256: 56798686851a03a53ac74f3afe9ec0e1ff83089abe7b157198a4ba9fa84a9a30
+          REPKG_TAG: v0.5.4-ex
+          REPKG_SHA256: a0015ffdbdbfc6dae807250d360c18821d17fcac6e911af613717506293b3e0b
         run: |
           $url = "https://github.com/Owl-ish/RePKG-EX/releases/download/$env:REPKG_TAG/RePKG.zip"
           Invoke-WebRequest -Uri $url -OutFile RePKG.zip
@@ -119,8 +119,9 @@ jobs:
       - name: Check RePKG meets the version floor
         shell: pwsh
         env:
-          # repkgSupportsExtractFlags in lib/utils/info.dart.
-          REPKG_FLOOR: '0.5.3'
+          # repkgSupportsThreads in lib/utils/info.dart, the highest gate the app
+          # has. Below it the memory ceiling and parallel conversion go unused.
+          REPKG_FLOOR: '0.5.4'
         run: |
           # RePKG prints its version on stderr, as parseRepkgVersionOutput expects.
           $reported = (& $env:REPKG_EXE version 2>&1 | Out-String)
