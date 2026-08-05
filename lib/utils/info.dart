@@ -68,16 +68,26 @@ bool repkgSupportsThreads(String? version) =>
 /// budget, which cost the memory ceiling for the whole session.
 const Duration _versionProbeTimeout = Duration(seconds: 10);
 
+typedef ProcessRunner =
+    Future<ProcessResult> Function(String executable, List<String> arguments);
+
 /// Reads the version reported by the active RePKG executable.
 ///
 /// About must remain usable if the configured tool is missing or broken, so
 /// failures and slow processes resolve to null rather than escaping.
-Future<String?> readRepkgVersion(String? toolPath) async {
+///
+/// [timeout] and [run] exist so a test can hold the probe open without waiting
+/// out the real budget.
+Future<String?> readRepkgVersion(
+  String? toolPath, {
+  Duration timeout = _versionProbeTimeout,
+  ProcessRunner run = Process.run,
+}) async {
   if (toolPath == null || !await File(toolPath).exists()) return null;
   try {
-    final ProcessResult result = await Process.run(toolPath, const <String>[
+    final ProcessResult result = await run(toolPath, const <String>[
       'version',
-    ]).timeout(_versionProbeTimeout);
+    ]).timeout(timeout);
     if (result.exitCode != 0) return null;
     return parseRepkgVersionOutput(result.stdout, result.stderr);
   } catch (_) {

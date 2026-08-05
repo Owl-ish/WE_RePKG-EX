@@ -14,9 +14,9 @@ import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/content.dart';
 import 'package:we_repkg/views/content/item.dart';
 
-/// The maths under the marquee has its own tests in grid_selection_test. This
-/// covers the wiring: the gesture, the ticker that scrolls past the edge, and
-/// the selection writes they produce.
+/// The maths under the marquee and the shift range have their own tests in
+/// grid_selection_test. This covers the wiring: the gestures, the ticker that
+/// scrolls past the edge, and the selection writes they produce.
 ///
 /// Geometry at the default 800x600 surface: the 24px inset each side leaves 752,
 /// which comes out as four 182px columns on a 190px stride. pumpGrid asserts it,
@@ -124,6 +124,46 @@ void main() {
     return {for (final int i in cells) order[i].id};
   }
 
+  Future<void> clickCell(
+    WidgetTester tester,
+    int cell, {
+    LogicalKeyboardKey? modifier,
+  }) async {
+    if (modifier != null) await tester.sendKeyDownEvent(modifier);
+    await tester.tap(find.byType(ImageItem).at(cell));
+    await tester.pumpAndSettle();
+    if (modifier != null) await tester.sendKeyUpEvent(modifier);
+  }
+
+  testWidgets('shift extends the selection from the last ctrl-click', (
+    tester,
+  ) async {
+    await pumpGrid(tester, 8);
+    // Two ctrl-clicks, out of order, so the stored anchor and the last checked
+    // tile sit at different cells. One ctrl-click cannot tell them apart, and
+    // the fallback would reach from cell 5 instead.
+    await clickCell(tester, 5, modifier: LogicalKeyboardKey.controlLeft);
+    await clickCell(tester, 1, modifier: LogicalKeyboardKey.controlLeft);
+    expect(checkedIds(), idsAt([1, 5]));
+
+    await clickCell(tester, 3, modifier: LogicalKeyboardKey.shiftLeft);
+    expect(checkedIds(), idsAt([1, 2, 3, 5]));
+    expect(
+      StorageUtil.getInt(AppKeys.ctrlPressedIndex),
+      isNull,
+      reason: 'the anchor is spent, so the next shift reads the selection',
+    );
+  });
+
+  testWidgets('shift with nothing selected extends from the first cell', (
+    tester,
+  ) async {
+    await pumpGrid(tester, 8);
+    await clickCell(tester, 3, modifier: LogicalKeyboardKey.shiftLeft);
+
+    expect(checkedIds(), idsAt([0, 1, 2, 3]));
+  });
+
   testWidgets('a box dragged over the grid selects what it covers', (
     tester,
   ) async {
@@ -199,6 +239,31 @@ void main() {
       ...before,
       ...idsAt([0, 4]),
     }, reason: 'ctrl adds to the selection rather than replacing it');
+    await drag.up();
+    await tester.pump();
+  });
+
+  testWidgets('without ctrl a drag drops what was already selected', (
+    tester,
+  ) async {
+    await pumpGrid(tester, 8);
+    // Top right cell, well clear of the rectangle the drag below sweeps.
+    container.read(checkedIdsProvider.notifier).setAll(idsAt([3]), true);
+    await tester.pump();
+
+    final TestGesture drag = await tester.startGesture(
+      const Offset(30, 500),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await drag.moveTo(_firstCentre);
+    await tester.pump();
+
+    expect(
+      checkedIds(),
+      idsAt([0, 4]),
+      reason: 'without ctrl the drag starts from nothing',
+    );
     await drag.up();
     await tester.pump();
   });

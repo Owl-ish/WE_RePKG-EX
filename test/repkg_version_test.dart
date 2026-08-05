@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +59,39 @@ void main() {
       expect(repkgSupportsExtractFlags(''), isFalse);
       expect(repkgSupportsExtractFlags('nonsense'), isFalse);
     });
+  });
+
+  // pubspec.yaml is there only to clear the existence check; the injected
+  // runner stands in for the process. Both tests below assert the runner was
+  // reached, or a path that stopped resolving would return null on its own and
+  // leave them green over nothing.
+  test('a probe that never answers gives up and reports no version', () async {
+    bool probed = false;
+    final String? version = await readRepkgVersion(
+      'pubspec.yaml',
+      timeout: const Duration(milliseconds: 20),
+      run: (_, _) {
+        probed = true;
+        return Completer<ProcessResult>().future;
+      },
+    );
+
+    expect(probed, isTrue);
+    expect(version, isNull);
+  });
+
+  test('a tool that exits non-zero reports no version', () async {
+    bool probed = false;
+    final String? version = await readRepkgVersion(
+      'pubspec.yaml',
+      run: (_, _) async {
+        probed = true;
+        return ProcessResult(0, 1, '', 'RePKG 0.5.4-ex');
+      },
+    );
+
+    expect(probed, isTrue);
+    expect(version, isNull);
   });
 
   final File localRepkgFixture = File(r'test\scene\RePKG.exe');
