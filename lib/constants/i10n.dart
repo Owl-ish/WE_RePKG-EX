@@ -121,6 +121,9 @@ class AppI10n {
   static const String settingConfigMemoryLimit = 'setting.configMemoryLimit';
   static const String settingConfigMemoryLimitTip =
       'setting.configMemoryLimitTip';
+  static const String settingConfigMemoryFree = 'setting.configMemoryFree';
+  static const String settingConfigMemoryOverFree =
+      'setting.configMemoryOverFree';
   static const String settingConfigAutoUpdateAcfPathTip =
       'setting.config.autoUpdateAcfPathTip';
   static const String settingConfigMaximizeOpen = 'setting.config.maximizeOpen';

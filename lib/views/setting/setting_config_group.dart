@@ -6,16 +6,29 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/utils/memory_advice.dart';
+import 'package:we_repkg/utils/system_memory.dart';
 import 'package:we_repkg/views/setting/setting_path_input.dart';
 import 'package:we_repkg/views/setting/setting_slider.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
 
-class SettingConfigGroup extends ConsumerWidget {
+class SettingConfigGroup extends ConsumerStatefulWidget {
   const SettingConfigGroup({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingConfigGroup> createState() => _SettingConfigGroupState();
+}
+
+class _SettingConfigGroupState extends ConsumerState<SettingConfigGroup> {
+  /// Read when this state is created, so at least once per opening of the
+  /// settings card and again if the card crosses the width where its groups
+  /// re-lay out. Held rather than read in build, so the figure under the slider
+  /// stays put while the slider above it is being dragged.
+  final int? _availableBytes = availableMemoryBytes();
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -107,17 +120,7 @@ class SettingConfigGroup extends ConsumerWidget {
         // A ceiling rather than a prediction: nothing can say in advance what a
         // wallpaper costs, since that follows the size of its largest texture.
         // Setting this low only makes extraction slower.
-        SettingSlider(
-          label: tr(AppI10n.settingConfigMemoryLimit),
-          tip: tr(AppI10n.settingConfigMemoryLimitTip),
-          value: ref.watch(extractMemoryLimitProvider),
-          min: ExtractMemoryLimit.min,
-          max: ExtractMemoryLimit.max,
-          step: ExtractMemoryLimit.step,
-          unit: ' MB',
-          onChanged: (v) =>
-              ref.read(extractMemoryLimitProvider.notifier).update(v),
-        ),
+        _memorySlider(),
         SizedBox(height: 8),
         SettingPathInput(
           label: tr(AppI10n.settingConfigWallpapersPath),
@@ -135,6 +138,37 @@ class SettingConfigGroup extends ConsumerWidget {
           onRefresh: () => refreshProjectPath(ref),
         ),
       ],
+    );
+  }
+
+  Widget _memorySlider() {
+    final int setting = ref.watch(extractMemoryLimitProvider);
+    final advice = memoryAdvice(
+      settingMb: setting,
+      availableBytes: _availableBytes,
+    );
+    final String? free = advice.freeMb == null
+        ? null
+        : formatGb(advice.freeMb!);
+
+    return SettingSlider(
+      label: tr(AppI10n.settingConfigMemoryLimit),
+      tip: tr(AppI10n.settingConfigMemoryLimitTip),
+      value: setting,
+      min: ExtractMemoryLimit.min,
+      max: ExtractMemoryLimit.max,
+      step: ExtractMemoryLimit.step,
+      unit: ' MB',
+      notice: free == null
+          ? null
+          : tr(
+              advice.exceedsFree
+                  ? AppI10n.settingConfigMemoryOverFree
+                  : AppI10n.settingConfigMemoryFree,
+              namedArgs: {'free': free},
+            ),
+      noticeIsWarning: advice.exceedsFree,
+      onChanged: (v) => ref.read(extractMemoryLimitProvider.notifier).update(v),
     );
   }
 }

@@ -124,7 +124,9 @@
     "configConcurrency": "同时提取数量",
     "configConcurrencyTip": "同时解包的壁纸数量。机械硬盘建议调低，固态硬盘可调高。",
     "configMemoryLimit": "内存上限",
-    "configMemoryLimitTip": "提取时最多占用的内存，由同时提取的壁纸共享。调低只会变慢，不会出错。"
+    "configMemoryLimitTip": "提取时最多占用的内存，由同时提取的壁纸共享。调低只会变慢，不会出错。",
+    "configMemoryFree": "当前空闲 {free}。",
+    "configMemoryOverFree": "超过当前空闲的 {free}。提取只会变慢，不会失败。"
   },
   "error": {
     "extractFailed": "提取失败:",

@@ -124,7 +124,9 @@
     "configConcurrency": "Simultaneous extractions",
     "configConcurrencyTip": "How many wallpapers unpack at once. Lower this on a hard drive, raise it on an SSD.",
     "configMemoryLimit": "Memory limit",
-    "configMemoryLimitTip": "Most memory extraction may use, shared between the wallpapers running at once. Lower is slower, never wrong."
+    "configMemoryLimitTip": "Most memory extraction may use, shared between the wallpapers running at once. Lower is slower, never wrong.",
+    "configMemoryFree": "{free} free right now.",
+    "configMemoryOverFree": "More than the {free} free right now. Extraction slows down rather than failing."
   },
   "error": {
     "extractFailed": "Extraction failed:",

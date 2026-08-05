@@ -14,6 +14,8 @@ class SettingSlider extends StatelessWidget {
     required this.onChanged,
     this.step = 1,
     this.unit = '',
+    this.notice,
+    this.noticeIsWarning = false,
   });
 
   final String label;
@@ -23,6 +25,11 @@ class SettingSlider extends StatelessWidget {
   final int max;
   final int step;
   final String unit;
+
+  /// A line under the slider about the value in front of the user, as opposed
+  /// to [tip], which explains the setting itself and never changes.
+  final String? notice;
+  final bool noticeIsWarning;
   final void Function(int value) onChanged;
 
   @override
@@ -50,6 +57,13 @@ class SettingSlider extends StatelessWidget {
             label: display,
             onChanged: (v) => onChanged((v / step).round() * step),
           ),
+          if (notice != null)
+            Text(
+              notice!,
+              style: noticeIsWarning
+                  ? theme.meta.captionStyle.copyWith(color: Colors.orange)
+                  : theme.meta.captionStyle,
+            ),
         ],
       ),
     );
