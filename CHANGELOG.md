@@ -1,5 +1,51 @@
 # Changelog
 
+## WeRePKG-EX - v1.65.0
+
+Mostly under the hood. Extraction is faster, keeps itself inside a memory budget
+you set, and no longer loses a wallpaper when it runs short. Bundles RePKG
+0.5.4-ex, which the memory and threading settings need.
+
+### Features
+- **Memory limit setting.** Extraction is held to a total you choose, shared
+  between the wallpapers running at once. Underneath it, the app shows how much
+  RAM is free and turns the line orange when you ask for more than there is.
+  Setting it low makes extraction slower, never wrong.
+- The simultaneous extractions setting is now sized against the machine as well
+  as the number you pick, so a small machine no longer takes on more than it can
+  hold.
+
+### Performance
+- Scenes extract several times faster: a package's textures now convert in
+  parallel rather than one after another.
+- The grid stays smooth while the window is resized, and previews use less
+  memory.
+
+### Bug Fixes
+- **Large wallpapers no longer fail on memory.** The bundled RePKG is 64 bit now,
+  so it is no longer capped at 2GB, and a texture that still runs short is
+  retried on its own instead of being skipped.
+- A RePKG run that wrote nothing but complained is reported as a failure instead
+  of a success.
+- An exported file is only replaced once its replacement has fully arrived, so a
+  run stopped part way cannot leave a half written file in place of a good one.
+- Extraction falls back to writing in place when a locked file blocks the
+  rename, instead of failing.
+- Cancelling stops a copy part way through and no longer publishes part of a
+  scene.
+- Files the cleanup could not delete are reported rather than silently claimed
+  as removed.
+- Replacing existing files works when extracting as wallpapers, not only as
+  projects.
+- The batch cleanup no longer deletes files it did not create.
+- Deleting a wallpaper drops it from the selection instead of leaving a
+  selection that points at nothing.
+- Picking a folder keeps the result even if its page has closed in the meantime.
+- The loading overlay is always dismissed when a batch throws.
+- Wallpapers with no date sort last instead of equal to everything.
+- The progress bar advances with the file count rather than the preview.
+- Startup no longer touches the view after it has been unmounted.
+
 ## WeRePKG-EX - v1.6.0
 
 A UI pass over browsing and selection, plus extraction fixes from the bundled
