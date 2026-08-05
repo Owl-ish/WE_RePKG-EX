@@ -466,7 +466,11 @@ Future<String?> copyWallpaperFolderTo(
   return null;
 }
 
-const String _sceneTempPrefix = '.werepkg-';
+const String _sceneTempPrefix = '.werepkg-ex-';
+
+/// Every scene temp folder this app has ever made begins with this, the pre-1.7
+/// name included, so one check sweeps both spellings.
+const String _sceneTempSweepPrefix = '.werepkg-';
 
 /// Clears the scene directories and half-copied files a killed run left at the
 /// top of the export folder, which the per-scene cleanup never got to. Both
@@ -479,9 +483,10 @@ Future<void> sweepStaleOutput(String outPath) async {
   try {
     await for (final entity in Directory(outPath).list(followLinks: false)) {
       final String name = path.basename(entity.path);
-      if (entity is Directory && name.startsWith(_sceneTempPrefix)) {
+      if (entity is Directory && name.startsWith(_sceneTempSweepPrefix)) {
         await entity.delete(recursive: true);
-      } else if (entity is File && name.endsWith(partSuffix)) {
+      } else if (entity is File &&
+          (name.endsWith(partSuffix) || name.endsWith(legacyPartSuffix))) {
         await entity.delete();
       }
     }

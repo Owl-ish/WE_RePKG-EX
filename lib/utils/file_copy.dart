@@ -55,7 +55,11 @@ Future<void> copyFileReplacing(
 
 /// Suffix for a copy still arriving. Shares the app's prefix so a sweep can
 /// recognise one left by a killed run.
-const String partSuffix = '.werepkg-part';
+const String partSuffix = '.werepkg-ex-part';
+
+/// The pre-1.7 spelling. Swept as well, so upgrading while a killed run's
+/// half-copied files sit in the export folder does not strand them there.
+const String legacyPartSuffix = '.werepkg-part';
 
 Future<void> _deleteQuietly(File file) async {
   try {

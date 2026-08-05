@@ -199,13 +199,13 @@ void main() {
 
   group('stale sweep', () {
     test('clears scene directories a killed run left behind', () async {
-      write(to, '.werepkg-123\\half-done.png', 'x');
+      write(to, '.werepkg-ex-123\\half-done.png', 'x');
       write(to, 'keep.png', 'y');
       Directory('${to.path}\\materials').createSync();
 
       await sweepStaleOutput(to.path);
 
-      expect(Directory('${to.path}\\.werepkg-123').existsSync(), isFalse);
+      expect(Directory('${to.path}\\.werepkg-ex-123').existsSync(), isFalse);
       expect(File('${to.path}\\keep.png').existsSync(), isTrue);
       expect(Directory('${to.path}\\materials').existsSync(), isTrue);
     });
@@ -218,6 +218,19 @@ void main() {
 
       expect(File('${to.path}\\cover.png$partSuffix').existsSync(), isFalse);
       expect(File('${to.path}\\cover.png').existsSync(), isTrue);
+    });
+
+    // Upgrading does not strand what the old build left behind. The names are
+    // spelled out rather than taken from the constants, because the point is
+    // what a pre-1.7 build actually wrote to disk.
+    test('clears leftovers a pre-1.7 build left behind', () async {
+      write(to, '.werepkg-123\\half-done.png', 'x');
+      write(to, 'cover.png.werepkg-part', 'x');
+
+      await sweepStaleOutput(to.path);
+
+      expect(Directory('${to.path}\\.werepkg-123').existsSync(), isFalse);
+      expect(File('${to.path}\\cover.png.werepkg-part').existsSync(), isFalse);
     });
 
     test('does nothing to a folder with none, or one that is gone', () async {
