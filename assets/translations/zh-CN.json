@@ -135,6 +135,7 @@
     "createdFolderFailed": "创建文件夹失败:",
     "getWallpaperFailed": "获取壁纸失败:",
     "parseAcfFailed": "解析 ACF 失败，已忽略附加信息:",
+    "readBackupRecordsFailed": "读取备份记录失败，将重新开始:",
     "wallpaperId": "壁纸 ID:",
     "sourcePath": "来源:",
     "outputPath": "目标位置:",

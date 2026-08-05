@@ -1,5 +1,16 @@
 # Changelog
 
+## WeRePKG-EX - v1.70.0
+
+Unreleased, in progress. Building out the Backup tab: mirroring your Workshop and
+MyProjects libraries to a folder you choose, and showing which wallpapers are
+missing, not backed up, or updated by their author since you last copied them.
+Nothing in it is usable yet.
+
+### Changes
+- Temporary files written while extracting are named `.werepkg-ex-...` instead of
+  `.werepkg-...`. Leftovers from an older version are still cleaned up.
+
 ## WeRePKG-EX - v1.65.0
 
 Mostly under the hood. Extraction is faster, keeps itself inside a memory budget

@@ -157,6 +157,8 @@ class AppI10n {
   static const String errorCreatedFolderFailed = 'error.createdFolderFailed';
   static const String errorGetWallpaperFailed = 'error.getWallpaperFailed';
   static const String errorParseAcfFailed = 'error.parseAcfFailed';
+  static const String errorReadBackupRecordsFailed =
+      'error.readBackupRecordsFailed';
   static const String errorWallpaperId = 'error.wallpaperId';
   static const String errorSourcePath = 'error.sourcePath';
   static const String errorOutputPath = 'error.outputPath';

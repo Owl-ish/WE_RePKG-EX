@@ -140,7 +140,8 @@ Future<List<AcfInfo>> getAcfInfo() async {
     if (content.isEmpty) return acfInfoList;
     acfInfoList = convertToAcfInfoList(content); // 转换为AcfInfo对象列表
   } catch (e) {
-    // ACF only adds size and update time, so a parse failure is not fatal.
+    // Not fatal for the grid, which only loses size and update time. It does
+    // cost the backup tab its update detection, so that warns for itself.
     debugPrint('${tr(AppI10n.errorParseAcfFailed)} $e');
   }
   return acfInfoList;

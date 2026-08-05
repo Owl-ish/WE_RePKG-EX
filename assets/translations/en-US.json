@@ -135,6 +135,7 @@
     "createdFolderFailed": "Folder creation failed:",
     "getWallpaperFailed": "Failed to get wallpaper:",
     "parseAcfFailed": "Failed to parse ACF file, ignoring extra info:",
+    "readBackupRecordsFailed": "Failed to read backup records, starting fresh:",
     "wallpaperId": "Wallpaper ID:",
     "sourcePath": "Source:",
     "outputPath": "Destination:",

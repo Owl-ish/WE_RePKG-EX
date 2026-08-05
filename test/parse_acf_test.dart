@@ -14,6 +14,7 @@ const _validAcf = '''
     {
       "size"  "2048"
       "timeupdated"  "1700000000"
+      "manifest"  "9876543210987654321"
     }
     "222"
     {
@@ -64,6 +65,15 @@ void main() {
       expect(byId['111']!.size, 2048);
       expect(byId['111']!.time, 1700000000);
       expect(byId['222']!.size, 4096);
+    });
+
+    // Steam's manifest is an unsigned 64-bit id, so the largest ones do not fit
+    // in an int. It stays a string and is only ever compared for equality.
+    test('keeps the manifest as a string, and null when absent', () async {
+      final list = convertToAcfInfoList(await parseContent(_validAcf));
+      final byId = {for (final a in list) a.id: a};
+      expect(byId['111']!.manifest, '9876543210987654321');
+      expect(byId['222']!.manifest, isNull);
     });
 
     test('returns empty for a map without AppWorkshop', () {
