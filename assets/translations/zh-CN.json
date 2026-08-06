@@ -4,7 +4,6 @@
     "backup": "备份"
   },
   "backup": {
-    "comingSoon": "备份功能即将在此处推出。",
     "noRoot": "请选择备份的存放位置。",
     "missingFolders": "以下文件夹无法读取，此处的统计结果将不可信：",
     "pathNotSet": "未设置",

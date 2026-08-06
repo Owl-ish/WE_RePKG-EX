@@ -53,6 +53,18 @@ enum BackupState {
   updateDismissed,
 }
 
+/// How many cards sit in each state, zero-filled so a caller can list every
+/// state without checking for null.
+Map<BackupState, int> countByState(Iterable<BackupState> states) {
+  final Map<BackupState, int> counts = <BackupState, int>{
+    for (final BackupState state in BackupState.values) state: 0,
+  };
+  for (final BackupState state in states) {
+    counts[state] = counts[state]! + 1;
+  }
+  return counts;
+}
+
 /// A folder name whose backup layout does not mirror its live layout.
 ///
 /// The four flags are what the card's presence matrix draws. Binning the

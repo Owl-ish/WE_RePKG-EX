@@ -705,4 +705,30 @@ void main() {
       expect(folderVersion(const <FileStamp>[]), isNull);
     });
   });
+
+  group('countByState', () {
+    test('counts each state', () {
+      expect(
+        countByState(const <BackupState>[
+          BackupState.synced,
+          BackupState.vanished,
+          BackupState.synced,
+        ]),
+        <BackupState, int>{
+          BackupState.synced: 2,
+          BackupState.notBackedUp: 0,
+          BackupState.vanished: 1,
+          BackupState.updateAvailable: 0,
+          BackupState.updateDismissed: 0,
+        },
+      );
+    });
+
+    // Zero-filled, so a caller can list every state without a null check and a
+    // state nobody has hits still shows its own row.
+    test('gives an empty library a zero for every state', () {
+      expect(countByState(const <BackupState>[]).values, everyElement(0));
+      expect(countByState(const <BackupState>[]), hasLength(5));
+    });
+  });
 }

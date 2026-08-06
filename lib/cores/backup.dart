@@ -5,11 +5,103 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
-import 'package:we_repkg/utils/storage.dart';
+
+String? backupWorkshopPath(String? backupRoot) => backupRoot == null
+    ? null
+    : path.join(backupRoot, AppStrings.backupWorkshopDir);
+
+String? backupMyProjectsPath(String? backupRoot) => backupRoot == null
+    ? null
+    : path.join(backupRoot, AppStrings.backupProjectDir);
+
+/// A folder the comparison cannot do without.
+///
+/// Any of the three unset or off disk and the answer is not merely incomplete,
+/// it is wrong in the quiet direction: an unreadable live library turns every
+/// backup folder into a vanished card, and an unreachable backup root turns the
+/// whole live library into "not backed up, nothing vanished". Both read as a
+/// confident number rather than as a failure, so the tab names the folder
+/// instead of showing counts.
+enum BackupFolder { liveWorkshop, liveMyProjects, backupRoot }
+
+typedef BackupScan = ({
+  Map<BackupCard, BackupState> cards,
+  List<ReconcileEntry> reconcile,
+  bool acfRead,
+  Set<BackupFolder> missing,
+});
+
+/// Everything the differ needs, read in one pass, then the comparison.
+///
+/// Paths rather than a `WidgetRef`, so this runs against a temp directory in a
+/// test. A null backup root reads as an empty backup, which is what makes every
+/// live wallpaper come back not backed up rather than as an error.
+Future<BackupScan> scanBackup({
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+  required String? acfPath,
+}) async {
+  final (
+    Set<String> liveWorkshop,
+    Set<String> liveMyProjects,
+    Set<String> backupWorkshop,
+    Set<String> backupMyProjects,
+    Map<String, String> myProjectsVersions,
+    ({Map<String, String> byId, bool acfRead}) acf,
+    Map<String, BackupRecord> records,
+    Set<BackupFolder> missing,
+  ) = await (
+    listFolderNames(liveWorkshopPath),
+    listFolderNames(liveMyProjectsPath),
+    listFolderNames(backupWorkshopPath(backupRoot)),
+    listFolderNames(backupMyProjectsPath(backupRoot)),
+    folderVersions(liveMyProjectsPath),
+    workshopVersions(acfPath),
+    readBackupRecords(backupRoot),
+    _missingFolders(liveWorkshopPath, liveMyProjectsPath, backupRoot),
+  ).wait;
+
+  final BackupDiffResult diff = backupDiff(
+    liveWorkshop: liveWorkshop,
+    liveMyProjects: liveMyProjects,
+    backupWorkshop: backupWorkshop,
+    backupMyProjects: backupMyProjects,
+    liveWorkshopVersions: acf.byId,
+    liveMyProjectsVersions: myProjectsVersions,
+    records: records,
+  );
+  return (
+    cards: diff.cards,
+    reconcile: diff.reconcile,
+    acfRead: acf.acfRead,
+    missing: missing,
+  );
+}
+
+Future<Set<BackupFolder>> _missingFolders(
+  String? liveWorkshopPath,
+  String? liveMyProjectsPath,
+  String? backupRoot,
+) async {
+  final List<bool> found = await Future.wait(<Future<bool>>[
+    _folderPresent(liveWorkshopPath),
+    _folderPresent(liveMyProjectsPath),
+    _folderPresent(backupRoot),
+  ]);
+  return <BackupFolder>{
+    if (!found[0]) BackupFolder.liveWorkshop,
+    if (!found[1]) BackupFolder.liveMyProjects,
+    if (!found[2]) BackupFolder.backupRoot,
+  };
+}
+
+Future<bool> _folderPresent(String? folderPath) async =>
+    folderPath != null && await Directory(folderPath).exists();
 
 /// Folder names in a wallpaper library, for the backup diff.
 ///
@@ -83,15 +175,20 @@ Future<void> writeBackupRecords(
 /// Deliberately not `getAcfInfo`, which honours the `useAcfInfo` setting. That
 /// setting picks what the grid sorts on; letting it switch off update detection
 /// would report every backed-up Workshop wallpaper as current. A false
-/// `acfRead` is what puts the warning on the backup tab, since an unreadable
-/// ACF and a library with nothing to update look identical otherwise.
-Future<({Map<String, String> byId, bool acfRead})> workshopVersions() async {
-  final String? acfPath = StorageUtil.getString(AppKeys.acfPath);
+/// `acfRead` puts the warning above the counts, since an unreadable ACF and a
+/// library with nothing to update look identical otherwise.
+Future<({Map<String, String> byId, bool acfRead})> workshopVersions(
+  String? acfPath,
+) async {
   if (acfPath == null || !await File(acfPath).exists()) {
     return (byId: <String, String>{}, acfRead: false);
   }
   try {
-    final List<AcfInfo> items = convertToAcfInfoList(await parseAcf(acfPath));
+    final Map<String, dynamic> parsed = await parseAcf(acfPath);
+    if (!isWorkshopAcf(parsed)) {
+      return (byId: <String, String>{}, acfRead: false);
+    }
+    final List<AcfInfo> items = convertToAcfInfoList(parsed);
     return (
       byId: <String, String>{
         for (final AcfInfo item in items)

@@ -118,6 +118,15 @@ int _skipWhitespace(String content, int i) {
   return (value: content.substring(contentStart, i), endIndex: i + 1);
 }
 
+/// Whether [parsedData] is an ACF the workshop reader understands.
+///
+/// An empty file and one that is not an ACF at all both parse to an empty map
+/// without throwing, and a library with nothing installed also yields no items,
+/// so the item count cannot tell "could not read it" from "read it, nothing
+/// there". The backup tab warns on the first and not the second.
+bool isWorkshopAcf(Map<String, dynamic> parsedData) =>
+    parsedData['AppWorkshop'] is Map<String, dynamic>;
+
 /// 将解析后的ACF数据转换为AcfInfo对象列表
 List<AcfInfo> convertToAcfInfoList(Map<String, dynamic> parsedData) {
   if (parsedData.isEmpty) return [];

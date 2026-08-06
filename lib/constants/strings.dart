@@ -20,4 +20,10 @@ class AppStrings {
   static const String acfName = 'appworkshop_431960.acf';
   static const String baseProjectPath =
       r'common\wallpaper_engine\projects\myprojects';
+  // The two libraries mirrored under the backup root. This layout is what the
+  // user's PowerShell script already produces, so an existing backup works
+  // untouched.
+  static const String backupWorkshopDir = '431960';
+  static const String backupProjectDir =
+      r'wallpaper_engine\projects\myprojects';
 }

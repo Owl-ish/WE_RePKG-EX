@@ -39,7 +39,6 @@ class AppI10n {
   static const String homeProject = 'home.project';
   static const String navExtract = 'nav.extract';
   static const String navBackup = 'nav.backup';
-  static const String backupComingSoon = 'backup.comingSoon';
   static const String backupNoRoot = 'backup.noRoot';
   static const String backupMissingFolders = 'backup.missingFolders';
   static const String backupPathNotSet = 'backup.pathNotSet';

@@ -4,7 +4,6 @@
     "backup": "Backup"
   },
   "backup": {
-    "comingSoon": "Backup lives here soon.",
     "noRoot": "Choose where your backups live.",
     "missingFolders": "These folders could not be read, so any numbers here would be wrong:",
     "pathNotSet": "not set",
