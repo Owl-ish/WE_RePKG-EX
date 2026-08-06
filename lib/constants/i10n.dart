@@ -7,6 +7,11 @@ class AppI10n {
   static const String homeSortUpdate = 'home.sortUpdate';
   static const String homeExtractTo = 'home.extractTo';
   static const String homeExtractFolderTip = 'home.extractFolderTip';
+  static const String homeLibraryWorkshop = 'home.libraryWorkshop';
+  static const String homeLibraryMyProjects = 'home.libraryMyProjects';
+  static const String homeProjectFolderTip = 'home.projectFolderTip';
+  static const String homeResetFolder = 'home.resetFolder';
+  static const String homeClearFolder = 'home.clearFolder';
   static const String homeExtractAll = 'home.extractAll';
   static const String homeExtractChecked = 'home.extractChecked';
   static const String homeDeleteChecked = 'home.deleteChecked';
@@ -36,6 +41,23 @@ class AppI10n {
   static const String navBackup = 'nav.backup';
   static const String backupComingSoon = 'backup.comingSoon';
   static const String backupNoRoot = 'backup.noRoot';
+  static const String backupMissingFolders = 'backup.missingFolders';
+  static const String backupPathNotSet = 'backup.pathNotSet';
+  static const String backupFolderLiveWorkshop = 'backup.folder.liveWorkshop';
+  static const String backupFolderLiveMyProjects =
+      'backup.folder.liveMyProjects';
+  static const String backupFolderBackupRoot = 'backup.folder.backupRoot';
+  static const String backupRefresh = 'backup.refresh';
+  static const String backupScanFailed = 'backup.scanFailed';
+  static const String backupAcfUnreadable = 'backup.acfUnreadable';
+  static const String backupReconcile = 'backup.reconcile';
+  static const String backupStateSynced = 'backup.state.synced';
+  static const String backupStateNotBackedUp = 'backup.state.notBackedUp';
+  static const String backupStateVanished = 'backup.state.vanished';
+  static const String backupStateUpdateAvailable =
+      'backup.state.updateAvailable';
+  static const String backupStateUpdateDismissed =
+      'backup.state.updateDismissed';
 
   static const String homeDetails = 'home.details';
   static const String homeDoubleClickDetails = 'home.doubleClickDetails';
@@ -90,17 +112,16 @@ class AppI10n {
       'setting.config.replaceExistFileTip';
   static const String settingConfigToolPath = 'setting.config.toolPath';
   static const String settingConfigToolPathTip = 'setting.config.toolPathTip';
-  static const String settingConfigWallpapersPath =
-      'setting.config.wallpapersPath';
-  static const String settingConfigWallpapersPathTip =
-      'setting.config.wallpapersPathTip';
   static const String settingConfigDeleteTransparency =
       'setting.config.deleteTransparency';
   static const String settingConfigDeleteTransparencyTip =
       'setting.config.deleteTransparencyTip';
-  static const String settingConfigProjectPath = 'setting.config.projectPath';
-  static const String settingConfigProjectPathTip =
-      'setting.config.projectPathTip';
+  static const String settingLibraryLabel = 'setting.library.label';
+  static const String settingLibraryWorkshop = 'setting.library.workshop';
+  static const String settingLibraryWorkshopTip = 'setting.library.workshopTip';
+  static const String settingLibraryMyProjects = 'setting.library.myProjects';
+  static const String settingLibraryMyProjectsTip =
+      'setting.library.myProjectsTip';
   static const String settingConfigUseProjectFolder =
       'setting.config.useProjectFolder';
   static const String settingConfigUseProjectFolderTip =

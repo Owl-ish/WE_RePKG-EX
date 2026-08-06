@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/utils/backup_diff.dart';
 
 enum RunState { initial, empty, complete }
 
@@ -96,6 +97,20 @@ extension NavSectionExtension on NavSection {
         return Icons.grid_view_rounded;
       case NavSection.backup:
         return Icons.backup_outlined;
+    }
+  }
+}
+
+/// Which library the grid is browsing. The enum itself lives in
+/// `backup_diff.dart`, where it is also the records-file key, rather than being
+/// declared twice for the same two folders.
+extension WallpaperLibraryExtension on WallpaperLibrary {
+  String get label {
+    switch (this) {
+      case WallpaperLibrary.workshop:
+        return tr(AppI10n.homeLibraryWorkshop);
+      case WallpaperLibrary.myProjects:
+        return tr(AppI10n.homeLibraryMyProjects);
     }
   }
 }

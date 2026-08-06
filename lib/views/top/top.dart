@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/views/top/filter_dropdown.dart';
+import 'package:we_repkg/views/top/library_dropdown.dart';
 import 'package:we_repkg/views/top/refresh.dart';
 import 'package:we_repkg/views/top/search.dart';
 import 'package:we_repkg/views/top/sort_dropdown.dart';
@@ -31,7 +32,13 @@ class TopView extends StatelessWidget {
           ),
           SizedBox(width: 4),
           Refresh(),
-          SizedBox(width: 16),
+          // Wider than the gap it had, to sit off the refresh button rather
+          // than beside it. Not true centring between refresh and the search
+          // field: that field is centred in the window, so the space to its
+          // left changes with every resize.
+          SizedBox(width: 32),
+          LibraryDropdown(),
+          SizedBox(width: 24),
           // Expanded absorbs the slack so the row cannot overflow, and Center
           // keeps the search off the filter button.
           Expanded(

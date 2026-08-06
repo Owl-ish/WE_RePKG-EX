@@ -108,6 +108,28 @@ void main() {
     expect(container.read(backupRootProvider), r'C:\backup');
   });
 
+  // Cancelling used to blank the row on screen while storage kept the old path,
+  // so the app looked like it had forgotten the setting until a restart.
+  testWidgets('cancelling the picker keeps a root already set', (tester) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    late WidgetRef captured;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(home: Host(onRef: (r) => captured = r)),
+      ),
+    );
+    container.read(backupRootProvider.notifier).update(r'C:\backup');
+
+    final Future<void> pending = setBackupRoot(captured);
+    picker.answer.complete(null);
+    await tester.runAsync(() => pending);
+
+    expect(container.read(backupRootProvider), r'C:\backup');
+  });
+
   testWidgets('cancelling the backup root picker leaves it unset', (
     tester,
   ) async {

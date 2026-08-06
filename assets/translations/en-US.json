@@ -5,7 +5,25 @@
   },
   "backup": {
     "comingSoon": "Backup lives here soon.",
-    "noRoot": "Choose where your backups live."
+    "noRoot": "Choose where your backups live.",
+    "missingFolders": "These folders could not be read, so any numbers here would be wrong:",
+    "pathNotSet": "not set",
+    "folder": {
+      "liveWorkshop": "Workshop library",
+      "liveMyProjects": "myprojects library",
+      "backupRoot": "Backup folder"
+    },
+    "refresh": "Rescan",
+    "scanFailed": "Could not read the libraries:",
+    "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
+    "reconcile": "Needs reconciling",
+    "state": {
+      "synced": "Synced",
+      "notBackedUp": "Not backed up",
+      "vanished": "Vanished",
+      "updateAvailable": "Update available",
+      "updateDismissed": "Update dismissed"
+    }
   },
   "home": {
     "topTitle": "{count} Wallpapers Found",
@@ -15,6 +33,11 @@
     "sortUpdate": "Sort by update",
     "extractTo": "Extract to",
     "extractFolderTip": "Please select the target folder for export",
+    "libraryWorkshop": "Workshop",
+    "libraryMyProjects": "MyProjects",
+    "projectFolderTip": "Please select where extracted projects are moved",
+    "resetFolder": "Back to the default folder",
+    "clearFolder": "Clear this folder",
     "extractAll": "Extract all",
     "extractChecked": "Extract selected",
     "deleteChecked": "Delete selected",
@@ -84,10 +107,6 @@
       "replaceExistFileTip": "Replace if the exported filename exists; otherwise, skip exporting",
       "toolPath": "Tool path",
       "toolPathTip": "Please select the path of RePKG.exe",
-      "wallpapersPath": "Library",
-      "wallpapersPathTip": "Please select the path of wallpapers",
-      "projectPath": "MyProject Path",
-      "projectPathTip": "Please select the path for the exported project",
       "useProjectFolder": "Move to the project folder",
       "useProjectFolderTip": "Move the extracted project to the Wallpaper Engine project folder",
       "deleteTransparency": "Delete transparent images",
@@ -105,6 +124,13 @@
       "label": "Backup",
       "root": "Backup root",
       "rootTip": "Please select the folder holding your backups"
+    },
+    "library": {
+      "label": "Library",
+      "workshop": "Workshop library",
+      "workshopTip": "Please select the path of wallpapers",
+      "myProjects": "MyProjects library",
+      "myProjectsTip": "Please select your Wallpaper Engine myprojects folder"
     },
     "system": {
       "label": "System",

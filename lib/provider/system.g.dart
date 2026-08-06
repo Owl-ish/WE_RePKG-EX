@@ -216,6 +216,166 @@ abstract class _$ProjectPath extends $Notifier<String?> {
   }
 }
 
+/// Which library the grid is browsing. Remembered, like the sort and filter.
+
+@ProviderFor(CurrentLibrary)
+final currentLibraryProvider = CurrentLibraryProvider._();
+
+/// Which library the grid is browsing. Remembered, like the sort and filter.
+final class CurrentLibraryProvider
+    extends $NotifierProvider<CurrentLibrary, WallpaperLibrary> {
+  /// Which library the grid is browsing. Remembered, like the sort and filter.
+  CurrentLibraryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'currentLibraryProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$currentLibraryHash();
+
+  @$internal
+  @override
+  CurrentLibrary create() => CurrentLibrary();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(WallpaperLibrary value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<WallpaperLibrary>(value),
+    );
+  }
+}
+
+String _$currentLibraryHash() => r'3f99ca99dc1dc34990d796b70549feef0a691aee';
+
+/// Which library the grid is browsing. Remembered, like the sort and filter.
+
+abstract class _$CurrentLibrary extends $Notifier<WallpaperLibrary> {
+  WallpaperLibrary build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<WallpaperLibrary, WallpaperLibrary>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<WallpaperLibrary, WallpaperLibrary>,
+              WallpaperLibrary,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+/// The live myprojects library, the second half of the pair the backup tab
+/// compares against the backup.
+///
+/// Deliberately not [ProjectPath], which is where extraction *writes*. The two
+/// shared one setting until 2026-08-05, so pointing extraction at a scratch
+/// folder made the backup tab read an empty myprojects library and file all
+/// 1341 backed-up folders as vanished or needing reconciliation.
+///
+/// Falls back to the folder beside the Workshop library, so it fills itself in
+/// and follows [WallpaperPath] until the user picks one. [reset] removes the
+/// override rather than writing a derived value, or the two would drift apart
+/// the next time the library moved.
+
+@ProviderFor(MyProjectsLibrary)
+final myProjectsLibraryProvider = MyProjectsLibraryProvider._();
+
+/// The live myprojects library, the second half of the pair the backup tab
+/// compares against the backup.
+///
+/// Deliberately not [ProjectPath], which is where extraction *writes*. The two
+/// shared one setting until 2026-08-05, so pointing extraction at a scratch
+/// folder made the backup tab read an empty myprojects library and file all
+/// 1341 backed-up folders as vanished or needing reconciliation.
+///
+/// Falls back to the folder beside the Workshop library, so it fills itself in
+/// and follows [WallpaperPath] until the user picks one. [reset] removes the
+/// override rather than writing a derived value, or the two would drift apart
+/// the next time the library moved.
+final class MyProjectsLibraryProvider
+    extends $NotifierProvider<MyProjectsLibrary, String?> {
+  /// The live myprojects library, the second half of the pair the backup tab
+  /// compares against the backup.
+  ///
+  /// Deliberately not [ProjectPath], which is where extraction *writes*. The two
+  /// shared one setting until 2026-08-05, so pointing extraction at a scratch
+  /// folder made the backup tab read an empty myprojects library and file all
+  /// 1341 backed-up folders as vanished or needing reconciliation.
+  ///
+  /// Falls back to the folder beside the Workshop library, so it fills itself in
+  /// and follows [WallpaperPath] until the user picks one. [reset] removes the
+  /// override rather than writing a derived value, or the two would drift apart
+  /// the next time the library moved.
+  MyProjectsLibraryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'myProjectsLibraryProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$myProjectsLibraryHash();
+
+  @$internal
+  @override
+  MyProjectsLibrary create() => MyProjectsLibrary();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String?>(value),
+    );
+  }
+}
+
+String _$myProjectsLibraryHash() => r'c2e4e2ce2d079697e8b0211a6401ad2e32abc46f';
+
+/// The live myprojects library, the second half of the pair the backup tab
+/// compares against the backup.
+///
+/// Deliberately not [ProjectPath], which is where extraction *writes*. The two
+/// shared one setting until 2026-08-05, so pointing extraction at a scratch
+/// folder made the backup tab read an empty myprojects library and file all
+/// 1341 backed-up folders as vanished or needing reconciliation.
+///
+/// Falls back to the folder beside the Workshop library, so it fills itself in
+/// and follows [WallpaperPath] until the user picks one. [reset] removes the
+/// override rather than writing a derived value, or the two would drift apart
+/// the next time the library moved.
+
+abstract class _$MyProjectsLibrary extends $Notifier<String?> {
+  String? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<String?, String?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String?, String?>,
+              String?,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
 /// Where the backup tab mirrors both libraries. Null until the user picks one,
 /// which reads as nothing being backed up rather than as an error.
 ///
@@ -324,7 +484,7 @@ final class ExportPathProvider extends $NotifierProvider<ExportPath, String?> {
   }
 }
 
-String _$exportPathHash() => r'283f48de6aa8083796d99ade7fe8e1b1e2f98243';
+String _$exportPathHash() => r'c2443b497920f5c82e5dc054e6fab3867b8683f6';
 
 abstract class _$ExportPath extends $Notifier<String?> {
   String? build();

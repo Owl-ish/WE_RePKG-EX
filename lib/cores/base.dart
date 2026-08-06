@@ -61,6 +61,20 @@ Future<bool> setProjectPath(WidgetRef ref, [bool show = false]) async {
   return true;
 }
 
+/// One setter behind the settings row for the live myprojects library.
+Future<void> setMyProjectsLibrary(WidgetRef ref) async {
+  final notifier = ref.read(myProjectsLibraryProvider.notifier);
+  final String? picked = await getDirectoryPath();
+  if (picked != null) notifier.update(picked);
+}
+
+/// Back to following the Workshop library path.
+void refreshMyProjectsLibrary(WidgetRef ref) =>
+    ref.read(myProjectsLibraryProvider.notifier).reset();
+
+void refreshExportPath(WidgetRef ref) =>
+    ref.read(exportPathProvider.notifier).clear();
+
 void refreshProjectPath(WidgetRef ref) {
   String? wallpaperPath = StorageUtil.getString(AppKeys.wallpaperPath);
   if (wallpaperPath != null) {

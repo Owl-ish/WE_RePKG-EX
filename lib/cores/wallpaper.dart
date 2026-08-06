@@ -15,6 +15,7 @@ import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -101,15 +102,26 @@ Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
   final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
   final CurrentState currentState = ref.read(currentStateProvider.notifier);
   final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
-  String? wallpaperPath = ref.read(wallpaperPathProvider);
-  if (wallpaperPath == null) {
-    wallpaperPath = await getWallpaperPath();
-    wallpaperPathNotifier.update(wallpaperPath);
+  final WallpaperLibrary library = ref.read(currentLibraryProvider);
+  final String? myProjects = ref.read(myProjectsLibraryProvider);
+  String? folderPath = ref.read(wallpaperPathProvider);
+  // Only the Workshop library is worth hunting for across the drives; the
+  // myprojects one is derived from whatever that search settles on.
+  if (folderPath == null) {
+    folderPath = await getWallpaperPath();
+    wallpaperPathNotifier.update(folderPath);
+  }
+  if (library == WallpaperLibrary.myProjects) {
+    // Derived here rather than taken from the provider, which settled on null
+    // back when the Workshop path was still unknown.
+    folderPath =
+        myProjects ??
+        (folderPath == null ? null : projectDefaultPath(folderPath));
   }
   currentState.update(RunState.initial);
   List<WallpaperInfo> wallpapers = [];
   try {
-    final result = await scanWallpapers(wallpaperPath);
+    final result = await scanWallpapers(folderPath);
     wallpapers = result.wallpapers;
     final earliest = result.earliestDate;
     if (earliest != null) {

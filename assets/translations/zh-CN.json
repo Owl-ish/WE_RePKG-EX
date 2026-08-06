@@ -5,7 +5,25 @@
   },
   "backup": {
     "comingSoon": "备份功能即将在此处推出。",
-    "noRoot": "请选择备份的存放位置。"
+    "noRoot": "请选择备份的存放位置。",
+    "missingFolders": "以下文件夹无法读取，此处的统计结果将不可信：",
+    "pathNotSet": "未设置",
+    "folder": {
+      "liveWorkshop": "创意工坊库",
+      "liveMyProjects": "myprojects 库",
+      "backupRoot": "备份文件夹"
+    },
+    "refresh": "重新扫描",
+    "scanFailed": "无法读取壁纸库：",
+    "acfUnreadable": "无法读取 Steam 的创意工坊文件，因此无法判断创意工坊壁纸是否有更新。",
+    "reconcile": "待处理",
+    "state": {
+      "synced": "已同步",
+      "notBackedUp": "未备份",
+      "vanished": "已丢失",
+      "updateAvailable": "有更新",
+      "updateDismissed": "已忽略更新"
+    }
   },
   "home": {
     "topTitle": "共检索到 {count} 个壁纸",
@@ -15,6 +33,11 @@
     "sortUpdate": "按更新排序",
     "extractTo": "提取至",
     "extractFolderTip": "请选择导出的目标文件夹",
+    "libraryWorkshop": "创意工坊",
+    "libraryMyProjects": "MyProjects",
+    "projectFolderTip": "请选择提取后项目的移动目标文件夹",
+    "resetFolder": "恢复默认文件夹",
+    "clearFolder": "清除该文件夹",
     "extractAll": "提取全部",
     "extractChecked": "提取选中",
     "deleteChecked": "删除选中",
@@ -84,10 +107,6 @@
       "replaceExistFileTip": "当导出的文件名在目标文件夹存在时直接替换，否则不会导出",
       "toolPath": "工具路径",
       "toolPathTip": "请选择 RePKG.exe 的路径",
-      "wallpapersPath": "壁纸路径",
-      "wallpapersPathTip": "请选择壁纸的路径",
-      "projectPath": "MyProject 路径",
-      "projectPathTip": "请选择项目导出后的路径",
       "useProjectFolder": "移动至项目文件夹",
       "useProjectFolderTip": "将提取的项目移动至 Wallpaper Engine 项目文件夹",
       "deleteTransparency": "删除透明图片",
@@ -105,6 +124,13 @@
       "label": "备份",
       "root": "备份根目录",
       "rootTip": "请选择备份文件的存放路径"
+    },
+    "library": {
+      "label": "壁纸库",
+      "workshop": "创意工坊库",
+      "workshopTip": "请选择壁纸的路径",
+      "myProjects": "MyProjects 库",
+      "myProjectsTip": "请选择 Wallpaper Engine 的 myprojects 文件夹"
     },
     "system": {
       "label": "系统",

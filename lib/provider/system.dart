@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/models/enums.dart';
+import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -50,6 +51,52 @@ class ProjectPath extends _$ProjectPath {
   }
 }
 
+/// Which library the grid is browsing. Remembered, like the sort and filter.
+@Riverpod(keepAlive: true)
+class CurrentLibrary extends _$CurrentLibrary {
+  @override
+  WallpaperLibrary build() =>
+      WallpaperLibrary.values[StorageUtil.getInt(AppKeys.currentLibrary) ?? 0];
+
+  void update(WallpaperLibrary value) async {
+    state = value;
+    await StorageUtil.setInt(AppKeys.currentLibrary, value.index);
+  }
+}
+
+/// The live myprojects library, the second half of the pair the backup tab
+/// compares against the backup.
+///
+/// Deliberately not [ProjectPath], which is where extraction *writes*. The two
+/// shared one setting until 2026-08-05, so pointing extraction at a scratch
+/// folder made the backup tab read an empty myprojects library and file all
+/// 1341 backed-up folders as vanished or needing reconciliation.
+///
+/// Falls back to the folder beside the Workshop library, so it fills itself in
+/// and follows [WallpaperPath] until the user picks one. [reset] removes the
+/// override rather than writing a derived value, or the two would drift apart
+/// the next time the library moved.
+@Riverpod(keepAlive: true)
+class MyProjectsLibrary extends _$MyProjectsLibrary {
+  @override
+  String? build() {
+    final String? stored = StorageUtil.getString(AppKeys.myProjectsLibrary);
+    if (stored != null) return stored;
+    final String? wallpaperPath = ref.watch(wallpaperPathProvider);
+    return wallpaperPath == null ? null : projectDefaultPath(wallpaperPath);
+  }
+
+  void update(String value) async {
+    state = value;
+    await StorageUtil.setString(AppKeys.myProjectsLibrary, value);
+  }
+
+  Future<void> reset() async {
+    await StorageUtil.remove(AppKeys.myProjectsLibrary);
+    ref.invalidateSelf();
+  }
+}
+
 /// Where the backup tab mirrors both libraries. Null until the user picks one,
 /// which reads as nothing being backed up rather than as an error.
 ///
@@ -74,6 +121,15 @@ class ExportPath extends _$ExportPath {
     state = value;
     if (state == null) return;
     await StorageUtil.setString(AppKeys.exportPath, value!);
+  }
+
+  /// Back to unset, hint and all. There is no folder to derive this one from,
+  /// unlike the project path, so the reset button clears it and the app asks
+  /// for a folder again. [update] cannot do this: it ignores null so that a
+  /// cancelled picker leaves the setting alone.
+  Future<void> clear() async {
+    state = null;
+    await StorageUtil.remove(AppKeys.exportPath);
   }
 }
 

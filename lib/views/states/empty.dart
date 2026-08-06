@@ -5,6 +5,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 
@@ -15,6 +16,11 @@ class EmptyView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The box sets whichever library is being shown. Offering the Workshop one
+    // while the grid is on myprojects would repoint the wrong library, and take
+    // the ACF and extraction paths with it.
+    final bool workshop =
+        ref.watch(currentLibraryProvider) == WallpaperLibrary.workshop;
     return Center(
       child: Column(
         spacing: 16,
@@ -48,9 +54,17 @@ class EmptyView extends ConsumerWidget {
                     width: double.infinity,
                     height: 40,
                     fontSize: 14,
-                    text: ref.watch(wallpaperPathProvider),
-                    hintText: tr(AppI10n.settingConfigWallpapersPathTip),
-                    onPressed: () async => await setWallpaperPath(ref),
+                    text: workshop
+                        ? ref.watch(wallpaperPathProvider)
+                        : ref.watch(myProjectsLibraryProvider),
+                    hintText: tr(
+                      workshop
+                          ? AppI10n.settingLibraryWorkshopTip
+                          : AppI10n.settingLibraryMyProjectsTip,
+                    ),
+                    onPressed: () async => workshop
+                        ? await setWallpaperPath(ref)
+                        : await setMyProjectsLibrary(ref),
                   ),
                 ),
               ],

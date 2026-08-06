@@ -40,4 +40,13 @@ class AppKeys {
   /// Root of the backup tree, holding `431960` and
   /// `wallpaper_engine\projects\myprojects` beneath it.
   static const String backupRoot = 'backupRoot';
+
+  /// Which library the grid is browsing, as a `WallpaperLibrary` index, so
+  /// reordering that enum changes which library a returning user lands on.
+  static const String currentLibrary = 'currentLibrary';
+
+  /// The live myprojects library. Absent until the user overrides the folder
+  /// derived from [wallpaperPath], which is what makes the refresh button a
+  /// removal rather than a second write.
+  static const String myProjectsLibrary = 'myProjectsLibrary';
 }

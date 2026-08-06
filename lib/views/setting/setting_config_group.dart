@@ -3,12 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/base.dart';
-import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/setting.dart';
-import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/memory_advice.dart';
 import 'package:we_repkg/utils/system_memory.dart';
-import 'package:we_repkg/views/setting/setting_path_input.dart';
 import 'package:we_repkg/views/setting/setting_slider.dart';
 import 'package:we_repkg/widgets/setting_checkbox.dart';
 import 'package:we_repkg/widgets/setting_label.dart';
@@ -75,11 +72,6 @@ class _SettingConfigGroupState extends ConsumerState<SettingConfigGroup> {
           value: ref.watch(useAcfInfoProvider),
           onChanged: (value) {
             ref.read(useAcfInfoProvider.notifier).update(value!);
-            if (!value && ref.read(wallpaperSortTypeProvider).isUpdate) {
-              ref
-                  .read(wallpaperSortTypeProvider.notifier)
-                  .update(SortType.time);
-            }
             refreshWallpaperPath(ref);
           },
           label: tr(AppI10n.settingConfigGetAcfInfo),
@@ -121,22 +113,6 @@ class _SettingConfigGroupState extends ConsumerState<SettingConfigGroup> {
         // wallpaper costs, since that follows the size of its largest texture.
         // Setting this low only makes extraction slower.
         _memorySlider(),
-        SizedBox(height: 8),
-        SettingPathInput(
-          label: tr(AppI10n.settingConfigWallpapersPath),
-          path: ref.watch(wallpaperPathProvider),
-          hintText: tr(AppI10n.settingConfigWallpapersPathTip),
-          onPick: () => setWallpaperPath(ref),
-          onRefresh: () => refreshWallpaperPath(ref),
-        ),
-        SizedBox(height: 4),
-        SettingPathInput(
-          label: tr(AppI10n.settingConfigProjectPath),
-          path: ref.watch(projectPathProvider),
-          hintText: tr(AppI10n.settingConfigProjectPathTip),
-          onPick: () => setProjectPath(ref),
-          onRefresh: () => refreshProjectPath(ref),
-        ),
       ],
     );
   }
