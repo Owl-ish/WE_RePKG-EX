@@ -14,11 +14,13 @@ class SettingCard extends StatelessWidget {
   /// Wide enough for two columns on a big monitor and no wider. Past this the
   /// card stops reading as a card.
   static const double maxWidth = 1240;
-  static const double maxHeight = 880;
+  static const double maxHeight = 920;
 
   static double widthFor(double window) => min(window * .82, maxWidth);
 
-  static double heightFor(double window) => min(window * .86, maxHeight);
+  /// Taller than the .86 it was: the right column gained the backup and library
+  /// groups, and the card was cutting its last row on a laptop-height window.
+  static double heightFor(double window) => min(window * .9, maxHeight);
 
   @override
   Widget build(BuildContext context) {

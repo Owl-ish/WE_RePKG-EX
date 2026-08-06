@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/pack.dart';
@@ -85,21 +86,41 @@ class SettingAboutGroup extends ConsumerWidget {
   /// Where the settings JSON lives, for backing it up or editing it by hand.
   /// The path runs to about 430px, so it gets its own line rather than being
   /// cut off beside its label in a half-width column.
+  ///
+  /// Boxed like the path rows below it, but bordered rather than filled alone,
+  /// so it reads as a path without reading as one that can be changed.
   Widget? _settingsFile(BuildContext context) {
     final String? file = StorageUtil.filePath;
     if (file == null) return null;
-    final TextStyle? style = Theme.of(context).textTheme.bodyMedium;
+    final ThemeData theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${tr(AppI10n.settingAboutSettingsFile)}:', style: style),
-          Row(
-            children: [
-              Flexible(child: Text(file, style: style)),
-              CopyBtn(text: file),
-            ],
+          Text(
+            '${tr(AppI10n.settingAboutSettingsFile)}:',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.only(left: 12),
+            decoration: BoxDecoration(
+              borderRadius: LayoutNums.pill,
+              color: theme.inputDecorationTheme.fillColor,
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    file,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+                  ),
+                ),
+                CopyBtn(text: file),
+              ],
+            ),
           ),
         ],
       ),
