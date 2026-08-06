@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/painting.dart';
 
 /// Shared so the refresh, filter and sort buttons stay the same size as each
 /// other.
@@ -20,6 +20,20 @@ class LayoutNums {
 
   /// Corners of the smaller controls sitting on those surfaces.
   static const double controlRadius = 4;
+
+  /// Height of the search field, the path boxes and the dropdowns, so they
+  /// line up wherever two of them sit side by side.
+  static const double controlHeight = 36;
+
+  /// Half that height, which is what makes a control read as a pill rather
+  /// than as a rounded rectangle.
+  static const double pillRadius = controlHeight / 2;
+
+  /// The pill corner itself, so the controls sharing it cannot drift apart and
+  /// so nothing allocates one per build.
+  static const BorderRadius pill = BorderRadius.all(
+    Radius.circular(pillRadius),
+  );
 }
 
 class WindowNums {

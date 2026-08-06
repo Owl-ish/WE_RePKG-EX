@@ -47,7 +47,7 @@ class _SearchState extends ConsumerState<Search> {
     return CustomInput(
       controller: controller,
       hintText: tr(AppI10n.homeSearchTip),
-      padding: EdgeInsets.only(left: 8, right: 8),
+      padding: EdgeInsets.only(left: 12, right: 8),
       leading: Icon(Icons.search_rounded, size: 20, color: Colors.grey),
       extraIcon: controller.text.isEmpty
           ? null

@@ -56,7 +56,7 @@ class _FolderInputState extends State<FolderInput> {
       width: widget.width,
       height: widget.height,
       controller: _controller,
-      padding: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.only(left: 12),
       fontSize: widget.fontSize,
       readOnly: true,
       hintText: widget.hintText,

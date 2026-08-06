@@ -32,10 +32,10 @@ class CustomInput extends StatelessWidget {
     ThemeData theme = Theme.of(context);
     return Container(
       width: width,
-      height: height ?? 36,
+      height: height ?? LayoutNums.controlHeight,
       padding: padding ?? EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+        borderRadius: LayoutNums.pill,
         color: theme.inputDecorationTheme.fillColor,
       ),
       alignment: Alignment.center,
@@ -53,8 +53,8 @@ class CustomInput extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: theme.inputDecorationTheme.hintStyle,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+                border: const OutlineInputBorder(
+                  borderRadius: LayoutNums.pill,
                   borderSide: BorderSide.none,
                 ),
                 isCollapsed: true,

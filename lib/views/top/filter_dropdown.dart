@@ -11,8 +11,8 @@ import 'package:we_repkg/widgets/app_icon_button.dart';
 /// setter that flips it.
 typedef _FilterBox = (String, bool, void Function(bool));
 
-/// Type and age-rating filters. The trigger stays icon-sized because TopView is
-/// a fixed Row with about 200px of slack at the minimum window width.
+/// Type and age-rating filters. The trigger stays icon-sized because the rest
+/// of TopView is fixed width and the search field absorbs what is left.
 class FilterDropdown extends ConsumerWidget {
   const FilterDropdown({super.key});
 

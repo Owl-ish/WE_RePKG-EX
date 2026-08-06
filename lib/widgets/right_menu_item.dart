@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart';
+import 'package:we_repkg/constants/nums.dart';
 
 final class RightMenuItem extends ContextMenuItem {
   final String label;
@@ -39,27 +40,33 @@ final class RightMenuItem extends ContextMenuItem {
       fontFamily: 'Microsoft YaHei',
     );
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 36.0, minWidth: 120.0),
-      child: Material(
-        color: !enabled
-            ? Colors.transparent
-            : isFocused
-            ? focusedBackground
-            : background,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: !enabled ? null : () => handleItemSelection(context),
-          mouseCursor: SystemMouseCursors.click,
-          canRequestFocus: false,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              maxLines: 1,
-              style: textStyle,
-              overflow: TextOverflow.ellipsis,
+    // Inset, so a pill row does not run into the menu panel's own corners.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 36.0, minWidth: 120.0),
+        child: Material(
+          color: !enabled
+              ? Colors.transparent
+              : isFocused
+              ? focusedBackground
+              : background,
+          borderRadius: LayoutNums.pill,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: LayoutNums.pill,
+            onTap: !enabled ? null : () => handleItemSelection(context),
+            mouseCursor: SystemMouseCursors.click,
+            canRequestFocus: false,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: textStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),
