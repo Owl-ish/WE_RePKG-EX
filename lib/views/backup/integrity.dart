@@ -196,7 +196,13 @@ class _FindingRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text(formatSize(finding.bytes), style: TextStyle(color: Colors.grey)),
+          // Zero means unsized, not empty: a root holding no loadable wallpaper
+          // is not walked. An empty folder has its own verdict.
+          if (finding.bytes > 0)
+            Text(
+              formatSize(finding.bytes),
+              style: TextStyle(color: Colors.grey),
+            ),
           const SizedBox(width: LayoutNums.contentGap),
           AppIconButton(
             icon: Icons.folder_open_rounded,

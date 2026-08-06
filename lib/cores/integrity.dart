@@ -110,7 +110,36 @@ Future<List<IntegrityFinding>?> _scanRoot(
       if (finding != null) found.add(finding);
     }
   }
-  return found;
+
+  // A library always holds wallpapers. A root where not one folder is loadable
+  // is a path pointed somewhere else entirely, and sizing it would recursively
+  // stat whatever that is: pick C:\Windows and every folder in it comes back
+  // media-only. The verdicts still say what is there; the sizes are skipped.
+  final bool isLibrary = found.any(
+    (IntegrityFinding f) => f.verdict == IntegrityVerdict.sound,
+  );
+  if (!isLibrary) return found;
+  return _withSizes(found);
+}
+
+/// Totals each broken folder, leaving the sound ones at zero so a healthy
+/// library never pays for a recursive walk.
+Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
+  final List<IntegrityFinding> sized = <IntegrityFinding>[];
+  for (final IntegrityFinding f in found) {
+    sized.add(
+      f.verdict == IntegrityVerdict.sound
+          ? f
+          : (
+              root: f.root,
+              name: f.name,
+              verdict: f.verdict,
+              bytes: await _folderBytes(Directory(f.folder)),
+              folder: f.folder,
+            ),
+    );
+  }
+  return sized;
 }
 
 Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
@@ -151,13 +180,13 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
       await _resolves(folder, named)) {
     verdict = IntegrityVerdict.sound;
   }
+  // Unsized: whether the walk is worth doing depends on the whole root, which
+  // this cannot see.
   return (
     root: root,
     name: path.basename(folder.path),
     verdict: verdict,
-    // Sized only when there is something to report, so a sound library never
-    // pays for a recursive walk.
-    bytes: verdict == IntegrityVerdict.sound ? 0 : await _folderBytes(folder),
+    bytes: 0,
     folder: folder.path,
   );
 }

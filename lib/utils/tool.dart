@@ -23,13 +23,15 @@ String typeText(String type) {
 }
 
 String formatSize(int size) {
-  if (size < 1024) {
-    return '${size}B';
-  } else if (size < 1024 * 1024) {
-    return '${(size / 1024).toStringAsFixed(2)}KB';
-  } else {
-    return '${(size / 1024 / 1024).toStringAsFixed(2)}MB';
+  const List<String> units = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+  if (size < 1024) return '${size}B';
+  double scaled = size.toDouble();
+  int unit = 0;
+  while (scaled >= 1024 && unit < units.length - 1) {
+    scaled /= 1024;
+    unit++;
   }
+  return '${scaled.toStringAsFixed(2)}${units[unit]}';
 }
 
 List<String> splitOnFirstColon(String message) {

@@ -19,6 +19,17 @@ void main() {
       expect(formatSize(1024 * 1024), '1.00MB');
       expect(formatSize(1024 * 1024 + 512 * 1024), '1.50MB');
     });
+    // A wallpaper library holds multi-gigabyte video, and 8908.80MB is a size
+    // nobody reads at a glance.
+    test('gigabytes and terabytes', () {
+      expect(formatSize(1024 * 1024 * 1024), '1.00GB');
+      expect(formatSize(5256468093), '4.90GB');
+      expect(formatSize(1024 * 1024 * 1024 * 1024), '1.00TB');
+    });
+    test('the largest unit keeps counting rather than wrapping', () {
+      const int terabyte = 1024 * 1024 * 1024 * 1024;
+      expect(formatSize(2048 * terabyte), '2048.00TB');
+    });
   });
 
   group('splitOnFirstColon', () {

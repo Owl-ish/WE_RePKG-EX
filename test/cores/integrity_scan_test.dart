@@ -197,6 +197,10 @@ void main() {
   });
 
   test('a finding carries the size of what is at stake', () async {
+    wallpaper('live_myprojects', 'ok', <String, String>{
+      'project.json': sceneProject,
+      'scene.pkg': 'x',
+    });
     wallpaper('live_myprojects', 'big', <String, String>{
       'payload.mp4': 'x' * 500,
     });
@@ -204,6 +208,30 @@ void main() {
     final IntegrityReport report = await scan();
 
     expect(report.findings.single.bytes, 500);
+  });
+
+  // A root where not one folder is loadable is a path pointed somewhere else,
+  // and sizing it would recursively stat whatever that is. Point the library at
+  // C:\Windows and every folder in it comes back media-only.
+  test('a root holding no wallpaper at all is listed but not sized', () async {
+    wallpaper('live_workshop', 'not_a_library_1', <String, String>{
+      'whatever.dll': 'x' * 300,
+    });
+    wallpaper('live_workshop', 'not_a_library_2', <String, String>{
+      'other.dll': 'x' * 300,
+    });
+
+    final IntegrityReport report = await scan();
+
+    expect(report.findings, hasLength(2));
+    expect(
+      report.findings.map((IntegrityFinding f) => f.verdict),
+      everyElement(IntegrityVerdict.mediaOnly),
+    );
+    expect(
+      report.findings.map((IntegrityFinding f) => f.bytes),
+      everyElement(0),
+    );
   });
 
   // An unset or absent root is not an empty one, and saying so is what stops a
