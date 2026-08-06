@@ -25,6 +25,28 @@ void main() {
   Directory wallpaper(Directory lib, String id) =>
       Directory(p.join(lib.path, id))..createSync();
 
+  // AC 2. With no backup root the scan has nothing to look in, so every card
+  // falls out of the differ as not backed up rather than as an error.
+  group('with no backup root', () {
+    test('the library listing is empty', () async {
+      expect(await listFolderNames(null), isEmpty);
+    });
+
+    test('the version listing is empty', () async {
+      expect(await folderVersions(null), isEmpty);
+    });
+
+    test('the records read as none', () async {
+      expect(await readBackupRecords(null), isEmpty);
+    });
+
+    test('writing records is a no-op rather than a crash', () async {
+      await writeBackupRecords(null, <String, BackupRecord>{
+        'workshop/793602574': const BackupRecord(backedUpVersion: 'manifest-1'),
+      });
+    });
+  });
+
   group('listFolderNames', () {
     test('returns the folder names and ignores loose files', () async {
       final Directory lib = library('431960');
@@ -107,7 +129,7 @@ void main() {
     }
 
     // useAcfInfo governs the grid's sort column. Letting it switch off update
-    // detection would report all 2,163 Workshop wallpapers as current.
+    // detection would report every backed-up Workshop wallpaper as current.
     test('reads manifests even when the acf display setting is off', () async {
       await useAcf(acf, setting: false);
 
@@ -137,20 +159,22 @@ void main() {
   group('backup records', () {
     test('round-trips through the backup root', () async {
       await writeBackupRecords(tmp.path, <String, BackupRecord>{
-        '793602574': const BackupRecord(
+        'workshop/793602574': const BackupRecord(
           backedUpVersion: 'manifest-1',
           dismissedVersion: 'manifest-2',
         ),
-        'Cool Wallpaper': const BackupRecord(backedUpVersion: 'alpha|1|2'),
+        'myprojects/793602574': const BackupRecord(
+          backedUpVersion: 'alpha|1|2',
+        ),
       });
 
       final Map<String, BackupRecord> read = await readBackupRecords(tmp.path);
 
-      expect(read.keys, <String>{'793602574', 'Cool Wallpaper'});
-      expect(read['793602574']!.backedUpVersion, 'manifest-1');
-      expect(read['793602574']!.dismissedVersion, 'manifest-2');
-      expect(read['Cool Wallpaper']!.backedUpVersion, 'alpha|1|2');
-      expect(read['Cool Wallpaper']!.dismissedVersion, isNull);
+      expect(read.keys, <String>{'workshop/793602574', 'myprojects/793602574'});
+      expect(read['workshop/793602574']!.backedUpVersion, 'manifest-1');
+      expect(read['workshop/793602574']!.dismissedVersion, 'manifest-2');
+      expect(read['myprojects/793602574']!.backedUpVersion, 'alpha|1|2');
+      expect(read['myprojects/793602574']!.dismissedVersion, isNull);
     });
 
     test('reads an absent file as no records', () async {

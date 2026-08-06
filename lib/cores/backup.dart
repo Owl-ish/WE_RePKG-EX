@@ -13,7 +13,7 @@ import 'package:we_repkg/utils/storage.dart';
 
 /// Folder names in a wallpaper library, for the backup diff.
 ///
-/// Names only, with no `project.json` parsing: the diff compares 3,400-odd
+/// Names only, with no `project.json` parsing: the diff compares thousands of
 /// folders and does not need their contents, and a folder dropped in by hand
 /// without a `project.json` still occupies the backup.
 Future<Set<String>> listFolderNames(String? folderPath) async {
