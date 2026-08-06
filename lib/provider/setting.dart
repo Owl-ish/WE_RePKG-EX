@@ -48,9 +48,21 @@ class SortAscending extends _$SortAscending {
 
 @riverpod
 class WallpaperSortType extends _$WallpaperSortType {
+  /// Sorting by update time reads the ACF's timestamps, so the choice cannot
+  /// stand while the setting that reads them is off: it would sort on data that
+  /// was never loaded, under a top bar naming an option its own menu no longer
+  /// offers. Held rather than overwritten, so the stored value stays put and
+  /// comes back when the setting does.
   @override
-  SortType build() =>
-      SortType.values[StorageUtil.getInt(AppKeys.sortType) ?? 0];
+  SortType build() {
+    final SortType stored =
+        SortType.values[StorageUtil.getInt(AppKeys.sortType) ?? 0];
+    if (stored == SortType.update && !ref.watch(useAcfInfoProvider)) {
+      return SortType.time;
+    }
+    return stored;
+  }
+
   void update(SortType value) async {
     state = value;
     await StorageUtil.setInt(AppKeys.sortType, value.index);
