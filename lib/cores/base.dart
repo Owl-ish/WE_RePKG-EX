@@ -33,6 +33,13 @@ Future<bool> setExportPath(WidgetRef ref, [bool show = false]) async {
   return true;
 }
 
+/// One setter behind both the settings row and the backup tab's empty state.
+Future<void> setBackupRoot(WidgetRef ref) async {
+  final notifier = ref.read(backupRootProvider.notifier);
+  final String? backupRoot = await getDirectoryPath();
+  if (backupRoot != null) notifier.update(backupRoot);
+}
+
 Future<void> setToolPath(WidgetRef ref) async {
   final notifier = ref.read(toolPathProvider.notifier);
   final xType = XTypeGroup(label: 'RePKG', extensions: ['exe']);

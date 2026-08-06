@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/views/setting/setting_about_group.dart';
+import 'package:we_repkg/views/setting/setting_backup_group.dart';
 import 'package:we_repkg/views/setting/setting_config_group.dart';
 import 'package:we_repkg/views/setting/setting_system_group.dart';
 
@@ -19,6 +20,22 @@ class SettingView extends StatelessWidget {
   /// start at roughly 1327px of window.
   static const double twoColumnWidth = 1040;
   static const double columnGap = 40;
+
+  /// Named once each, so a new group cannot reach one layout and miss the
+  /// other. Split by group, not by height: the extraction settings are one
+  /// subject and stay together even though it leaves the right column shorter.
+  static const List<Widget> _leftGroups = <Widget>[SettingConfigGroup()];
+  static const List<Widget> _rightGroups = <Widget>[
+    SettingBackupGroup(),
+    SettingSystemGroup(),
+    SettingAboutGroup(),
+  ];
+
+  static Widget _column(List<Widget> groups) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: groups,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -50,31 +67,14 @@ class SettingView extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth < twoColumnWidth) {
-                  return const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SettingConfigGroup(),
-                      SettingSystemGroup(),
-                      SettingAboutGroup(),
-                    ],
-                  );
+                  return _column(<Widget>[..._leftGroups, ..._rightGroups]);
                 }
-                // Split by group, not by height. The extraction settings are
-                // one subject and stay together even though it leaves the
-                // right column shorter.
-                return const Row(
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: SettingConfigGroup()),
-                    SizedBox(width: columnGap),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [SettingSystemGroup(), SettingAboutGroup()],
-                      ),
-                    ),
+                  children: <Widget>[
+                    Expanded(child: _column(_leftGroups)),
+                    const SizedBox(width: columnGap),
+                    Expanded(child: _column(_rightGroups)),
                   ],
                 );
               },

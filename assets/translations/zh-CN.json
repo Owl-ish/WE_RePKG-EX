@@ -4,7 +4,8 @@
     "backup": "备份"
   },
   "backup": {
-    "comingSoon": "备份功能即将在此处推出。"
+    "comingSoon": "备份功能即将在此处推出。",
+    "noRoot": "请选择备份的存放位置。"
   },
   "home": {
     "topTitle": "共检索到 {count} 个壁纸",
@@ -99,6 +100,11 @@
       "autoUpdateProjectPathTip": "手动选择壁纸库路径后自动更新项目路径",
       "autoUpdateAcfPath": "自动更新 acf 路径",
       "autoUpdateAcfPathTip": "手动选择壁纸库路径后自动更新 acf 路径"
+    },
+    "backup": {
+      "label": "备份",
+      "root": "备份根目录",
+      "rootTip": "请选择备份文件的存放路径"
     },
     "system": {
       "label": "系统",

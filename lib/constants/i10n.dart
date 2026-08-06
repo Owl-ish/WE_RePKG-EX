@@ -35,6 +35,7 @@ class AppI10n {
   static const String navExtract = 'nav.extract';
   static const String navBackup = 'nav.backup';
   static const String backupComingSoon = 'backup.comingSoon';
+  static const String backupNoRoot = 'backup.noRoot';
 
   static const String homeDetails = 'home.details';
   static const String homeDoubleClickDetails = 'home.doubleClickDetails';
@@ -127,6 +128,11 @@ class AppI10n {
   static const String settingConfigAutoUpdateAcfPathTip =
       'setting.config.autoUpdateAcfPathTip';
   static const String settingConfigMaximizeOpen = 'setting.config.maximizeOpen';
+
+  // 设置-备份相关
+  static const String settingBackupLabel = 'setting.backup.label';
+  static const String settingBackupRoot = 'setting.backup.root';
+  static const String settingBackupRootTip = 'setting.backup.rootTip';
 
   // 设置-系统相关
   static const String settingSystemLabel = 'setting.system.label';

@@ -352,7 +352,7 @@ final class LocalNotificationTypeProvider
 }
 
 String _$localNotificationTypeHash() =>
-    r'60c745f0e6ae544e18201a8900455d239c71a588';
+    r'6fff8ba3bfb7f403faf3d3c15e29debf600c993d';
 
 abstract class _$LocalNotificationType extends $Notifier<NotificationType> {
   NotificationType build();

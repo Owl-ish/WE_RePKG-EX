@@ -77,6 +77,58 @@ void main() {
     expect(container.read(exportPathProvider), r'C:\chosen');
   });
 
+  // Same shape for the backup root, which the settings row and the backup tab's
+  // empty state both reach through one setter.
+  testWidgets('a backup root chosen after the page closed is still kept', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    late WidgetRef captured;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(home: Host(onRef: (r) => captured = r)),
+      ),
+    );
+
+    final Future<void> pending = setBackupRoot(captured);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SizedBox()),
+      ),
+    );
+
+    picker.answer.complete(r'C:\backup');
+    await tester.runAsync(() => pending);
+
+    expect(container.read(backupRootProvider), r'C:\backup');
+  });
+
+  testWidgets('cancelling the backup root picker leaves it unset', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    late WidgetRef captured;
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(home: Host(onRef: (r) => captured = r)),
+      ),
+    );
+
+    final Future<void> pending = setBackupRoot(captured);
+    picker.answer.complete(null);
+    await tester.runAsync(() => pending);
+
+    expect(container.read(backupRootProvider), isNull);
+  });
+
   testWidgets('cancelling the picker leaves the path alone', (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);

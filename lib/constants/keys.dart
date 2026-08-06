@@ -36,4 +36,8 @@ class AppKeys {
   static const String windowHeight = 'windowHeight';
   static const String extractConcurrency = 'extractConcurrency';
   static const String extractMemoryLimit = 'extractMemoryLimit';
+
+  /// Root of the backup tree, holding `431960` and
+  /// `wallpaper_engine\projects\myprojects` beneath it.
+  static const String backupRoot = 'backupRoot';
 }

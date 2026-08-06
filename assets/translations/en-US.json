@@ -4,7 +4,8 @@
     "backup": "Backup"
   },
   "backup": {
-    "comingSoon": "Backup lives here soon."
+    "comingSoon": "Backup lives here soon.",
+    "noRoot": "Choose where your backups live."
   },
   "home": {
     "topTitle": "{count} Wallpapers Found",
@@ -99,6 +100,11 @@
       "autoUpdateProjectPathTip": "Auto update project path after updating wallpaper library path",
       "autoUpdateAcfPath": "Auto update acf path",
       "autoUpdateAcfPathTip": "Auto update acf path after updating wallpaper library path"
+    },
+    "backup": {
+      "label": "Backup",
+      "root": "Backup root",
+      "rootTip": "Please select the folder holding your backups"
     },
     "system": {
       "label": "System",

@@ -216,6 +216,83 @@ abstract class _$ProjectPath extends $Notifier<String?> {
   }
 }
 
+/// Where the backup tab mirrors both libraries. Null until the user picks one,
+/// which reads as nothing being backed up rather than as an error.
+///
+/// [update] takes a non-null path, unlike the other path notifiers: nothing
+/// clears a backup root, and the nullable shape would let a cancelled picker
+/// blank the setting on screen while storage kept the old value.
+
+@ProviderFor(BackupRoot)
+final backupRootProvider = BackupRootProvider._();
+
+/// Where the backup tab mirrors both libraries. Null until the user picks one,
+/// which reads as nothing being backed up rather than as an error.
+///
+/// [update] takes a non-null path, unlike the other path notifiers: nothing
+/// clears a backup root, and the nullable shape would let a cancelled picker
+/// blank the setting on screen while storage kept the old value.
+final class BackupRootProvider extends $NotifierProvider<BackupRoot, String?> {
+  /// Where the backup tab mirrors both libraries. Null until the user picks one,
+  /// which reads as nothing being backed up rather than as an error.
+  ///
+  /// [update] takes a non-null path, unlike the other path notifiers: nothing
+  /// clears a backup root, and the nullable shape would let a cancelled picker
+  /// blank the setting on screen while storage kept the old value.
+  BackupRootProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'backupRootProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$backupRootHash();
+
+  @$internal
+  @override
+  BackupRoot create() => BackupRoot();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String?>(value),
+    );
+  }
+}
+
+String _$backupRootHash() => r'03628b7578d535fdb44bd2b9afeca02822aeae9c';
+
+/// Where the backup tab mirrors both libraries. Null until the user picks one,
+/// which reads as nothing being backed up rather than as an error.
+///
+/// [update] takes a non-null path, unlike the other path notifiers: nothing
+/// clears a backup root, and the nullable shape would let a cancelled picker
+/// blank the setting on screen while storage kept the old value.
+
+abstract class _$BackupRoot extends $Notifier<String?> {
+  String? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<String?, String?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String?, String?>,
+              String?,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(ExportPath)
 final exportPathProvider = ExportPathProvider._();
 

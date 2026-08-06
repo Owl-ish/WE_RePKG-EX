@@ -50,6 +50,22 @@ class ProjectPath extends _$ProjectPath {
   }
 }
 
+/// Where the backup tab mirrors both libraries. Null until the user picks one,
+/// which reads as nothing being backed up rather than as an error.
+///
+/// [update] takes a non-null path, unlike the other path notifiers: nothing
+/// clears a backup root, and the nullable shape would let a cancelled picker
+/// blank the setting on screen while storage kept the old value.
+@Riverpod(keepAlive: true)
+class BackupRoot extends _$BackupRoot {
+  @override
+  String? build() => StorageUtil.getString(AppKeys.backupRoot);
+  void update(String value) async {
+    state = value;
+    await StorageUtil.setString(AppKeys.backupRoot, value);
+  }
+}
+
 @Riverpod(keepAlive: true)
 class ExportPath extends _$ExportPath {
   @override
