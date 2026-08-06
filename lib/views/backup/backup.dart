@@ -2,17 +2,68 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
+import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
+import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
+import 'package:we_repkg/widgets/sliding_switch.dart';
 
-/// The backup area. Until the grid lands this is a count per state, which is
-/// enough to check the comparison against a real library.
+/// The backup area: the backup itself, and the integrity check beside it.
 class BackupView extends ConsumerWidget {
   const BackupView({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final BackupTab tab = ref.watch(currentBackupTabProvider);
+    // The section is handed straight into an Expanded, so the inset the top bar
+    // and the grid apply for themselves has to be applied here too.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        LayoutNums.edgeInset,
+        LayoutNums.contentGap,
+        LayoutNums.edgeInset,
+        LayoutNums.contentGap,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(bottom: LayoutNums.contentGap),
+            child: SlidingSwitch(
+              initialValue: tab.index,
+              children: <int, Widget>{
+                for (int i = 0; i < BackupTab.values.length; i++)
+                  i + 1: Text(BackupTab.values[i].label),
+              },
+              onValueChanged: (int v) => ref
+                  .read(currentBackupTabProvider.notifier)
+                  .update(BackupTab.values[v - 1]),
+            ),
+          ),
+          Expanded(
+            child: switch (tab) {
+              // The integrity check reads the live libraries too, so it is
+              // worth opening before a backup root has been chosen.
+              BackupTab.integrity => const IntegrityView(),
+              BackupTab.backup => const _Backup(),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Until the grid lands this is a count per state, which is enough to check the
+/// comparison against a real library.
+class _Backup extends ConsumerWidget {
+  const _Backup();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

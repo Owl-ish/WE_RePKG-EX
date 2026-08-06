@@ -5,13 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
+import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/backup/backup.dart';
+import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 
@@ -52,7 +56,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: BackupView())),
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: const Scaffold(body: BackupView()),
+        ),
       ),
     );
     return container;
@@ -60,6 +67,20 @@ void main() {
 
   String fieldText(WidgetTester tester) =>
       tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+  // The segmented control keys its children from 1 while the enum indexes from
+  // 0, so the off-by-one is only ever a click away from a RangeError.
+  testWidgets('the second segment opens the integrity check', (tester) async {
+    final ProviderContainer container = await show(tester);
+
+    expect(find.byType(IntegrityView), findsNothing);
+
+    await tester.tap(find.text(AppI10n.backupTabIntegrity));
+    await tester.pumpAndSettle();
+
+    expect(container.read(currentBackupTabProvider), BackupTab.integrity);
+    expect(find.byType(IntegrityView), findsOneWidget);
+  });
 
   // The tab has to be usable on its own. Without this the only way to set a
   // backup root is to know it lives in the settings card.
@@ -106,7 +127,10 @@ void main() {
                 AsyncValue<BackupScan>.data(scan),
               ),
             ],
-            child: const MaterialApp(home: Scaffold(body: BackupView())),
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const Scaffold(body: BackupView()),
+            ),
           ),
         );
 
@@ -236,7 +260,10 @@ void main() {
               ),
             ),
           ],
-          child: const MaterialApp(home: Scaffold(body: BackupView())),
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const Scaffold(body: BackupView()),
+          ),
         ),
       );
 
@@ -256,7 +283,10 @@ void main() {
               return scanOf();
             }),
           ],
-          child: const MaterialApp(home: Scaffold(body: BackupView())),
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const Scaffold(body: BackupView()),
+          ),
         ),
       );
       await tester.pump();

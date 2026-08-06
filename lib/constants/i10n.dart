@@ -49,6 +49,34 @@ class AppI10n {
   static const String backupRefresh = 'backup.refresh';
   static const String backupScanFailed = 'backup.scanFailed';
   static const String backupAcfUnreadable = 'backup.acfUnreadable';
+  static const String backupTabBackup = 'backup.tab.backup';
+  static const String backupTabIntegrity = 'backup.tab.integrity';
+
+  // 完整性检查相关
+  static const String integrityClean = 'integrity.clean';
+  static const String integrityScanned = 'integrity.scanned';
+  static const String integrityMissingRoots = 'integrity.missingRoots';
+  static const String integrityRecheck = 'integrity.recheck';
+  static const String integrityFailed = 'integrity.failed';
+  static const String integrityOpenFolder = 'integrity.openFolder';
+  static const String integrityRootLiveWorkshop = 'integrity.root.liveWorkshop';
+  static const String integrityRootLiveMyProjects =
+      'integrity.root.liveMyProjects';
+  static const String integrityRootBackupWorkshop =
+      'integrity.root.backupWorkshop';
+  static const String integrityRootBackupMyProjects =
+      'integrity.root.backupMyProjects';
+  static const String integrityVerdictSound = 'integrity.verdict.sound';
+  static const String integrityVerdictPackedSceneNoProject =
+      'integrity.verdict.packedSceneNoProject';
+  static const String integrityVerdictUnpackedSceneNoProject =
+      'integrity.verdict.unpackedSceneNoProject';
+  static const String integrityVerdictMediaOnly = 'integrity.verdict.mediaOnly';
+  static const String integrityVerdictPayloadMissing =
+      'integrity.verdict.payloadMissing';
+  static const String integrityVerdictProjectUnreadable =
+      'integrity.verdict.projectUnreadable';
+  static const String integrityVerdictEmpty = 'integrity.verdict.empty';
   static const String backupReconcile = 'backup.reconcile';
   static const String backupStateSynced = 'backup.state.synced';
   static const String backupStateNotBackedUp = 'backup.state.notBackedUp';

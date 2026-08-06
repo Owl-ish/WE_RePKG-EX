@@ -25,3 +25,13 @@ class CurrentSection extends _$CurrentSection {
     return pending;
   }
 }
+
+/// Which tab the backup area is showing. Not persisted, for the same reason as
+/// [CurrentSection].
+@Riverpod(keepAlive: true)
+class CurrentBackupTab extends _$CurrentBackupTab {
+  @override
+  BackupTab build() => BackupTab.backup;
+
+  void update(BackupTab value) => state = value;
+}

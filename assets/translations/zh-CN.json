@@ -15,6 +15,10 @@
     "refresh": "重新扫描",
     "scanFailed": "无法读取壁纸库：",
     "acfUnreadable": "无法读取 Steam 的创意工坊文件，因此无法判断创意工坊壁纸是否有更新。",
+    "tab": {
+      "backup": "备份",
+      "integrity": "完整性"
+    },
     "reconcile": "待处理",
     "state": {
       "synced": "已同步",
@@ -22,6 +26,29 @@
       "vanished": "已丢失",
       "updateAvailable": "有更新",
       "updateDismissed": "已忽略更新"
+    }
+  },
+  "integrity": {
+    "clean": "所有壁纸引擎能识别的文件夹均可正常加载。",
+    "scanned": "已检查 {} 个文件夹",
+    "missingRoots": "以下壁纸库无法读取，因此未做检查：",
+    "recheck": "重新检查",
+    "failed": "检查未能完成：",
+    "openFolder": "打开文件夹",
+    "root": {
+      "liveWorkshop": "创意工坊库",
+      "liveMyProjects": "myprojects 库",
+      "backupWorkshop": "创意工坊备份",
+      "backupMyProjects": "myprojects 备份"
+    },
+    "verdict": {
+      "sound": "可加载",
+      "packedSceneNoProject": "已打包场景，缺少 project.json",
+      "unpackedSceneNoProject": "未打包场景，缺少 project.json",
+      "mediaOnly": "仅有媒体文件，壁纸引擎无法识别",
+      "payloadMissing": "缺少 project.json 指定的文件",
+      "projectUnreadable": "project.json 无法解析",
+      "empty": "空文件夹"
     }
   },
   "home": {

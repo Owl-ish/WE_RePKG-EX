@@ -115,6 +115,19 @@ extension WallpaperLibraryExtension on WallpaperLibrary {
   }
 }
 
+enum BackupTab { backup, integrity }
+
+extension BackupTabExtension on BackupTab {
+  String get label {
+    switch (this) {
+      case BackupTab.backup:
+        return tr(AppI10n.backupTabBackup);
+      case BackupTab.integrity:
+        return tr(AppI10n.backupTabIntegrity);
+    }
+  }
+}
+
 enum NotificationType { system, app }
 
 extension NotificationTypeExtension on NotificationType {

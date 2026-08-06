@@ -244,8 +244,10 @@ Future<String?> deleteChecked(WidgetRef ref) async {
   return err;
 }
 
-Future<void> browserCurrent(WallpaperInfo wallpaper) async {
-  String folder = wallpaper.folder;
+Future<void> browserCurrent(WallpaperInfo wallpaper) =>
+    browserFolder(wallpaper.folder);
+
+Future<void> browserFolder(String folder) async {
   if (!Directory(folder).existsSync()) {
     return showErrorToast(tr(AppI10n.dialogFileNoExist));
   }

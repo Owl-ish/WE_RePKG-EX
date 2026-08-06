@@ -1,0 +1,149 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:we_repkg/utils/wallpaper_integrity.dart';
+
+// Each case is one of the shapes found in the user's real library on
+// 2026-08-06, so a regression here is a regression against something that
+// actually happened.
+void main() {
+  IntegrityVerdict verdict(
+    List<String> files, {
+    List<String> dirs = const <String>[],
+    bool project = true,
+    bool readable = true,
+    String? file,
+    bool customDirectory = false,
+  }) => classifyFolder(
+    entries: <FolderEntry>[
+      for (final String f in files) (name: f, isDirectory: false),
+      for (final String d in dirs) (name: d, isDirectory: true),
+    ],
+    project: (present: project, readable: readable, file: file),
+    hasCustomDirectory: customDirectory,
+  );
+
+  test('a packed scene beside its project file is sound', () {
+    expect(
+      verdict(<String>[
+        'project.json',
+        'scene.pkg',
+        'preview.jpg',
+      ], file: 'scene.json'),
+      IntegrityVerdict.sound,
+    );
+  });
+
+  test('an unpacked scene is sound without a pkg', () {
+    expect(
+      verdict(
+        <String>['project.json', 'scene.json', 'preview.jpg'],
+        dirs: <String>['materials', 'models'],
+        file: 'scene.json',
+      ),
+      IntegrityVerdict.sound,
+    );
+  });
+
+  test('a video is sound when the file it names is there', () {
+    expect(
+      verdict(<String>[
+        'project.json',
+        'preview.jpg',
+        'STARS-141.mp4',
+      ], file: 'STARS-141.mp4'),
+      IntegrityVerdict.sound,
+    );
+  });
+
+  // 3675770605: metadata backed up, the 21MB video never was.
+  test('a video wallpaper missing its video is caught', () {
+    expect(
+      verdict(<String>[
+        'project.json',
+        'preview.jpg',
+      ], file: '[4K] 2B Midnight Bloom.mp4'),
+      IntegrityVerdict.payloadMissing,
+    );
+  });
+
+  // 3373684260 and 3373711195: the file field names a top-level mp4 that is
+  // really a folder of them. Reporting these as broken was a false alarm.
+  test('media in a folder named after the file counts as present', () {
+    expect(
+      verdict(
+        <String>['project.json', 'preview.jpg'],
+        dirs: <String>['白桃少女1110-2'],
+        file: '白桃少女1110-2.mp4',
+      ),
+      IntegrityVerdict.sound,
+    );
+  });
+
+  // 3294327477: a bare pkg, nothing else. The metadata is what is missing.
+  test('a lone scene.pkg is a packed scene with no project file', () {
+    expect(
+      verdict(<String>['scene.pkg'], project: false),
+      IntegrityVerdict.packedSceneNoProject,
+    );
+  });
+
+  // 1306534790: assets and a scene, no project.json anywhere, live or backup.
+  test('a scene.json with no project file is an unpacked scene', () {
+    expect(
+      verdict(
+        <String>['scene.json', 'preview.jpg'],
+        dirs: <String>['materials', 'models', 'shaders'],
+        project: false,
+      ),
+      IntegrityVerdict.unpackedSceneNoProject,
+    );
+  });
+
+  // 3373795844: 8.7GB in one nested folder and nothing WPE reads.
+  test('content with nothing recognisable is media only', () {
+    expect(
+      verdict(const <String>[], dirs: <String>['1110-5奶咪'], project: false),
+      IntegrityVerdict.mediaOnly,
+    );
+  });
+
+  // 3679588148 in the myprojects backup: the 5GB payload with no metadata.
+  test('a payload alone is media only, not sound', () {
+    expect(
+      verdict(<String>['STARS-141.mp4'], project: false),
+      IntegrityVerdict.mediaOnly,
+    );
+  });
+
+  test('an empty folder is empty rather than media only', () {
+    expect(verdict(const <String>[], project: false), IntegrityVerdict.empty);
+  });
+
+  test('a project file that will not parse is called out on its own', () {
+    expect(
+      verdict(<String>['project.json', 'scene.pkg'], readable: false),
+      IntegrityVerdict.projectUnreadable,
+    );
+  });
+
+  test('no file field falls back to a custom directory', () {
+    expect(
+      verdict(
+        <String>['project.json'],
+        dirs: <String>['directories'],
+        customDirectory: true,
+      ),
+      IntegrityVerdict.sound,
+    );
+    expect(
+      verdict(<String>['project.json'], dirs: <String>['directories']),
+      IntegrityVerdict.payloadMissing,
+    );
+  });
+
+  test('names match whatever their case, since Windows sees one folder', () {
+    expect(
+      verdict(<String>['project.json', 'Scene.PKG'], file: 'scene.json'),
+      IntegrityVerdict.sound,
+    );
+  });
+}

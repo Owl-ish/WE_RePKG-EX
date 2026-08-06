@@ -15,6 +15,10 @@
     "refresh": "Rescan",
     "scanFailed": "Could not read the libraries:",
     "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
+    "tab": {
+      "backup": "Backup",
+      "integrity": "Integrity"
+    },
     "reconcile": "Needs reconciling",
     "state": {
       "synced": "Synced",
@@ -22,6 +26,29 @@
       "vanished": "Vanished",
       "updateAvailable": "Update available",
       "updateDismissed": "Update dismissed"
+    }
+  },
+  "integrity": {
+    "clean": "Every folder Wallpaper Engine can see is loadable.",
+    "scanned": "{} folders checked",
+    "missingRoots": "These libraries could not be read, so they were not checked:",
+    "recheck": "Check again",
+    "failed": "Could not finish the check:",
+    "openFolder": "Open folder",
+    "root": {
+      "liveWorkshop": "Workshop library",
+      "liveMyProjects": "myprojects library",
+      "backupWorkshop": "Workshop backup",
+      "backupMyProjects": "myprojects backup"
+    },
+    "verdict": {
+      "sound": "Loadable",
+      "packedSceneNoProject": "Packed scene with no project.json",
+      "unpackedSceneNoProject": "Unpacked scene with no project.json",
+      "mediaOnly": "Media only, nothing Wallpaper Engine reads",
+      "payloadMissing": "Missing the file project.json names",
+      "projectUnreadable": "project.json will not parse",
+      "empty": "Empty folder"
     }
   },
   "home": {
