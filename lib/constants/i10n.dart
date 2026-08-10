@@ -85,6 +85,9 @@ class AppI10n {
       'backup.state.updateAvailable';
   static const String backupStateUpdateDismissed =
       'backup.state.updateDismissed';
+  static const String backupStateEmptyBackup = 'backup.state.emptyBackup';
+  static const String backupScanReading = 'backup.scanReading';
+  static const String backupScanComparing = 'backup.scanComparing';
 
   static const String homeDetails = 'home.details';
   static const String homeDoubleClickDetails = 'home.doubleClickDetails';
@@ -213,6 +216,8 @@ class AppI10n {
   static const String errorParseAcfFailed = 'error.parseAcfFailed';
   static const String errorReadBackupRecordsFailed =
       'error.readBackupRecordsFailed';
+  static const String errorSeedBackupRecordsFailed =
+      'error.seedBackupRecordsFailed';
   static const String errorWallpaperId = 'error.wallpaperId';
   static const String errorSourcePath = 'error.sourcePath';
   static const String errorOutputPath = 'error.outputPath';

@@ -34,7 +34,13 @@ BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
-}) => (cards: cards, reconcile: reconcile, acfRead: true, missing: missing);
+}) => (
+  cards: cards,
+  reconcile: reconcile,
+  acfRead: true,
+  missing: missing,
+  seeds: const <String, String>{},
+);
 
 void main() {
   setUp(() async {

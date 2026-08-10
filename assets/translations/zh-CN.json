@@ -13,6 +13,8 @@
       "backupRoot": "备份文件夹"
     },
     "refresh": "重新扫描",
+    "scanReading": "正在读取壁纸库",
+    "scanComparing": "正在比较备份，{done} / {total}",
     "scanFailed": "无法读取壁纸库：",
     "acfUnreadable": "无法读取 Steam 的创意工坊文件，因此无法判断创意工坊壁纸是否有更新。",
     "tab": {
@@ -25,7 +27,8 @@
       "notBackedUp": "未备份",
       "vanished": "已丢失",
       "updateAvailable": "有更新",
-      "updateDismissed": "已忽略更新"
+      "updateDismissed": "已忽略更新",
+      "emptyBackup": "空文件夹"
     }
   },
   "integrity": {
@@ -194,6 +197,7 @@
     "getWallpaperFailed": "获取壁纸失败:",
     "parseAcfFailed": "解析 ACF 失败，已忽略附加信息:",
     "readBackupRecordsFailed": "读取备份记录失败，将重新开始:",
+    "seedBackupRecordsFailed": "无法记录备份版本，但比较已完成:",
     "wallpaperId": "壁纸 ID:",
     "sourcePath": "来源:",
     "outputPath": "目标位置:",

@@ -102,6 +102,250 @@ void main() {
     });
   });
 
+  group('copyStandings', () {
+    late Directory live;
+    late Directory backup;
+    setUp(() {
+      live = library('live');
+      backup = library('backup');
+    });
+
+    Directory pair(String name, {String liveBody = 'x', String? backupBody}) {
+      File(
+        p.join(wallpaper(live, name).path, 'project.json'),
+      ).writeAsStringSync(liveBody);
+      final Directory folder = wallpaper(backup, name);
+      if (backupBody != null) {
+        File(p.join(folder.path, 'project.json')).writeAsStringSync(backupBody);
+      }
+      return folder;
+    }
+
+    Future<Map<String, CopyStanding>> run({
+      required Set<String> shared,
+      Set<String>? compare,
+      bool recursive = true,
+    }) => copyStandings(
+      livePath: live.path,
+      backupPath: backup.path,
+      recursive: recursive,
+      shared: shared,
+      compare: compare ?? shared,
+    );
+
+    // Comparing a folder with no counterpart buys nothing, and the walk is the
+    // expensive half of the whole scan.
+    test('only the named folders are compared', () async {
+      pair('alpha', backupBody: 'x');
+      pair('beta', backupBody: 'x');
+
+      expect((await run(shared: <String>{'alpha'})).keys, <String>{'alpha'});
+    });
+
+    test('nothing shared means nothing is opened', () async {
+      pair('alpha', backupBody: 'x');
+
+      expect(await run(shared: const <String>{}), isEmpty);
+    });
+
+    // The split between the libraries: Workshop is packed so its payload sits
+    // at the top level, myprojects is usually unpacked so its edits do not.
+    test('a subfolder counts only when the walk is recursive', () async {
+      final Directory backupFolder = pair('alpha', backupBody: 'x');
+      for (final Directory folder in <Directory>[
+        Directory(p.join(live.path, 'alpha')),
+        backupFolder,
+      ]) {
+        Directory(p.join(folder.path, 'materials')).createSync();
+        File(
+          p.join(folder.path, 'materials', 'sky.tex'),
+        ).writeAsStringSync('same');
+      }
+      File(
+        p.join(live.path, 'alpha', 'materials', 'sky.tex'),
+      ).writeAsStringSync('a much larger texture');
+
+      expect(
+        (await run(shared: <String>{'alpha'}))['alpha'],
+        CopyStanding.behind,
+      );
+      expect(
+        (await run(shared: <String>{'alpha'}, recursive: false))['alpha'],
+        CopyStanding.covers,
+        reason: 'the top level is identical, so a shallow walk sees no change',
+      );
+    });
+
+    // Copying rewrites every timestamp, so a comparison that noticed would
+    // refuse to recognise any hand-made backup as a backup.
+    test('a copy made at a different time still covers', () async {
+      final Directory backupFolder = pair(
+        'alpha',
+        liveBody: 'same',
+        backupBody: 'same',
+      );
+      File(
+        p.join(backupFolder.path, 'project.json'),
+      ).setLastModifiedSync(DateTime(2001));
+
+      expect(
+        (await run(shared: <String>{'alpha'}))['alpha'],
+        CopyStanding.covers,
+      );
+    });
+
+    // The whole reason emptiness is judged separately from the comparison: a
+    // Workshop card with a baseline is never compared, and an emptied backup
+    // folder still has to stop reading as backed up.
+    test('an empty folder is caught even when it is not compared', () async {
+      pair('alpha');
+
+      final Map<String, CopyStanding> standings = await run(
+        shared: <String>{'alpha'},
+        compare: const <String>{},
+      );
+
+      expect(standings['alpha'], CopyStanding.empty);
+    });
+
+    // Outside compare, a folder with content is left unjudged rather than
+    // guessed at, so the record can answer for it.
+    test('an uncompared folder with content gets no verdict', () async {
+      pair('alpha', backupBody: 'x');
+
+      expect(
+        await run(shared: <String>{'alpha'}, compare: const <String>{}),
+        isEmpty,
+      );
+    });
+
+    test('an unset or absent folder gives nothing', () async {
+      expect(
+        await copyStandings(
+          livePath: null,
+          backupPath: backup.path,
+          recursive: true,
+          shared: <String>{'alpha'},
+          compare: <String>{'alpha'},
+        ),
+        isEmpty,
+      );
+      expect(
+        await copyStandings(
+          livePath: live.path,
+          backupPath: p.join(tmp.path, 'nope'),
+          recursive: true,
+          shared: <String>{'alpha'},
+          compare: <String>{'alpha'},
+        ),
+        isEmpty,
+      );
+    });
+
+    // Every earlier test used one or two folders, so the batch arithmetic was
+    // never exercised. A dropped folder reads as backed up.
+    test('every folder survives the batching', () async {
+      final Set<String> names = <String>{
+        for (int i = 0; i < 60; i++) 'wallpaper-$i',
+      };
+      for (final String name in names) {
+        pair(name, backupBody: 'x');
+      }
+
+      final Map<String, CopyStanding> standings = await run(shared: names);
+
+      expect(standings, hasLength(60));
+      expect(standings.values, everyElement(CopyStanding.covers));
+    });
+  });
+
+  group('seedBackupRecords', () {
+    test('records the baseline a scan earned', () async {
+      await seedBackupRecords(tmp.path, <String, String>{
+        'workshop/793602574': 'manifest-1',
+      });
+
+      expect(
+        (await readBackupRecords(
+          tmp.path,
+        ))['workshop/793602574']!.backedUpVersion,
+        'manifest-1',
+      );
+    });
+
+    // Seeding is not the only thing in the file, and it must not wipe a
+    // dismissal the user filed earlier.
+    test('an existing dismissal survives', () async {
+      await writeBackupRecords(tmp.path, <String, BackupRecord>{
+        'workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
+      });
+
+      await seedBackupRecords(tmp.path, <String, String>{
+        'workshop/793602574': 'manifest-1',
+      });
+
+      final BackupRecord record = (await readBackupRecords(
+        tmp.path,
+      ))['workshop/793602574']!;
+      expect(record.backedUpVersion, 'manifest-1');
+      expect(record.dismissedVersion, 'waved-off');
+    });
+
+    // A hand-edited file can hold any spelling. Merging without folding it
+    // would leave one wallpaper with two entries and no way to say which wins.
+    test('a differently cased key is folded rather than duplicated', () async {
+      await writeBackupRecords(tmp.path, <String, BackupRecord>{
+        'Workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
+      });
+
+      await seedBackupRecords(tmp.path, <String, String>{
+        'workshop/793602574': 'manifest-1',
+      });
+
+      final Map<String, BackupRecord> records = await readBackupRecords(
+        tmp.path,
+      );
+      expect(records.keys, <String>{'workshop/793602574'});
+      expect(records['workshop/793602574']!.dismissedVersion, 'waved-off');
+    });
+
+    // Not merely "reads back empty": a backup that has earned nothing should
+    // not gain a file at its root at all.
+    test('nothing to seed writes no file', () async {
+      await seedBackupRecords(tmp.path, const <String, String>{});
+      await seedBackupRecords(null, <String, String>{'workshop/1': 'manifest'});
+
+      expect(File(p.join(tmp.path, backupRecordsName)).existsSync(), isFalse);
+    });
+
+    // Truncate-then-write would leave a short file if the app died mid-write,
+    // and a short file reads as no records at all: every baseline and every
+    // dismissal silently gone. This file is rewritten on every scan.
+    test('the file is renamed into place, never truncated in place', () async {
+      await writeBackupRecords(tmp.path, <String, BackupRecord>{
+        'workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
+      });
+
+      await seedBackupRecords(tmp.path, <String, String>{
+        'workshop/793602574': 'manifest-1',
+      });
+
+      expect(
+        File(
+          '${p.join(tmp.path, backupRecordsName)}$backupRecordsPartSuffix',
+        ).existsSync(),
+        isFalse,
+        reason: 'the part file is renamed, not left behind',
+      );
+      expect(
+        (await readBackupRecords(
+          tmp.path,
+        ))['workshop/793602574']?.dismissedVersion,
+        'waved-off',
+      );
+    });
+  });
+
   const String acf = '''
 "AppWorkshop"
 {
@@ -206,6 +450,25 @@ void main() {
       expect(read['myprojects/793602574']!.dismissedVersion, isNull);
     });
 
+    // The file lives in the user's backup and they open it by hand. Sorted as
+    // well as indented, so one changed wallpaper does not reshuffle the file.
+    test('is written indented and in a stable order', () async {
+      await writeBackupRecords(tmp.path, <String, BackupRecord>{
+        'workshop/zzz': const BackupRecord(backedUpVersion: 'later'),
+        'workshop/aaa': const BackupRecord(backedUpVersion: 'earlier'),
+      });
+
+      final String body = File(
+        p.join(tmp.path, backupRecordsName),
+      ).readAsStringSync();
+
+      expect(body, contains('\n'), reason: 'one long line is unreadable');
+      expect(
+        body.indexOf('workshop/aaa'),
+        lessThan(body.indexOf('workshop/zzz')),
+      );
+    });
+
     test('reads an absent file as no records', () async {
       expect(await readBackupRecords(tmp.path), isEmpty);
     });
@@ -247,11 +510,16 @@ void main() {
     Directory backupMyProjects() =>
         library(p.join('backup', 'wallpaper_engine', 'projects', 'myprojects'));
 
-    Future<BackupScan> scan({String? root, String? acfPath}) => scanBackup(
+    Future<BackupScan> scan({
+      String? root,
+      String? acfPath,
+      void Function(BackupScanProgress)? onProgress,
+    }) => scanBackup(
       backupRoot: root,
       liveWorkshopPath: liveWorkshop.path,
       liveMyProjectsPath: liveMyProjects.path,
       acfPath: acfPath,
+      onProgress: onProgress,
     );
 
     // AC 2.
@@ -270,16 +538,88 @@ void main() {
       expect(result.reconcile, isEmpty);
     });
 
+    /// A wallpaper in a library, with a file in it so the folder is not empty.
+    Directory filled(Directory lib, String id, [String body = '{}']) {
+      final Directory folder = wallpaper(lib, id);
+      File(p.join(folder.path, 'project.json')).writeAsStringSync(body);
+      return folder;
+    }
+
     test('finds both backup libraries under the root', () async {
-      wallpaper(liveWorkshop, '793602574');
-      wallpaper(liveMyProjects, 'alpha');
-      wallpaper(backupWorkshop(), '793602574');
-      wallpaper(backupMyProjects(), 'alpha');
+      filled(liveWorkshop, '793602574');
+      filled(liveMyProjects, 'alpha');
+      filled(backupWorkshop(), '793602574');
+      filled(backupMyProjects(), 'alpha');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
       expect(result.cards, hasLength(2));
       expect(result.cards.values, everyElement(BackupState.synced));
+    });
+
+    // The first scan is about twelve seconds against a real library, nearly all
+    // of it walking both backup trees, so the tab has to be able to say how far
+    // along it is rather than spinning silently.
+    test('the scan reports what it is doing and how far it has got', () async {
+      for (int i = 0; i < 30; i++) {
+        filled(liveMyProjects, 'wallpaper-$i');
+        filled(backupMyProjects(), 'wallpaper-$i');
+      }
+      final List<BackupScanProgress> seen = <BackupScanProgress>[];
+
+      await scan(root: backupRoot.path, onProgress: seen.add);
+
+      expect(seen.first.phase, BackupScanPhase.reading);
+      expect(
+        seen.map((BackupScanProgress p) => p.phase),
+        contains(BackupScanPhase.comparing),
+      );
+      expect(seen.last.total, 30);
+      expect(
+        seen.last.done,
+        30,
+        reason: 'the count has to reach the total, or it stalls on screen',
+      );
+      // Batched at 24, so 30 folders is more than one report. A single jump
+      // from nothing to done would tell the user nothing while it runs.
+      expect(
+        seen.where((BackupScanProgress p) => p.done > 0).length,
+        greaterThan(1),
+      );
+    });
+
+    // A cancelled copy leaves the folder behind with nothing in it. Reading
+    // that as backed up is the quiet-wrong answer this tab exists to avoid.
+    test('a backup folder with nothing in it is not backed up', () async {
+      filled(liveMyProjects, 'alpha');
+      wallpaper(backupMyProjects(), 'alpha');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.emptyBackup,
+      );
+    });
+
+    // Wallpaper Engine rebuilds these, so a folder holding only them holds
+    // nothing that counts as a backup.
+    test('a backup holding only rebuilt shaders is empty', () async {
+      filled(liveMyProjects, 'alpha');
+      final Directory folder = wallpaper(backupMyProjects(), 'alpha');
+      Directory(
+        p.join(folder.path, 'shaders', 'blobsSM40'),
+      ).createSync(recursive: true);
+      File(
+        p.join(folder.path, 'shaders', 'blobsSM40', 'cache.bin'),
+      ).writeAsStringSync('rebuilt');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.emptyBackup,
+      );
     });
 
     // The case the whole tab exists for: Steam removed a delisted item and only
@@ -313,8 +653,8 @@ void main() {
     });
 
     test('a republished workshop item reads as an update', () async {
-      wallpaper(liveWorkshop, '793602574');
-      wallpaper(backupWorkshop(), '793602574');
+      filled(liveWorkshop, '793602574');
+      filled(backupWorkshop(), '793602574');
       await writeBackupRecords(backupRoot.path, <String, BackupRecord>{
         'workshop/793602574': const BackupRecord(backedUpVersion: 'older'),
       });
@@ -333,14 +673,16 @@ void main() {
       );
     });
 
+    // myprojects keeps no baseline, so this needs no record at all: the two
+    // folders are compared against each other. A hand-made backup is therefore
+    // judged correctly from the very first scan.
     test('an edited myprojects wallpaper reads as an update', () async {
       File(
         p.join(wallpaper(liveMyProjects, 'alpha').path, 'project.json'),
+      ).writeAsStringSync('{"edited":true}');
+      File(
+        p.join(wallpaper(backupMyProjects(), 'alpha').path, 'project.json'),
       ).writeAsStringSync('{}');
-      wallpaper(backupMyProjects(), 'alpha');
-      await writeBackupRecords(backupRoot.path, <String, BackupRecord>{
-        'myprojects/alpha': const BackupRecord(backedUpVersion: 'older'),
-      });
 
       final BackupScan result = await scan(root: backupRoot.path);
 
@@ -348,6 +690,182 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.updateAvailable,
       );
+      expect(result.seeds, isEmpty, reason: 'myprojects records no baseline');
+    });
+
+    // The other half: a copy that still matches is left alone, and the copy's
+    // own timestamps must not enter into it.
+    test('an untouched myprojects backup reads as synced', () async {
+      File(
+        p.join(wallpaper(liveMyProjects, 'alpha').path, 'project.json'),
+      ).writeAsStringSync('{"same":true}');
+      final File copy = File(
+        p.join(wallpaper(backupMyProjects(), 'alpha').path, 'project.json'),
+      )..writeAsStringSync('{"same":true}');
+      copy.setLastModifiedSync(DateTime(2001));
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.synced,
+      );
+    });
+
+    // Subfolders are where a myprojects edit usually lands, and the top level
+    // alone found 3 of 46 real cases.
+    test('a myprojects edit below the top level is still an update', () async {
+      final Directory live = wallpaper(liveMyProjects, 'alpha');
+      final Directory backup = wallpaper(backupMyProjects(), 'alpha');
+      for (final Directory folder in <Directory>[live, backup]) {
+        File(p.join(folder.path, 'project.json')).writeAsStringSync('{}');
+        Directory(p.join(folder.path, 'materials')).createSync();
+      }
+      File(
+        p.join(live.path, 'materials', 'sky.tex'),
+      ).writeAsStringSync('a much larger texture');
+      File(
+        p.join(backup.path, 'materials', 'sky.tex'),
+      ).writeAsStringSync('old');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.updateAvailable,
+      );
+    });
+
+    // Wallpaper Engine rebuilds these, so nothing copies them and nothing may
+    // compare them. Only the recursive myprojects walk ever reaches one; on a
+    // real library 1127 live folders held one against 214 backup folders, so
+    // counting them would call almost every myprojects backup stale.
+    test('rebuilt shaders do not make a backup look stale', () async {
+      final Directory live = wallpaper(liveMyProjects, 'alpha');
+      final Directory backup = wallpaper(backupMyProjects(), 'alpha');
+      for (final Directory folder in <Directory>[live, backup]) {
+        File(p.join(folder.path, 'project.json')).writeAsStringSync('{}');
+      }
+      Directory(
+        p.join(live.path, 'shaders', 'blobsSM40'),
+      ).createSync(recursive: true);
+      File(
+        p.join(live.path, 'shaders', 'blobsSM40', 'cache.bin'),
+      ).writeAsStringSync('rebuilt locally');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.synced,
+      );
+    });
+
+    // Seeding is what gives a hand-made Workshop backup a baseline, and the
+    // manifest is what must land there: recording the fingerprint instead would
+    // leave every Workshop card comparing a fingerprint against a manifest and
+    // reading as out of date for good.
+    test('a matching workshop backup seeds its manifest', () async {
+      final Directory live = wallpaper(liveWorkshop, '793602574');
+      final Directory backup = wallpaper(backupWorkshop(), '793602574');
+      for (final Directory folder in <Directory>[live, backup]) {
+        File(p.join(folder.path, 'project.json')).writeAsStringSync('{}');
+      }
+      final File acfFile = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+        ..writeAsStringSync(acf);
+
+      final BackupScan result = await scan(
+        root: backupRoot.path,
+        acfPath: acfFile.path,
+      );
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
+        BackupState.synced,
+      );
+      expect(result.seeds, <String, String>{
+        'workshop/793602574': '6791066680065157913',
+      });
+    });
+
+    // Not matching writes nothing, so the card stays on the fingerprint path
+    // and fixes itself the moment a real backup lands.
+    test('a workshop backup that differs reports rather than seeds', () async {
+      File(
+        p.join(wallpaper(liveWorkshop, '793602574').path, 'project.json'),
+      ).writeAsStringSync('{"republished":true}');
+      File(
+        p.join(wallpaper(backupWorkshop(), '793602574').path, 'project.json'),
+      ).writeAsStringSync('{}');
+      final File acfFile = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+        ..writeAsStringSync(acf);
+
+      final BackupScan result = await scan(
+        root: backupRoot.path,
+        acfPath: acfFile.path,
+      );
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
+        BackupState.updateAvailable,
+      );
+      expect(result.seeds, isEmpty);
+    });
+
+    // myprojects folder names come from wallpaper titles, so they are not all
+    // safely numeric and the two sides need not agree on case. Getting this
+    // wrong drops the wallpaper out of the comparison entirely, and an
+    // uncompared card reads as synced however stale it is.
+    test('a differently cased folder name still compares', () async {
+      File(
+        p.join(wallpaper(liveMyProjects, 'Cool Wallpaper').path, 'scene.json'),
+      ).writeAsStringSync('a good deal of content');
+      File(
+        p.join(
+          wallpaper(backupMyProjects(), 'cool wallpaper').path,
+          'scene.json',
+        ),
+      ).writeAsStringSync('old');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(
+          WallpaperLibrary.myProjects,
+          'Cool Wallpaper',
+        )],
+        BackupState.updateAvailable,
+      );
+    });
+
+    // Once a baseline exists the manifests answer the question, so the walk is
+    // skipped entirely. That is what keeps the Workshop cost decaying to zero.
+    test('a workshop card with a baseline is not fingerprinted', () async {
+      File(
+        p.join(wallpaper(liveWorkshop, '793602574').path, 'project.json'),
+      ).writeAsStringSync('{"republished":true}');
+      File(
+        p.join(wallpaper(backupWorkshop(), '793602574').path, 'project.json'),
+      ).writeAsStringSync('{}');
+      await writeBackupRecords(backupRoot.path, <String, BackupRecord>{
+        'workshop/793602574': const BackupRecord(
+          backedUpVersion: '6791066680065157913',
+        ),
+      });
+      final File acfFile = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+        ..writeAsStringSync(acf);
+
+      final BackupScan result = await scan(
+        root: backupRoot.path,
+        acfPath: acfFile.path,
+      );
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
+        BackupState.synced,
+        reason: 'the manifest matches the baseline, whatever the folders hold',
+      );
+      expect(result.seeds, isEmpty);
     });
 
     // False is what puts the banner on the tab. Without the flag an unreadable

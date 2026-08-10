@@ -13,6 +13,8 @@
       "backupRoot": "Backup folder"
     },
     "refresh": "Rescan",
+    "scanReading": "Reading your libraries",
+    "scanComparing": "Comparing backups, {done} of {total}",
     "scanFailed": "Could not read the libraries:",
     "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
     "tab": {
@@ -25,7 +27,8 @@
       "notBackedUp": "Not backed up",
       "vanished": "Vanished",
       "updateAvailable": "Update available",
-      "updateDismissed": "Update dismissed"
+      "updateDismissed": "Update dismissed",
+      "emptyBackup": "Empty folder"
     }
   },
   "integrity": {
@@ -194,6 +197,7 @@
     "getWallpaperFailed": "Failed to get wallpaper:",
     "parseAcfFailed": "Failed to parse ACF file, ignoring extra info:",
     "readBackupRecordsFailed": "Failed to read backup records, starting fresh:",
+    "seedBackupRecordsFailed": "Could not record backup versions; the comparison still ran:",
     "wallpaperId": "Wallpaper ID:",
     "sourcePath": "Source:",
     "outputPath": "Destination:",

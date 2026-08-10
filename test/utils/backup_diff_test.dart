@@ -4,6 +4,8 @@ import 'package:we_repkg/utils/backup_diff.dart';
 void main() {
   // Everything defaults to empty so each test names only the sets it cares
   // about. Ids are the folder names Steam and Wallpaper Engine actually use.
+  const Map<String, CopyStanding> nothingCompared = <String, CopyStanding>{};
+
   BackupDiffResult diff({
     Set<String> liveWorkshop = const <String>{},
     Set<String> liveMyProjects = const <String>{},
@@ -11,6 +13,8 @@ void main() {
     Set<String> backupMyProjects = const <String>{},
     Map<String, String> liveWorkshopVersions = const <String, String>{},
     Map<String, String> liveMyProjectsVersions = const <String, String>{},
+    Map<String, CopyStanding> workshopStanding = nothingCompared,
+    Map<String, CopyStanding> myProjectsStanding = nothingCompared,
     Map<String, BackupRecord> records = const <String, BackupRecord>{},
   }) => backupDiff(
     liveWorkshop: liveWorkshop,
@@ -19,6 +23,8 @@ void main() {
     backupMyProjects: backupMyProjects,
     liveWorkshopVersions: liveWorkshopVersions,
     liveMyProjectsVersions: liveMyProjectsVersions,
+    workshopStanding: workshopStanding,
+    myProjectsStanding: myProjectsStanding,
     records: records,
   );
 
@@ -29,6 +35,8 @@ void main() {
     Set<String> backupMyProjects = const <String>{},
     Map<String, String> liveWorkshopVersions = const <String, String>{},
     Map<String, String> liveMyProjectsVersions = const <String, String>{},
+    Map<String, CopyStanding> workshopStanding = nothingCompared,
+    Map<String, CopyStanding> myProjectsStanding = nothingCompared,
     Map<String, BackupRecord> records = const <String, BackupRecord>{},
   }) => diff(
     liveWorkshop: liveWorkshop,
@@ -37,8 +45,15 @@ void main() {
     backupMyProjects: backupMyProjects,
     liveWorkshopVersions: liveWorkshopVersions,
     liveMyProjectsVersions: liveMyProjectsVersions,
+    workshopStanding: workshopStanding,
+    myProjectsStanding: myProjectsStanding,
     records: records,
   ).cards;
+
+  /// Named per test, so a card that must not be compared cannot pick one up by
+  /// accident.
+  Map<String, CopyStanding> standing(String name, CopyStanding value) =>
+      <String, CopyStanding>{name: value};
 
   BackupCard workshop(String name) =>
       BackupCard(WallpaperLibrary.workshop, name);
@@ -538,26 +553,244 @@ void main() {
     });
 
     // `id` lowercases what it writes, so an odd-cased key comes from a
-    // hand-edited file or an older one. It still has to match.
+    // hand-edited file or an older one. It still has to match. Workshop,
+    // because that is the only library holding a baseline.
     test('a re-cased record still finds its wallpaper', () {
+      expect(
+        cards(
+          liveWorkshop: const <String>{'Cool Wallpaper'},
+          backupWorkshop: const <String>{'Cool Wallpaper'},
+          liveWorkshopVersions: const <String, String>{
+            'Cool Wallpaper': 'manifest-2',
+          },
+          records: const <String, BackupRecord>{
+            'workshop/Cool Wallpaper': BackupRecord(
+              backedUpVersion: 'manifest-1',
+            ),
+          },
+        ),
+        <BackupCard, BackupState>{
+          workshop('Cool Wallpaper'): BackupState.updateAvailable,
+        },
+      );
+    });
+
+    // The other half of the same rule: myprojects keeps no baseline, so an
+    // odd-cased key there has only the dismissal to find.
+    test('a re-cased record still finds a myprojects dismissal', () {
       expect(
         cards(
           liveMyProjects: const <String>{'Cool Wallpaper'},
           backupMyProjects: const <String>{'Cool Wallpaper'},
+          myProjectsStanding: standing('Cool Wallpaper', CopyStanding.behind),
           liveMyProjectsVersions: const <String, String>{
             'Cool Wallpaper': 'digest-2',
           },
           records: const <String, BackupRecord>{
             'myprojects/Cool Wallpaper': BackupRecord(
-              backedUpVersion: 'digest-1',
+              dismissedVersion: 'digest-2',
             ),
           },
         ),
         <BackupCard, BackupState>{
-          myProjects('Cool Wallpaper'): BackupState.updateAvailable,
+          myProjects('Cool Wallpaper'): BackupState.updateDismissed,
         },
       );
     });
+  });
+
+  // Steam's manifest names the live version only, so a hand-made backup has no
+  // baseline until one comparison earns it.
+  group('seeding a workshop baseline', () {
+    const String n = '793602574';
+
+    BackupDiffResult seeded({
+      Map<String, CopyStanding> standings = nothingCompared,
+      Map<String, String> versions = const <String, String>{n: 'manifest-1'},
+      Map<String, BackupRecord> records = const <String, BackupRecord>{},
+    }) => diff(
+      liveWorkshop: const <String>{n},
+      backupWorkshop: const <String>{n},
+      liveWorkshopVersions: versions,
+      workshopStanding: standings,
+      records: records,
+    );
+
+    // The manifest, never a digest of the folder: recording one would leave
+    // every later scan comparing a digest against a manifest, so no card would
+    // ever match again.
+    test('a covering backup records the live manifest', () {
+      final BackupDiffResult result = seeded(
+        standings: standing(n, CopyStanding.covers),
+      );
+
+      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.seeds, <String, String>{'workshop/$n': 'manifest-1'});
+    });
+
+    test('a backup behind live reports it and records nothing', () {
+      final BackupDiffResult result = seeded(
+        standings: standing(n, CopyStanding.behind),
+      );
+
+      expect(result.cards[workshop(n)], BackupState.updateAvailable);
+      expect(result.seeds, isEmpty);
+    });
+
+    // A folder dropped in by hand has no ACF entry and never will, so flagging
+    // it leaves a card nagging forever with no version to dismiss.
+    test('a wallpaper with no manifest is left alone and not seeded', () {
+      final BackupDiffResult result = seeded(
+        standings: standing(n, CopyStanding.behind),
+        versions: const <String, String>{},
+      );
+
+      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.seeds, isEmpty);
+    });
+
+    // Once the baseline is there the manifests answer the question, which is
+    // what lets the scan skip comparing the folders at all.
+    test('a recorded baseline wins over the comparison', () {
+      final BackupDiffResult result = seeded(
+        standings: standing(n, CopyStanding.behind),
+        records: const <String, BackupRecord>{
+          'workshop/$n': BackupRecord(backedUpVersion: 'manifest-1'),
+        },
+      );
+
+      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.seeds, isEmpty);
+    });
+
+    // Nothing compared is not the same as compared and matched.
+    test('an uncompared card is left alone and not seeded', () {
+      final BackupDiffResult result = seeded();
+
+      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.seeds, isEmpty);
+    });
+
+    // A cancelled copy leaves the folder there and nothing in it. The record
+    // must not answer for it either, or a seeded card could be emptied and go
+    // on reading as backed up.
+    test('an empty backup folder beats even a recorded baseline', () {
+      final BackupDiffResult result = seeded(
+        standings: standing(n, CopyStanding.empty),
+        records: const <String, BackupRecord>{
+          'workshop/$n': BackupRecord(backedUpVersion: 'manifest-1'),
+        },
+      );
+
+      expect(result.cards[workshop(n)], BackupState.emptyBackup);
+      expect(result.seeds, isEmpty);
+    });
+  });
+
+  // myprojects has no ACF to ask, so its version is already a fingerprint and
+  // the two folders are compared against each other on every scan. A recorded
+  // baseline would go stale the moment anything touched the backup outside this
+  // app.
+  group('myprojects compares the folders directly', () {
+    const String n = 'alpha';
+
+    BackupDiffResult compared({
+      Map<String, CopyStanding> standings = nothingCompared,
+      Map<String, String> versions = const <String, String>{},
+      Map<String, BackupRecord> records = const <String, BackupRecord>{},
+    }) => diff(
+      liveMyProjects: const <String>{n},
+      backupMyProjects: const <String>{n},
+      liveMyProjectsVersions: versions,
+      myProjectsStanding: standings,
+      records: records,
+    );
+
+    test('a covering backup is synced and earns no baseline', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.covers),
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.synced);
+      expect(result.seeds, isEmpty);
+    });
+
+    test('a backup behind live is an update, with no record needed', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.behind),
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.updateAvailable);
+      expect(result.seeds, isEmpty);
+    });
+
+    test('an empty backup folder is not synced', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.empty),
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.emptyBackup);
+    });
+
+    // The folders are what decide it, so a leftover baseline from an older
+    // records file cannot quiet a wallpaper that really has moved on.
+    test('a recorded baseline does not silence a real difference', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.behind),
+        versions: const <String, String>{n: 'digest-2'},
+        records: const <String, BackupRecord>{
+          'myprojects/$n': BackupRecord(backedUpVersion: 'digest-2'),
+        },
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.updateAvailable);
+    });
+
+    test('a dismissal still applies once the folders differ', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.behind),
+        versions: const <String, String>{n: 'digest-2'},
+        records: const <String, BackupRecord>{
+          'myprojects/$n': BackupRecord(dismissedVersion: 'digest-2'),
+        },
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.updateDismissed);
+    });
+
+    // Editing the wallpaper moves its token, so the dismissal stops matching
+    // and the card comes back on its own.
+    test('an edit after a dismissal brings the card back', () {
+      final BackupDiffResult result = compared(
+        standings: standing(n, CopyStanding.behind),
+        versions: const <String, String>{n: 'digest-3'},
+        records: const <String, BackupRecord>{
+          'myprojects/$n': BackupRecord(dismissedVersion: 'digest-2'),
+        },
+      );
+
+      expect(result.cards[myProjects(n)], BackupState.updateAvailable);
+    });
+  });
+
+  // A wallpaper waiting in reconcile must not go quiet: its live copy still has
+  // a state, and that state can still earn a baseline.
+  test('a reconcile entry seeds its live copy too', () {
+    const String n = '793602574';
+    final BackupDiffResult result = diff(
+      liveWorkshop: const <String>{n},
+      backupWorkshop: const <String>{n},
+      backupMyProjects: const <String>{n},
+      liveWorkshopVersions: const <String, String>{n: 'manifest-1'},
+      workshopStanding: standing(n, CopyStanding.covers),
+    );
+
+    expect(result.cards, isEmpty);
+    expect(
+      result.reconcile.single.states[WallpaperLibrary.workshop],
+      BackupState.synced,
+    );
+    expect(result.seeds, <String, String>{'workshop/$n': 'manifest-1'});
   });
 
   group('a name live in both libraries', () {
@@ -576,6 +809,9 @@ void main() {
       );
     });
 
+    // Each library asks its own question: Workshop compares manifests against
+    // its record, myprojects compares the two folders. Both arms are exercised
+    // here, so a card reading the other library's answer shows up.
     test('tracks a version per card', () {
       expect(
         cards(
@@ -586,12 +822,9 @@ void main() {
           liveWorkshopVersions: const <String, String>{
             '793602574': 'manifest-1',
           },
-          liveMyProjectsVersions: const <String, String>{
-            '793602574': 'digest-2',
-          },
+          myProjectsStanding: standing('793602574', CopyStanding.behind),
           records: const <String, BackupRecord>{
             'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
-            'myprojects/793602574': BackupRecord(backedUpVersion: 'digest-1'),
           },
         ),
         <BackupCard, BackupState>{
@@ -617,12 +850,10 @@ void main() {
           liveMyProjectsVersions: const <String, String>{
             '793602574': 'digest-2',
           },
+          myProjectsStanding: standing('793602574', CopyStanding.behind),
           records: const <String, BackupRecord>{
             'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
-            'myprojects/793602574': BackupRecord(
-              backedUpVersion: 'digest-1',
-              dismissedVersion: 'digest-2',
-            ),
+            'myprojects/793602574': BackupRecord(dismissedVersion: 'digest-2'),
           },
         ),
         <BackupCard, BackupState>{
@@ -644,6 +875,129 @@ void main() {
   // the JSON happened to encode.
   test('a re-cased card ids the same', () {
     expect(myProjects('Cool Wallpaper').id, myProjects('cool wallpaper').id);
+  });
+
+  group('compareCopy', () {
+    FileEntry file(String path, int size) => (path: path, size: size);
+    const List<FileEntry> project = <FileEntry>[
+      (path: 'project.json', size: 100),
+    ];
+
+    test('the same files at the same sizes covers', () {
+      expect(compareCopy(live: project, backup: project), CopyStanding.covers);
+    });
+
+    test('a live file at a different size is behind', () {
+      expect(
+        compareCopy(
+          live: project,
+          backup: <FileEntry>[file('project.json', 101)],
+        ),
+        CopyStanding.behind,
+      );
+    });
+
+    test('a live file the backup does not hold is behind', () {
+      expect(
+        compareCopy(
+          live: <FileEntry>[...project, file('scene.pkg', 5)],
+          backup: project,
+        ),
+        CopyStanding.behind,
+      );
+    });
+
+    // The whole point of the subset rule. Nothing ever deletes from a backup,
+    // so a wallpaper edited to drop a file leaves that file there for good;
+    // counting it would report an update Back up can never clear, because
+    // backing up copies and never removes.
+    test('files the backup holds beyond live do not count against it', () {
+      expect(
+        compareCopy(
+          live: project,
+          backup: <FileEntry>[...project, file('dropped-last-year.tex', 900)],
+        ),
+        CopyStanding.covers,
+      );
+    });
+
+    // Windows sees one path whatever the case, and a backup made by another
+    // tool need not have preserved it.
+    test('case does not decide it', () {
+      expect(
+        compareCopy(
+          live: <FileEntry>[file(r'Materials\Sky.TEX', 100)],
+          backup: <FileEntry>[file(r'materials\sky.tex', 100)],
+        ),
+        CopyStanding.covers,
+      );
+    });
+
+    test('separator style does not decide it', () {
+      expect(
+        compareCopy(
+          live: <FileEntry>[file('materials/sky.tex', 100)],
+          backup: <FileEntry>[file(r'materials\sky.tex', 100)],
+        ),
+        CopyStanding.covers,
+      );
+    });
+
+    // Same name and size in a different folder is a different file.
+    test('a file moved between folders is behind', () {
+      expect(
+        compareCopy(
+          live: <FileEntry>[file(r'materials\sky.tex', 100)],
+          backup: <FileEntry>[file(r'effects\sky.tex', 100)],
+        ),
+        CopyStanding.behind,
+      );
+    });
+
+    // The whole reason this is not folderVersion: copying rewrites every
+    // timestamp, and a real backup differed from live on nothing else. There is
+    // no timestamp in the input at all, which is the strongest form of this.
+    test('a copy made at another time still covers', () {
+      expect(compareCopy(live: project, backup: project), CopyStanding.covers);
+    });
+
+    // Wallpaper Engine rebuilds these locally, so live grows them and a backup
+    // never holds them. Counting them called 1984 of 2162 real backups stale.
+    test('rebuilt shaders on the live side do not make it behind', () {
+      expect(
+        compareCopy(
+          live: <FileEntry>[
+            ...project,
+            file(r'shaders\blobsSM40\cache.bin', 4096),
+          ],
+          backup: project,
+        ),
+        CopyStanding.covers,
+      );
+    });
+
+    test('a backup holding only rebuilt shaders is empty', () {
+      expect(
+        compareCopy(
+          live: project,
+          backup: <FileEntry>[file(r'shaders\blobsSM40\cache.bin', 4096)],
+        ),
+        CopyStanding.empty,
+      );
+    });
+
+    // Empty is checked before coverage, or a live wallpaper with nothing in it
+    // would report as covered by a backup folder holding nothing either.
+    test('a backup with no files is empty, not covering', () {
+      expect(
+        compareCopy(live: project, backup: const <FileEntry>[]),
+        CopyStanding.empty,
+      );
+      expect(
+        compareCopy(live: const <FileEntry>[], backup: const <FileEntry>[]),
+        CopyStanding.empty,
+      );
+    });
   });
 
   group('folderVersion', () {
@@ -720,15 +1074,20 @@ void main() {
           BackupState.vanished: 1,
           BackupState.updateAvailable: 0,
           BackupState.updateDismissed: 0,
+          BackupState.emptyBackup: 0,
         },
       );
     });
 
     // Zero-filled, so a caller can list every state without a null check and a
-    // state nobody has hits still shows its own row.
+    // state nobody has hits still shows its own row. Counted off the enum, so a
+    // new state cannot be added without the tab gaining a row for it.
     test('gives an empty library a zero for every state', () {
       expect(countByState(const <BackupState>[]).values, everyElement(0));
-      expect(countByState(const <BackupState>[]), hasLength(5));
+      expect(
+        countByState(const <BackupState>[]),
+        hasLength(BackupState.values.length),
+      );
     });
   });
 }

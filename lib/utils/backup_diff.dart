@@ -51,6 +51,12 @@ enum BackupState {
   vanished,
   updateAvailable,
   updateDismissed,
+
+  /// The backup library holds a folder for this wallpaper and there is nothing
+  /// in it. A cancelled copy leaves exactly this, so it is kept apart from
+  /// [notBackedUp]: one has never been backed up, the other looks backed up
+  /// until you open it.
+  emptyBackup,
 }
 
 /// How many cards sit in each state, zero-filled so a caller can list every
@@ -179,9 +185,75 @@ String? folderVersion(Iterable<FileStamp> topLevelFiles) {
       .join(';');
 }
 
+/// A file under a wallpaper folder, by its path relative to that folder.
+typedef FileEntry = ({String path, int size});
+
+/// Wallpaper Engine rebuilds these for itself, so nothing copies them and
+/// nothing may compare them. On a real library 1127 live myprojects folders
+/// held one against 214 backup folders, so counting them would call almost
+/// every myprojects backup stale. Lowercase, matching what [_relative] folds
+/// its paths to.
+const String rebuiltShaderDir = r'shaders\blobssm40\';
+
+/// How a backup folder stands against the live wallpaper it mirrors.
+enum CopyStanding {
+  /// Every live file is in the backup at the same size.
+  ///
+  /// Files the backup holds *beyond* those do not count against it. Nothing
+  /// ever deletes from a backup, so a wallpaper edited to drop a file leaves
+  /// residue there for good; counting it would report an update that Back up
+  /// can never clear, since backing up copies and never removes.
+  covers,
+
+  /// A live file is missing from the backup, or is there at a different size.
+  behind,
+
+  /// The backup folder holds nothing worth comparing.
+  empty,
+}
+
+/// Windows sees one path whatever the case, and the two sides are listed by
+/// separate walks that need not agree on it.
+String _relative(FileEntry file) =>
+    file.path.toLowerCase().replaceAll('/', r'\');
+
+/// Whether the backup still holds everything the live wallpaper has.
+///
+/// Sizes, never timestamps: copying rewrites mtime, so a hand-made backup
+/// differs from live on every one of them while being a perfectly good copy.
+/// [folderVersion] is the other fingerprint and keeps mtime deliberately,
+/// because there it is detecting an author editing their own wallpaper. Two
+/// fingerprints, two jobs; do not merge them.
+CopyStanding compareCopy({
+  required Iterable<FileEntry> live,
+  required Iterable<FileEntry> backup,
+}) {
+  final Map<String, int> held = <String, int>{};
+  for (final FileEntry file in backup) {
+    final String path = _relative(file);
+    if (path.startsWith(rebuiltShaderDir)) continue;
+    held[path] = file.size;
+  }
+  // Checked before coverage, so a folder holding only rebuilt shaders reads as
+  // empty rather than as covering a live wallpaper it holds nothing of.
+  if (held.isEmpty) return CopyStanding.empty;
+
+  for (final FileEntry file in live) {
+    final String path = _relative(file);
+    if (path.startsWith(rebuiltShaderDir)) continue;
+    if (held[path] != file.size) return CopyStanding.behind;
+  }
+  return CopyStanding.covers;
+}
+
 typedef BackupDiffResult = ({
   Map<BackupCard, BackupState> cards,
   List<ReconcileEntry> reconcile,
+
+  /// Baselines the comparison earned, by [BackupCard.id]. Returned rather than
+  /// written, so the differ stays pure and one named caller owns the only write
+  /// this feature makes into the user's backup.
+  Map<String, String> seeds,
 });
 
 /// Every folder name sorted into a grid card or a reconcile entry.
@@ -201,6 +273,8 @@ BackupDiffResult backupDiff({
   required Set<String> backupMyProjects,
   required Map<String, String> liveWorkshopVersions,
   required Map<String, String> liveMyProjectsVersions,
+  required Map<String, CopyStanding> workshopStanding,
+  required Map<String, CopyStanding> myProjectsStanding,
   required Map<String, BackupRecord> records,
 }) {
   final Map<String, String> liveW = _namesByKey(liveWorkshop);
@@ -210,10 +284,13 @@ BackupDiffResult backupDiff({
 
   final Map<String, String> versionsW = _keyed(liveWorkshopVersions);
   final Map<String, String> versionsM = _keyed(liveMyProjectsVersions);
+  final Map<String, CopyStanding> standingW = _keyed(workshopStanding);
+  final Map<String, CopyStanding> standingM = _keyed(myProjectsStanding);
   final Map<String, BackupRecord> byId = _keyed(records);
 
   final Map<BackupCard, BackupState> cards = <BackupCard, BackupState>{};
   final List<ReconcileEntry> reconcile = <ReconcileEntry>[];
+  final Map<String, String> seeds = <String, String>{};
 
   final Set<String> keys = <String>{
     ...liveW.keys,
@@ -247,20 +324,29 @@ BackupDiffResult backupDiff({
         : BackupCard(WallpaperLibrary.myProjects, lm);
 
     final Map<WallpaperLibrary, BackupState> states =
-        <WallpaperLibrary, BackupState>{
-          if (workshopCard != null)
-            WallpaperLibrary.workshop: _cardState(
-              bw != null,
-              versionsW[key],
-              byId[workshopCard.id],
-            ),
-          if (myProjectsCard != null)
-            WallpaperLibrary.myProjects: _cardState(
-              bm != null,
-              versionsM[key],
-              byId[myProjectsCard.id],
-            ),
-        };
+        <WallpaperLibrary, BackupState>{};
+    if (workshopCard != null) {
+      final _Verdict verdict = _cardState(
+        library: WallpaperLibrary.workshop,
+        covered: bw != null,
+        liveVersion: versionsW[key],
+        standing: standingW[key],
+        record: byId[workshopCard.id],
+      );
+      states[WallpaperLibrary.workshop] = verdict.state;
+      if (verdict.seed != null) seeds[workshopCard.id] = verdict.seed!;
+    }
+    if (myProjectsCard != null) {
+      final _Verdict verdict = _cardState(
+        library: WallpaperLibrary.myProjects,
+        covered: bm != null,
+        liveVersion: versionsM[key],
+        standing: standingM[key],
+        record: byId[myProjectsCard.id],
+      );
+      states[WallpaperLibrary.myProjects] = verdict.state;
+      if (verdict.seed != null) seeds[myProjectsCard.id] = verdict.seed!;
+    }
 
     if ((bw != null && lw == null) || (bm != null && lm == null)) {
       // Tier 1 returned already, so one of the two live names is non-null,
@@ -284,7 +370,7 @@ BackupDiffResult backupDiff({
     }
   }
 
-  return (cards: cards, reconcile: reconcile);
+  return (cards: cards, reconcile: reconcile, seeds: seeds);
 }
 
 /// One library's names under a lowercased key, since Windows sees `A` and `a`
@@ -298,25 +384,65 @@ Map<String, V> _keyed<V>(Map<String, V> byName) => <String, V>{
     entry.key.toLowerCase(): entry.value,
 };
 
-/// State of one grid card.
+typedef _Verdict = ({BackupState state, String? seed});
+
+/// State of one grid card. The two libraries answer "is the backup stale?"
+/// differently, because only one of them has a version to ask Steam for.
 ///
-/// Either version missing means nothing can be compared, so the wallpaper is
-/// left alone. The two cases are not the same, though: no recorded version is a
-/// folder copied into the backup by hand, while no live version means the ACF
-/// could not be read. The caller warns about that one rather than letting a
-/// whole library quietly read as current. Back up stays available on a synced
-/// card, which is how one with no record acquires a baseline.
-BackupState _cardState(
-  bool covered,
-  String? liveVersion,
-  BackupRecord? record,
-) {
-  if (!covered) return BackupState.notBackedUp;
-  final String? backedUp = record?.backedUpVersion;
-  if (liveVersion == null || backedUp == null) return BackupState.synced;
-  if (liveVersion == backedUp) return BackupState.synced;
-  if (liveVersion == record?.dismissedVersion) {
-    return BackupState.updateDismissed;
+/// myprojects compares the two folders directly and keeps no baseline. Its
+/// version is already a fingerprint, so a recorded one would add nothing and
+/// would go stale the moment anything touched the backup outside this app.
+///
+/// Workshop keeps a baseline, seeded on first sight. Steam's manifest names
+/// the live version only; nothing inside a wallpaper folder says which version
+/// it is. So a card with no record compares both folders once. Matching
+/// records the live manifest, not the comparison, or every Workshop card
+/// would compare a fingerprint against a manifest and read as out of date for
+/// good. Not matching reports the update and writes nothing, leaving the card
+/// on this path until a backup fixes it.
+///
+/// A Workshop folder with no manifest was dropped in by hand and will never
+/// gain one, so it is left alone rather than nagging forever with no version to
+/// dismiss. The caller's banner covers the other reason a manifest is missing,
+/// which is an unreadable ACF.
+_Verdict _cardState({
+  required WallpaperLibrary library,
+  required bool covered,
+  required String? liveVersion,
+  required CopyStanding? standing,
+  required BackupRecord? record,
+}) {
+  if (!covered) return (state: BackupState.notBackedUp, seed: null);
+  // Before anything else, including the Workshop baseline: a folder with
+  // nothing in it is not a backup, whatever a record says about it.
+  if (standing == CopyStanding.empty) {
+    return (state: BackupState.emptyBackup, seed: null);
   }
-  return BackupState.updateAvailable;
+
+  final String? dismissed = record?.dismissedVersion;
+  _Verdict behind() => liveVersion != null && liveVersion == dismissed
+      ? (state: BackupState.updateDismissed, seed: null)
+      : (state: BackupState.updateAvailable, seed: null);
+
+  if (library == WallpaperLibrary.myProjects) {
+    return standing == CopyStanding.behind
+        ? behind()
+        : (state: BackupState.synced, seed: null);
+  }
+
+  if (liveVersion == null) return (state: BackupState.synced, seed: null);
+
+  final String? backedUp = record?.backedUpVersion;
+  if (backedUp != null) {
+    return liveVersion == backedUp
+        ? (state: BackupState.synced, seed: null)
+        : behind();
+  }
+  return switch (standing) {
+    CopyStanding.covers => (state: BackupState.synced, seed: liveVersion),
+    CopyStanding.behind => behind(),
+    // Nothing was compared, so there is nothing to record and nothing to
+    // report. Leaving it alone beats guessing in either direction.
+    _ => (state: BackupState.synced, seed: null),
+  };
 }

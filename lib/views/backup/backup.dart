@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:we_repkg/config/custom_theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
@@ -76,8 +77,46 @@ class _Backup extends ConsumerWidget {
       AsyncError<BackupScan>(:final Object error) => Center(
         child: Text('${tr(AppI10n.backupScanFailed)} $error'),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const _Scanning(),
     };
+  }
+}
+
+/// The first scan takes about twelve seconds against a real library, most of it
+/// walking both backup trees, so the spinner says what it is doing rather than
+/// leaving the tab blank.
+class _Scanning extends ConsumerWidget {
+  const _Scanning();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: 16,
+        children: <Widget>[
+          const CircularProgressIndicator(),
+          // Only this line listens, so a count that moves every few folders
+          // does not rebuild the tab behind it.
+          ValueListenableBuilder<BackupScanProgress?>(
+            valueListenable: ref.watch(backupScanProgressProvider),
+            builder: (BuildContext context, BackupScanProgress? progress, _) {
+              if (progress == null) return const SizedBox.shrink();
+              return Text(switch (progress.phase) {
+                BackupScanPhase.reading => tr(AppI10n.backupScanReading),
+                BackupScanPhase.comparing => tr(
+                  AppI10n.backupScanComparing,
+                  namedArgs: <String, String>{
+                    'done': '${progress.done}',
+                    'total': '${progress.total}',
+                  },
+                ),
+              }, style: Theme.of(context).meta.captionStyle);
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -171,6 +210,7 @@ class _Counts extends ConsumerWidget {
   /// for, so it goes at the top.
   static const Map<BackupState, String> _labels = <BackupState, String>{
     BackupState.vanished: AppI10n.backupStateVanished,
+    BackupState.emptyBackup: AppI10n.backupStateEmptyBackup,
     BackupState.updateAvailable: AppI10n.backupStateUpdateAvailable,
     BackupState.notBackedUp: AppI10n.backupStateNotBackedUp,
     BackupState.synced: AppI10n.backupStateSynced,

@@ -31,18 +31,37 @@ void main() {
     return container;
   }
 
+  /// A wallpaper folder with a file in it. Empty folders have their own state
+  /// now, so a fixture that leaves them bare tests that instead.
+  void wallpaper(String relative) {
+    File(p.join(dir(relative), 'project.json')).writeAsStringSync('{}');
+  }
+
   String livePaths() {
-    dir(p.join('live', '431960', '793602574'));
-    dir(p.join('live', 'myprojects', 'alpha'));
+    wallpaper(p.join('live', '431960', '793602574'));
+    wallpaper(p.join('live', 'myprojects', 'alpha'));
     return tmp.path;
   }
 
   void backupBoth() {
-    dir(p.join('backup', '431960', '793602574'));
-    dir(
+    wallpaper(p.join('backup', '431960', '793602574'));
+    wallpaper(
       p.join('backup', 'wallpaper_engine', 'projects', 'myprojects', 'alpha'),
     );
   }
+
+  final String acfBody = '''
+"AppWorkshop"
+{
+  "WorkshopItemsInstalled"
+  {
+    "793602574"
+    {
+      "manifest"  "6791066680065157913"
+    }
+  }
+}
+''';
 
   // Every path setting has to reach its own side of the comparison. Swapping
   // any two puts a wallpaper in the wrong library, which changes its state.
@@ -76,18 +95,7 @@ void main() {
       'workshop/793602574': const BackupRecord(backedUpVersion: 'older'),
     });
     final File acf = File(p.join(tmp.path, 'appworkshop_431960.acf'))
-      ..writeAsStringSync('''
-"AppWorkshop"
-{
-  "WorkshopItemsInstalled"
-  {
-    "793602574"
-    {
-      "manifest"  "6791066680065157913"
-    }
-  }
-}
-''');
+      ..writeAsStringSync(acfBody);
     final ProviderContainer container = await seeded(<String, Object>{
       AppKeys.wallpaperPath: p.join(tmp.path, 'live', '431960'),
       AppKeys.myProjectsLibrary: p.join(tmp.path, 'live', 'myprojects'),
@@ -102,6 +110,60 @@ void main() {
       scan.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
       BackupState.updateAvailable,
     );
+  });
+
+  // The scan works out the baselines and hands them back; this is the only
+  // place anything writes them. Without the write, every Workshop card would be
+  // compared folder-against-folder on every scan forever and nothing would say
+  // so, which is exactly what the records exist to stop.
+  test('a baseline the scan earned reaches the backup root', () async {
+    livePaths();
+    backupBoth();
+    final String backupRoot = p.join(tmp.path, 'backup');
+    final File acf = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+      ..writeAsStringSync(acfBody);
+    final ProviderContainer container = await seeded(<String, Object>{
+      AppKeys.wallpaperPath: p.join(tmp.path, 'live', '431960'),
+      AppKeys.myProjectsLibrary: p.join(tmp.path, 'live', 'myprojects'),
+      AppKeys.backupRoot: backupRoot,
+      AppKeys.acfPath: acf.path,
+    });
+
+    final BackupScan scan = await container.read(backupScanProvider.future);
+
+    expect(scan.seeds, <String, String>{
+      'workshop/793602574': '6791066680065157913',
+    });
+    expect(
+      (await readBackupRecords(
+        backupRoot,
+      ))['workshop/793602574']?.backedUpVersion,
+      '6791066680065157913',
+      reason: 'the scan returned it, so something has to have written it',
+    );
+  });
+
+  // Bookkeeping must never cost the user the answer. A read-only backup drive
+  // would otherwise replace the vanished list with an error string.
+  test('a baseline that cannot be written still leaves the scan', () async {
+    livePaths();
+    backupBoth();
+    final String backupRoot = p.join(tmp.path, 'backup');
+    // A directory where the records file needs to go, so the rename fails.
+    Directory(p.join(backupRoot, backupRecordsName)).createSync();
+    final File acf = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+      ..writeAsStringSync(acfBody);
+    final ProviderContainer container = await seeded(<String, Object>{
+      AppKeys.wallpaperPath: p.join(tmp.path, 'live', '431960'),
+      AppKeys.myProjectsLibrary: p.join(tmp.path, 'live', 'myprojects'),
+      AppKeys.backupRoot: backupRoot,
+      AppKeys.acfPath: acf.path,
+    });
+
+    final BackupScan scan = await container.read(backupScanProvider.future);
+
+    expect(scan.cards, hasLength(2));
+    expect(scan.missing, isEmpty);
   });
 
   // Watched, not read once: choosing a root has to rescan rather than leave the
