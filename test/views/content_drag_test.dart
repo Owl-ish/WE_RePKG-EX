@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/constants/nums.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/wallpaper.dart';
+import 'package:we_repkg/provider/filter.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -36,19 +38,20 @@ const Offset _firstCentre = Offset(
 /// press here reaches the grid rather than a tile's own click handler.
 const Offset _columnGap = Offset(210, 300);
 
-WallpaperInfo make(String id) => WallpaperInfo(
-  id: id,
-  title: 'Wallpaper $id',
-  contentRating: 'everyone',
-  tags: const [],
-  previews: '',
-  type: 'scene',
-  updateTime: null,
-  createTime: DateTime(2024, 1, 1),
-  target: 'scene.pkg',
-  folder: 'C:\\wallpapers\\$id',
-  size: 0,
-);
+WallpaperInfo make(String id, {String type = WallpaperType.scene}) =>
+    WallpaperInfo(
+      id: id,
+      title: 'Wallpaper $id',
+      contentRating: 'everyone',
+      tags: const [],
+      previews: '',
+      type: type,
+      updateTime: null,
+      createTime: DateTime(2024, 1, 1),
+      target: 'scene.pkg',
+      folder: 'C:\\wallpapers\\$id',
+      size: 0,
+    );
 
 /// Every filter off, so the grid shows the whole seeded library.
 Map<String, Object> prefs() => {
@@ -81,11 +84,19 @@ void main() {
 
   /// Seeds the library before pumping. ContentView scans for wallpapers itself
   /// when the list is empty, which would reach for the real disk.
-  Future<void> pumpGrid(WidgetTester tester, int count) async {
+  ///
+  /// [videos] are seeded alongside the [count] scene wallpapers, for the one
+  /// test that hides them again with a filter.
+  Future<void> pumpGrid(
+    WidgetTester tester,
+    int count, {
+    List<String> videos = const <String>[],
+  }) async {
     container = ProviderContainer();
     addTearDown(container.dispose);
     container.read(wallpaperListProvider.notifier).addAll([
       for (int i = 0; i < count; i++) make('$i'),
+      for (final String id in videos) make(id, type: WallpaperType.video),
     ]);
     // Complete before the first frame, so the entrance animation stays out of
     // the way of the gestures below.
@@ -239,6 +250,42 @@ void main() {
       ...before,
       ...idsAt([0, 4]),
     }, reason: 'ctrl adds to the selection rather than replacing it');
+    await drag.up();
+    await tester.pump();
+  });
+
+  testWidgets('ctrl keeps a wallpaper the filter is hiding', (tester) async {
+    await pumpGrid(tester, 8, videos: const ['v']);
+    // Filtered out before the drag, so the only way it can survive is if the
+    // baseline is read from the whole library rather than from what is on
+    // screen. Also takes the grid back to two rows, leaving the press below
+    // clear of any tile.
+    container.read(filterStateProvider.notifier).updateHideVideo(true);
+    await tester.pumpAndSettle();
+    expect(find.byType(ImageItem), findsNWidgets(8));
+
+    container.read(checkedIdsProvider.notifier).setAll({'v'}, true);
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    addTearDown(() => tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft));
+
+    final TestGesture drag = await tester.startGesture(
+      const Offset(30, 500),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await drag.moveTo(_firstCentre);
+    await tester.pump();
+
+    expect(
+      checkedIds(),
+      {
+        'v',
+        ...idsAt([0, 4]),
+      },
+      reason: 'a hidden wallpaper stays selected through a ctrl-drag',
+    );
     await drag.up();
     await tester.pump();
   });
