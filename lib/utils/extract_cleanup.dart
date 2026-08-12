@@ -67,7 +67,12 @@ Future<String?> deleteOther(String outPath) async {
 
 Future<String?> deleteOtherAndTexture(String outPath) async {
   if (await Directory('$outPath/materials').exists()) {
-    final files = await Directory('$outPath/materials').list().toList();
+    // Recursive, and listed in full before anything moves: a scene can keep its
+    // art under materials/effects/, and the whole tree is deleted below, so
+    // rescuing only the top level threw those away.
+    final files = await Directory(
+      '$outPath/materials',
+    ).list(recursive: true).toList();
     for (var file in files) {
       if (file is File &&
           (isImage(file.path) || file.path.toLowerCase().endsWith('mp4'))) {

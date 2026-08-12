@@ -18,7 +18,6 @@ void main() {
 
   test('moves images out of materials and clears the rest', () async {
     touch('materials\\art.png');
-    touch('materials\\masks\\mask.png');
     touch('shaders\\a.frag');
     touch('scene.json');
 
@@ -28,6 +27,37 @@ void main() {
     expect(Directory('${out.path}\\materials').existsSync(), isFalse);
     expect(Directory('${out.path}\\shaders').existsSync(), isFalse);
     expect(File('${out.path}\\scene.json').existsSync(), isFalse);
+  });
+
+  // Rescuing only the top level sent everything deeper to the bin with the
+  // folder, which is how an extraction reported success and wrote nothing.
+  test('moves images out of folders under materials', () async {
+    touch('materials\\effects\\water.png');
+    touch('materials\\masks\\deep\\mask.jpg');
+    touch('materials\\clip.mp4');
+    touch('materials\\effects\\notes.txt');
+
+    expect(await deleteOtherAndTexture(out.path), isNull);
+
+    expect(File('${out.path}\\water.png').existsSync(), isTrue);
+    expect(File('${out.path}\\mask.jpg').existsSync(), isTrue);
+    expect(File('${out.path}\\clip.mp4').existsSync(), isTrue);
+    expect(File('${out.path}\\notes.txt').existsSync(), isFalse);
+  });
+
+  // Two folders under materials can hold the same filename, and the first one
+  // out must not be replaced by the second.
+  test('two nested images of one name both come out', () async {
+    touch('materials\\a\\art.png').writeAsStringSync('first');
+    touch('materials\\b\\art.png').writeAsStringSync('second');
+
+    expect(await deleteOtherAndTexture(out.path), isNull);
+
+    final List<String> kept = <String>[
+      File('${out.path}\\art.png').readAsStringSync(),
+      File('${out.path}\\art-1.png').readAsStringSync(),
+    ]..sort();
+    expect(kept, <String>['first', 'second']);
   });
 
   // A scene can hold a texture and a root file of the same name. Renaming the
