@@ -56,7 +56,8 @@ class ProjectPath extends _$ProjectPath {
 class CurrentLibrary extends _$CurrentLibrary {
   @override
   WallpaperLibrary build() =>
-      WallpaperLibrary.values[StorageUtil.getInt(AppKeys.currentLibrary) ?? 0];
+      StorageUtil.getEnum(AppKeys.currentLibrary, WallpaperLibrary.values) ??
+      WallpaperLibrary.values.first;
 
   void update(WallpaperLibrary value) async {
     state = value;
@@ -156,7 +157,9 @@ class SearchContent extends _$SearchContent {
 @Riverpod(keepAlive: true)
 class CurrentTheme extends _$CurrentTheme {
   @override
-  ThemeType build() => ThemeType.values[StorageUtil.getInt(AppKeys.theme) ?? 0];
+  ThemeType build() =>
+      StorageUtil.getEnum(AppKeys.theme, ThemeType.values) ??
+      ThemeType.values.first;
   void update(ThemeType value) async {
     state = value;
     await StorageUtil.setInt(AppKeys.theme, value.index);
@@ -175,7 +178,8 @@ class LoadingText extends _$LoadingText {
 class CurrentExtractType extends _$CurrentExtractType {
   @override
   ExtractType build() =>
-      ExtractType.values[StorageUtil.getInt(AppKeys.extractType) ?? 0];
+      StorageUtil.getEnum(AppKeys.extractType, ExtractType.values) ??
+      ExtractType.values.first;
   void update(ExtractType value) async {
     state = value;
     await StorageUtil.setInt(AppKeys.extractType, value.index);

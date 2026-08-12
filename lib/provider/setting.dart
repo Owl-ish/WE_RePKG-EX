@@ -56,7 +56,8 @@ class WallpaperSortType extends _$WallpaperSortType {
   @override
   SortType build() {
     final SortType stored =
-        SortType.values[StorageUtil.getInt(AppKeys.sortType) ?? 0];
+        StorageUtil.getEnum(AppKeys.sortType, SortType.values) ??
+        SortType.values.first;
     if (stored == SortType.update && !ref.watch(useAcfInfoProvider)) {
       return SortType.time;
     }
@@ -83,8 +84,8 @@ class ReplaceFile extends _$ReplaceFile {
 /// no `ref` to read the provider through: it is stored by index, so a second
 /// copy of this lookup would be free to disagree about the default.
 NotificationType storedNotificationType() =>
-    NotificationType.values[StorageUtil.getInt(AppKeys.notificationType) ??
-        NotificationType.app.index];
+    StorageUtil.getEnum(AppKeys.notificationType, NotificationType.values) ??
+    NotificationType.app;
 
 @riverpod
 class LocalNotificationType extends _$LocalNotificationType {

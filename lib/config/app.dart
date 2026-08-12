@@ -47,7 +47,8 @@ class AppConfig {
           : WindowNums.defaultSize;
 
       final ThemeType savedTheme =
-          ThemeType.values[StorageUtil.getInt(AppKeys.theme) ?? 0];
+          StorageUtil.getEnum(AppKeys.theme, ThemeType.values) ??
+          ThemeType.values.first;
       final bool darkWindow =
           savedTheme == ThemeType.dark ||
           (savedTheme == ThemeType.system &&
