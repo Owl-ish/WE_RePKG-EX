@@ -120,7 +120,10 @@ Future<bool> _rePKGAvailable(
 
 /// Runs [work] over [wallpapers] behind the loading overlay and reports how it
 /// went. Both extraction modes share this; only the setup before it differs.
-Future<void> _runBatch(
+///
+/// Returns whether it ran to the end, so a caller with something else to say
+/// stays quiet after a cancel.
+Future<bool> _runBatch(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
   int concurrency,
@@ -171,8 +174,12 @@ Future<void> _runBatch(
     }
   }
 
-  if (token.isCancelled) return showCancelledToast();
+  if (token.isCancelled) {
+    showCancelledToast();
+    return false;
+  }
   errList.isNotEmpty ? showErrorView(errList) : showExtractSuccessToast();
+  return true;
 }
 
 Future<void> extractProject(
@@ -318,7 +325,6 @@ Future<void> extractWallpapers(
 
   final String outPath = ref.read(exportPathProvider)!;
   if (!await ensureOutputDir(outPath)) return;
-  await sweepStaleOutput(outPath);
 
   final ExtractSettings settings = await readExtractSettings(
     ref,
@@ -330,21 +336,72 @@ Future<void> extractWallpapers(
 
   final StatusSink onStatus = ref.read(loadingTextProvider.notifier).update;
 
-  await _runBatch(ref, wallpapers, settings.plan.concurrency, (
-    wallpaper,
-    token,
-  ) {
-    return extractBranch(
-      onStatus,
-      settings,
+  // A run that writes nothing is not a failure: skipping every entry is what
+  // some settings ask for. It is still worth saying, since the only other
+  // signal is a success toast over an unchanged folder.
+  final List<String> emptyHanded = <String>[];
+  bool finished = false;
+
+  await withExportSweep(outPath, () async {
+    finished = await _runBatch(ref, wallpapers, settings.plan.concurrency, (
       wallpaper,
-      outPath,
-      claims,
       token,
-      // Only a single-wallpaper run can own the progress line.
-      detailedProgress: wallpapers.length == 1,
-    );
+    ) {
+      return extractBranch(
+        onStatus,
+        settings,
+        wallpaper,
+        outPath,
+        claims,
+        token,
+        // Only a single-wallpaper run can own the progress line.
+        detailedProgress: wallpapers.length == 1,
+        onNothingWritten: () => emptyHanded.add(wallpaper.title),
+      );
+    });
   });
+
+  if (!finished || emptyHanded.isEmpty) return;
+  showNoticeToast(
+    tr(
+      AppI10n.extractNothingWritten,
+      namedArgs: <String, String>{
+        'names': emptyHanded.take(3).join(', '),
+        'count': '${emptyHanded.length}',
+        'path': outPath,
+      },
+    ),
+  );
+}
+
+/// How many batches are running in each export folder. A count, not a flag:
+/// with three runs in flight the first to finish would otherwise free the
+/// folder while the second is still writing into it.
+final Map<String, int> _exporting = <String, int>{};
+
+/// Runs [work] as one export batch, clearing what an earlier run left behind
+/// only when nothing else is exporting into [outPath].
+///
+/// The sweep cannot tell a leftover from a scene folder or a part file another
+/// run is writing this second, and two runs overlapping is ordinary: picking an
+/// export folder returns while the first run is still going, and the second
+/// click starts before it finishes. The second sweep then deleted the first
+/// run's `.werepkg-ex-` folder out from under RePKG, which surfaced as a file
+/// that was not found.
+Future<void> withExportSweep(
+  String outPath,
+  Future<void> Function() work,
+) async {
+  final String key = path.normalize(outPath).toLowerCase();
+  final bool alone = (_exporting[key] ?? 0) == 0;
+  _exporting[key] = (_exporting[key] ?? 0) + 1;
+  try {
+    if (alone) await sweepStaleOutput(outPath);
+    await work();
+  } finally {
+    final int left = (_exporting[key] ?? 1) - 1;
+    left > 0 ? _exporting[key] = left : _exporting.remove(key);
+  }
 }
 
 Future<void> extractCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
@@ -378,6 +435,7 @@ Future<String?> extractBranch(
   FileNameClaims claims,
   CancelToken token, {
   bool detailedProgress = false,
+  VoidCallback? onNothingWritten,
 }) async {
   final target = wallpaper.target;
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
@@ -391,6 +449,7 @@ Future<String?> extractBranch(
       claims,
       token,
       detailedProgress: detailedProgress,
+      onNothingWritten: onNothingWritten,
     );
   } else if (targetLower.endsWith('.mp4')) {
     return extractVideo(
@@ -402,6 +461,9 @@ Future<String?> extractBranch(
       detailedProgress: detailedProgress,
     );
   } else if (targetLower.endsWith('customdirectory')) {
+    // A wallpaper whose folder holds nothing to copy is the same silence a
+    // scene that extracted nothing leaves.
+    if (await isEmptyOfFiles(Directory(target))) onNothingWritten?.call();
     return extractImages(
       onStatus,
       target,
@@ -414,11 +476,18 @@ Future<String?> extractBranch(
   final name = settings.useTitleName
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
-  return copyWallpaperFolderTo(
+  final String dest = path.join(outPath, name);
+  final String? copied = await copyWallpaperFolderTo(
     wallpaper,
-    path.join(outPath, name),
+    dest,
     overwrite: settings.overwrite,
   );
+  // Nothing copied and nothing there: every file already existed with overwrite
+  // off, or the folder was empty to begin with.
+  if (copied == null && await isEmptyOfFiles(Directory(dest))) {
+    onNothingWritten?.call();
+  }
+  return copied;
 }
 
 /// Copies the whole wallpaper folder into [destDir], so the output stays a
@@ -467,6 +536,18 @@ Future<String?> copyWallpaperFolderTo(
 }
 
 const String _sceneTempPrefix = '.werepkg-ex-';
+
+int _sceneTempSeq = 0;
+
+/// A private directory for one scene, for one run.
+///
+/// The counter is what keeps two runs apart. Named by wallpaper id alone, a
+/// second run on the same wallpaper deleted the first one's directory on its way
+/// in and then emptied it again on its way out, so one run reported a file that
+/// was not found and the other moved nothing and called it success. Two runs
+/// overlap in ordinary use: the export folder picker returns while the first is
+/// still going.
+String sceneTempName(String id) => '$_sceneTempPrefix$id-${_sceneTempSeq++}';
 
 /// Every scene temp folder this app has ever made begins with this, the pre-1.7
 /// name included, so one check sweeps both spellings.
@@ -554,12 +635,12 @@ Future<String?> extractSceneToShared(
   FileNameClaims claims,
   CancelToken token, {
   bool detailedProgress = false,
+  VoidCallback? onNothingWritten,
 }) async {
   final Directory temp = Directory(
-    path.join(outPath, '$_sceneTempPrefix${wallpaper.id}'),
+    path.join(outPath, sceneTempName(wallpaper.id)),
   );
   try {
-    if (await temp.exists()) await temp.delete(recursive: true);
     await temp.create(recursive: true);
   } catch (e) {
     debugPrint('${tr(AppI10n.errorCreatedFolderFailed)} $e');
@@ -584,13 +665,18 @@ Future<String?> extractSceneToShared(
     final String? cleanup = await deleteUselessFiles(settings, temp.path);
     if (cleanup != null) return cleanup;
 
+    // Counted before the move, which empties it. The tool skipping every entry
+    // and the cleanup deleting every file both land here, and neither is a
+    // failure to report as one.
+    if (await isEmptyOfFiles(temp)) onNothingWritten?.call();
+
     final String? moved = await moveExtractedInto(temp.path, outPath, claims);
     if (moved == null) return null;
     // Whatever could not be moved is still in here. Deleting it would destroy
     // output the error message just named, and re-extracting cannot recover it
     // when the cause is permanent, a path too long being the usual one.
     keepTemp = true;
-    return '$moved -> ${await keepUnmovedFiles(temp, outPath, wallpaper.id)}';
+    return '$moved -> ${await keepUnmovedFiles(temp, outPath)}';
   } finally {
     if (!keepTemp) {
       try {
@@ -602,19 +688,32 @@ Future<String?> extractSceneToShared(
   }
 }
 
+/// Whether [dir] holds no file at any depth. Empty subfolders do not count:
+/// RePKG creates the tree before it knows what it will write.
+Future<bool> isEmptyOfFiles(Directory dir) async {
+  try {
+    await for (final FileSystemEntity entity in dir.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is File) return false;
+    }
+  } on FileSystemException {
+    return true;
+  }
+  return true;
+}
+
 /// Moves the leftovers out of the sweep's way and says where they went, since
 /// the next run clears anything still named with the scene prefix.
-Future<String> keepUnmovedFiles(
-  Directory temp,
-  String outPath,
-  String id,
-) async {
-  final String kept = path.join(outPath, '$id-unmoved');
-  try {
-    await Directory(kept).delete(recursive: true);
-  } catch (_) {
-    // Nothing there yet, which is the normal case.
-  }
+Future<String> keepUnmovedFiles(Directory temp, String outPath) async {
+  // Named after this run's own directory, so a second run on the same wallpaper
+  // cannot delete the files an error message has just pointed at. The scene
+  // prefix comes off, or the next run's sweep would clear it.
+  final String kept = path.join(
+    outPath,
+    '${path.basename(temp.path).replaceFirst(_sceneTempPrefix, '')}-unmoved',
+  );
   try {
     await temp.rename(kept);
     return kept;

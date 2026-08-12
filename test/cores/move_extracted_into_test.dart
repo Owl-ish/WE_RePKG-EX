@@ -162,37 +162,45 @@ void main() {
   // named in an error the user could do nothing about.
   group('keeping what could not be moved', () {
     test('renames the leftovers under the output folder', () async {
-      final Directory temp = Directory('${to.path}\\.werepkg-77')..createSync();
+      final Directory temp = Directory('${to.path}\\.werepkg-ex-77-0')
+        ..createSync();
       File('${temp.path}\\stuck.png').writeAsStringSync('x');
 
-      final String kept = await keepUnmovedFiles(temp, to.path, '77');
+      final String kept = await keepUnmovedFiles(temp, to.path);
 
-      expect(kept, '${to.path}\\77-unmoved');
+      expect(kept, '${to.path}\\77-0-unmoved');
       expect(File('$kept\\stuck.png').readAsStringSync(), 'x');
       expect(temp.existsSync(), isFalse);
     });
 
     test('survives the next run clearing stale scene folders', () async {
-      final Directory temp = Directory('${to.path}\\.werepkg-77')..createSync();
+      final Directory temp = Directory('${to.path}\\.werepkg-ex-77-0')
+        ..createSync();
       File('${temp.path}\\stuck.png').writeAsStringSync('x');
-      final String kept = await keepUnmovedFiles(temp, to.path, '77');
+      final String kept = await keepUnmovedFiles(temp, to.path);
 
       await sweepStaleOutput(to.path);
 
       expect(File('$kept\\stuck.png').existsSync(), isTrue);
     });
 
-    test('a second failure replaces the first rather than piling up', () async {
-      for (final String body in <String>['first', 'second']) {
-        final Directory temp = Directory('${to.path}\\.werepkg-77')
+    // Two runs on one wallpaper each fail to move something. The second used to
+    // delete the first one's kept files, which an error message had just named.
+    test('a second failure keeps the first one\'s files', () async {
+      for (final String run in <String>['0', '1']) {
+        final Directory temp = Directory('${to.path}\\.werepkg-ex-77-$run')
           ..createSync();
-        File('${temp.path}\\stuck.png').writeAsStringSync(body);
-        await keepUnmovedFiles(temp, to.path, '77');
+        File('${temp.path}\\stuck.png').writeAsStringSync(run);
+        await keepUnmovedFiles(temp, to.path);
       }
 
       expect(
-        File('${to.path}\\77-unmoved\\stuck.png').readAsStringSync(),
-        'second',
+        File('${to.path}\\77-0-unmoved\\stuck.png').readAsStringSync(),
+        '0',
+      );
+      expect(
+        File('${to.path}\\77-1-unmoved\\stuck.png').readAsStringSync(),
+        '1',
       );
     });
   });

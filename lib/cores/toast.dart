@@ -40,6 +40,11 @@ void showToolNoExistToast() => _toast(
 void showErrorToast(String message) =>
     _toast(Icons.warning_rounded, Colors.red, message, seconds: 5);
 
+/// Amber, not red: the run did what it was told and there is simply nothing to
+/// show for it.
+void showNoticeToast(String message) =>
+    _toast(Icons.info_rounded, Colors.orange, message, seconds: 6);
+
 void showExtractSuccessToast() {
   if (storedNotificationType() == NotificationType.app) {
     return _toast(

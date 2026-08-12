@@ -89,6 +89,7 @@ class AppI10n {
   static const String backupStateEmptyBackup = 'backup.state.emptyBackup';
   static const String backupScanReading = 'backup.scanReading';
   static const String backupScanComparing = 'backup.scanComparing';
+  static const String extractNothingWritten = 'extract.nothingWritten';
   static const String backupSortState = 'backup.sort.state';
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';
