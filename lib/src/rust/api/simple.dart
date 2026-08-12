@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `alpha_hint_from_header`, `has_png_transparency_blocking`, `read_prefix`
+// These functions are ignored because they are not marked as `pub`: `all_invisible`, `alpha_hint_from_header`, `is_png_fully_transparent_blocking`, `read_prefix`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AlphaHint`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `eq`, `fmt`
 
@@ -16,10 +16,10 @@ Future<String?> deleteToTrash({required String filePath}) =>
 Future<String?> deleteAllToTrash({required List<String> filePaths}) =>
     RustLib.instance.api.crateApiSimpleDeleteAllToTrash(filePaths: filePaths);
 
-Future<bool> hasPngTransparencyRust({required String filePath}) => RustLib
+Future<bool> isPngFullyTransparentRust({required String filePath}) => RustLib
     .instance
     .api
-    .crateApiSimpleHasPngTransparencyRust(filePath: filePath);
+    .crateApiSimpleIsPngFullyTransparentRust(filePath: filePath);
 
 Future<List<String>> deleteTransparentPngsRust({
   required List<String> filePaths,

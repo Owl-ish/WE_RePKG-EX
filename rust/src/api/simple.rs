@@ -90,9 +90,15 @@ fn read_prefix(path: &Path, max: usize) -> std::io::Result<Vec<u8>> {
     Ok(buffer)
 }
 
-/// Blocking transparency check: header fast path first, full decode only when
-/// the header cannot settle it.
-fn has_png_transparency_blocking(file_path: &str) -> Result<bool, String> {
+/// True when every alpha is zero, and there is at least one pixel to say so.
+fn all_invisible(alphas: impl Iterator<Item = u32>) -> bool {
+    let mut alphas = alphas.peekable();
+    alphas.peek().is_some() && alphas.all(|alpha| alpha == 0)
+}
+
+/// Blocking check: header fast path first, full decode only when the header
+/// cannot settle it.
+fn is_png_fully_transparent_blocking(file_path: &str) -> Result<bool, String> {
     let path = Path::new(file_path);
     // Case-insensitive: a ".PNG" used to fall through as "not a png" and report
     // opaque regardless of its contents.
@@ -111,22 +117,25 @@ fn has_png_transparency_blocking(file_path: &str) -> Result<bool, String> {
     }
 
     let img = image::open(path).map_err(|e| format!("Failed to open image: {}", e))?;
-    // LumaA (colour type 4) was missing here, so a transparent grayscale PNG
-    // reported opaque and survived the cleanup.
+    // Wholly invisible, not merely carrying an alpha channel. Deleting anything
+    // with one soft pixel took the artwork with the masks. LumaA (colour type 4)
+    // is listed because a grayscale mask used to read as opaque and survive.
     Ok(match img {
-        image::DynamicImage::ImageRgba8(img) => img.pixels().any(|p| p.0[3] < u8::MAX),
-        image::DynamicImage::ImageRgba16(img) => img.pixels().any(|p| p.0[3] < u16::MAX),
-        image::DynamicImage::ImageLumaA8(img) => img.pixels().any(|p| p.0[1] < u8::MAX),
-        image::DynamicImage::ImageLumaA16(img) => img.pixels().any(|p| p.0[1] < u16::MAX),
+        image::DynamicImage::ImageRgba8(img) => all_invisible(img.pixels().map(|p| p.0[3] as u32)),
+        image::DynamicImage::ImageRgba16(img) => all_invisible(img.pixels().map(|p| p.0[3] as u32)),
+        image::DynamicImage::ImageLumaA8(img) => all_invisible(img.pixels().map(|p| p.0[1] as u32)),
+        image::DynamicImage::ImageLumaA16(img) => {
+            all_invisible(img.pixels().map(|p| p.0[1] as u32))
+        }
         _ => false, // 非RGBA格式没有透明度通道
     })
 }
 
 #[flutter_rust_bridge::frb]
-pub async fn has_png_transparency_rust(file_path: String) -> Result<bool, String> {
+pub async fn is_png_fully_transparent_rust(file_path: String) -> Result<bool, String> {
     // Decoding is blocking CPU work. Running it directly on an async worker
     // starved the runtime once a batch was in flight.
-    tokio::task::spawn_blocking(move || has_png_transparency_blocking(&file_path))
+    tokio::task::spawn_blocking(move || is_png_fully_transparent_blocking(&file_path))
         .await
         .map_err(|e| format!("Task execution error: {}", e))?
 }
@@ -152,7 +161,7 @@ pub async fn delete_transparent_pngs_rust(file_paths: Vec<String>) -> Vec<String
                 Ok(permit) => permit,
                 Err(e) => return Some(format!("Semaphore closed: {}", e)),
             };
-            match has_png_transparency_rust(file_path.clone()).await {
+            match is_png_fully_transparent_rust(file_path.clone()).await {
                 Ok(true) => trash::delete(&file_path)
                     .err()
                     .map(|e| format!("Failed to delete transparent PNG: {}", e)),
@@ -237,7 +246,7 @@ mod tests {
         );
         assert_eq!(hint_of(&path), AlphaHint::Opaque);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
@@ -250,7 +259,7 @@ mod tests {
         write_png(&path, ColorType::Rgb, &pixels, 2, 2, None, None);
         assert_eq!(hint_of(&path), AlphaHint::Opaque);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
@@ -271,16 +280,16 @@ mod tests {
         );
         assert_eq!(hint_of(&path), AlphaHint::Opaque);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
 
     /// palette alpha lives in tRNS, not the colour type byte.
-    /// Answering from the colour type alone would call this opaque and leave the
-    /// file on disk.
+    /// Answering from the colour type alone would call this opaque and never
+    /// look at the pixels.
     #[test]
-    fn indexed_with_trns_falls_through_and_detects_transparency() {
+    fn indexed_with_trns_falls_through_to_the_decode() {
         let dir = tmp_dir();
         let path = dir.join("pal_trns.png");
         let palette = vec![255, 0, 0, 0, 255, 0];
@@ -295,7 +304,27 @@ mod tests {
         );
         assert_eq!(hint_of(&path), AlphaHint::NeedsDecode);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
+            Ok(false),
+            "half the pixels are visible"
+        );
+    }
+
+    #[test]
+    fn an_indexed_image_drawn_only_in_the_clear_entry_is_reported() {
+        let dir = tmp_dir();
+        let path = dir.join("pal_trns_blank.png");
+        write_png(
+            &path,
+            ColorType::Indexed,
+            &[0, 0, 0, 0],
+            2,
+            2,
+            Some(vec![255, 0, 0, 0, 255, 0]),
+            Some(vec![0, 255]),
+        );
+        assert_eq!(
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(true)
         );
     }
@@ -316,45 +345,82 @@ mod tests {
         );
         assert_eq!(hint_of(&path), AlphaHint::NeedsDecode);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
+            Ok(false)
+        );
+    }
+
+    /// No alpha channel at all, so the verdict rests entirely on tRNS naming the
+    /// one colour the image is drawn in.
+    #[test]
+    fn a_truecolour_image_drawn_only_in_the_clear_colour_is_reported() {
+        let dir = tmp_dir();
+        let path = dir.join("rgb_trns_blank.png");
+        let pixels = [255u8, 0, 0, 255, 0, 0];
+        write_png(
+            &path,
+            ColorType::Rgb,
+            &pixels,
+            2,
+            1,
+            None,
+            Some(vec![0, 255, 0, 0, 0, 0]), // pure red reads as transparent
+        );
+        assert_eq!(
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(true)
         );
     }
 
     #[test]
-    fn rgba_needs_a_decode_and_reports_opaque_when_fully_opaque() {
+    fn a_fully_opaque_rgba_image_is_kept() {
         let dir = tmp_dir();
         let path = dir.join("rgba_opaque.png");
         let pixels = [255u8, 0, 0, 255, 0, 255, 0, 255];
         write_png(&path, ColorType::Rgba, &pixels, 2, 1, None, None);
         assert_eq!(hint_of(&path), AlphaHint::NeedsDecode);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
 
+    /// The setting used to mean "carries any transparency", so a photograph with
+    /// one soft pixel went to the recycle bin and the export came out empty.
     #[test]
-    fn rgba_with_a_transparent_pixel_reports_transparency() {
+    fn rgba_with_one_transparent_pixel_is_kept() {
         let dir = tmp_dir();
         let path = dir.join("rgba_alpha.png");
         let pixels = [255u8, 0, 0, 255, 0, 255, 0, 0];
         write_png(&path, ColorType::Rgba, &pixels, 2, 1, None, None);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn rgba_with_every_pixel_invisible_is_reported() {
+        let dir = tmp_dir();
+        let path = dir.join("rgba_blank.png");
+        let pixels = [255u8, 0, 0, 0, 0, 255, 0, 0];
+        write_png(&path, ColorType::Rgba, &pixels, 2, 1, None, None);
+        assert_eq!(
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(true)
         );
     }
 
-    /// Colour type 4 was absent from the old match arm, so this reported opaque.
+    /// Colour type 4 was absent from the match arm once, so grayscale never
+    /// reached the pixels at all.
     #[test]
-    fn grayscale_alpha_transparency_is_detected() {
+    fn a_grayscale_alpha_image_with_every_pixel_invisible_is_reported() {
         let dir = tmp_dir();
         let path = dir.join("la.png");
         write_png(
             &path,
             ColorType::GrayscaleAlpha,
-            &[128, 255, 200, 0],
+            &[128, 0, 200, 0],
             2,
             1,
             None,
@@ -362,13 +428,13 @@ mod tests {
         );
         assert_eq!(hint_of(&path), AlphaHint::NeedsDecode);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(true)
         );
     }
 
     #[test]
-    fn grayscale_alpha_fully_opaque_reports_false() {
+    fn a_fully_opaque_grayscale_alpha_image_is_kept() {
         let dir = tmp_dir();
         let path = dir.join("la_opaque.png");
         write_png(
@@ -381,7 +447,7 @@ mod tests {
             None,
         );
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
@@ -392,7 +458,7 @@ mod tests {
         let path = dir.join("clip.mp4");
         std::fs::write(&path, b"not an image").unwrap();
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(false)
         );
     }
@@ -404,7 +470,7 @@ mod tests {
         let pixels = [255u8, 0, 0, 0];
         write_png(&path, ColorType::Rgba, &pixels, 1, 1, None, None);
         assert_eq!(
-            has_png_transparency_blocking(path.to_str().unwrap()),
+            is_png_fully_transparent_blocking(path.to_str().unwrap()),
             Ok(true)
         );
     }
@@ -435,7 +501,7 @@ mod tests {
         assert_eq!(hint_of(&cut), AlphaHint::NeedsDecode);
         // The decode then fails, which surfaces as an error rather than a
         // silent "opaque".
-        assert!(has_png_transparency_blocking(cut.to_str().unwrap()).is_err());
+        assert!(is_png_fully_transparent_blocking(cut.to_str().unwrap()).is_err());
     }
 
     #[test]
@@ -472,12 +538,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn opaque_files_survive_the_sweep() {
+    async fn artwork_survives_the_sweep() {
         let dir = tmp_dir();
-        let path = dir.join("keep.png");
-        write_png(&path, ColorType::Rgb, &[1, 2, 3], 1, 1, None, None);
-        let errors = delete_transparent_pngs_rust(vec![path.to_str().unwrap().into()]).await;
+        let opaque = dir.join("keep.png");
+        write_png(&opaque, ColorType::Rgb, &[1, 2, 3], 1, 1, None, None);
+        let soft_edge = dir.join("photo.png");
+        write_png(
+            &soft_edge,
+            ColorType::Rgba,
+            &[255, 0, 0, 255, 0, 255, 0, 0],
+            2,
+            1,
+            None,
+            None,
+        );
+
+        let errors = delete_transparent_pngs_rust(vec![
+            opaque.to_str().unwrap().into(),
+            soft_edge.to_str().unwrap().into(),
+        ])
+        .await;
+
         assert!(errors.is_empty(), "{:?}", errors);
-        assert!(path.exists(), "an opaque png must not be deleted");
+        assert!(opaque.exists(), "an opaque png must not be deleted");
+        assert!(soft_edge.exists(), "one soft pixel is not a mask");
     }
 }
