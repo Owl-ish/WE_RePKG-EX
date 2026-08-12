@@ -78,6 +78,8 @@ class AppI10n {
   static const String integrityVerdictProjectUnreadable =
       'integrity.verdict.projectUnreadable';
   static const String integrityVerdictEmpty = 'integrity.verdict.empty';
+  static const String integrityVerdictShaderCacheOnly =
+      'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
   static const String backupStateSynced = 'backup.state.synced';
   static const String backupStateNotBackedUp = 'backup.state.notBackedUp';

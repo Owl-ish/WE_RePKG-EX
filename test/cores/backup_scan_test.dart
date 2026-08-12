@@ -776,6 +776,16 @@ void main() {
       return folder;
     }
 
+    /// What Steam leaves behind: the folder, holding only the cache Wallpaper
+    /// Engine wrote into it.
+    Directory husk(Directory lib, String id) {
+      final Directory folder = wallpaper(lib, id);
+      File(p.join(folder.path, 'shaders', 'blobsSM40', 'cache.dxs'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('rebuilt');
+      return folder;
+    }
+
     // AC 2.
     test('with no root every live wallpaper is not backed up', () async {
       wallpaper(liveWorkshop, '793602574');
@@ -790,6 +800,79 @@ void main() {
             BackupState.notBackedUp,
       });
       expect(result.reconcile, isEmpty);
+    });
+
+    // Steam removes an unsubscribed wallpaper's files and leaves the folder,
+    // because Wallpaper Engine wrote the shader cache in it. Twenty-seven of
+    // these were sitting in the grid as blank cards offering to back up nothing.
+    group('a folder Steam left behind', () {
+      test('gets no card, in either library', () async {
+        filled(liveWorkshop, '793602574');
+        husk(liveWorkshop, '3776838872');
+        husk(liveMyProjects, 'abandoned');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(result.cards.keys, <BackupCard>[
+          const BackupCard(WallpaperLibrary.workshop, '793602574'),
+        ]);
+      });
+
+      // The backup is the only copy left of what used to be there, so the card
+      // has to stay whatever the live folder holds today.
+      test('keeps its card when the backup still holds it', () async {
+        husk(liveWorkshop, '3776838872');
+        filled(backupWorkshop(), '3776838872');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '3776838872',
+          )],
+          BackupState.synced,
+        );
+      });
+
+      // The rule has to stay narrow. This folder is unloadable too, and one of
+      // the user's holds 8.7GB: dropping it would take a wallpaper they can
+      // still back up off the tab with nothing said.
+      test('a folder with content in a subfolder keeps its card', () async {
+        final Directory nested = wallpaper(liveWorkshop, '3373795844');
+        File(p.join(nested.path, '1110-5', 'clip.mp4'))
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync('8.7GB in spirit');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '3373795844',
+          )],
+          BackupState.notBackedUp,
+        );
+      });
+
+      // Its Workshop original is gone and the myprojects backup is all that is
+      // left, which is what vanished means. It used to reach reconcile instead,
+      // on the strength of a live folder holding nothing.
+      test('a myprojects backup of the same name reads as vanished', () async {
+        husk(liveWorkshop, '3776838872');
+        filled(backupMyProjects(), '3776838872');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.myProjects,
+            '3776838872',
+          )],
+          BackupState.vanished,
+        );
+        expect(result.reconcile, isEmpty);
+      });
     });
 
     test('finds both backup libraries under the root', () async {

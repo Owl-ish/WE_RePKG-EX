@@ -98,6 +98,34 @@ void main() {
     );
   });
 
+  // 3776838872 and 26 others: Steam removed the wallpaper and left the folder,
+  // because Wallpaper Engine wrote the cache in it rather than downloading it.
+  group('a folder Steam left behind', () {
+    test('is named as leftover cache, not as media', () {
+      expect(
+        verdict(const <String>[], dirs: <String>['shaders'], project: false),
+        IntegrityVerdict.shaderCacheOnly,
+      );
+    });
+
+    test('is media only once something else is in there', () {
+      expect(
+        verdict(
+          const <String>[],
+          dirs: <String>['shaders', 'materials'],
+          project: false,
+        ),
+        IntegrityVerdict.mediaOnly,
+      );
+    });
+
+    // The backup tab reads the same rule to decide what to leave out, and an
+    // empty folder is not one of these: it may be a wallpaper mid-download.
+    test('an empty folder is not one', () {
+      expect(holdsOnlyRebuiltShaders(const <FolderEntry>[]), isFalse);
+    });
+  });
+
   // 3373795844: 8.7GB in one nested folder and nothing WPE reads.
   test('content with nothing recognisable is media only', () {
     expect(

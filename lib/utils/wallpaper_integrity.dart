@@ -7,10 +7,10 @@ typedef ProjectRead = ({bool present, bool readable, String? file});
 /// Whether Wallpaper Engine could load a folder, and if not, what it is
 /// instead.
 ///
-/// The three project-less verdicts are kept apart on purpose. A packed scene
-/// only wants its metadata back, an unpacked one is a project someone can
-/// finish, and a media-only folder probably cannot be salvaged at all. One
-/// "invalid" label would hide which is which.
+/// The project-less verdicts are kept apart on purpose. A packed scene only
+/// wants its metadata back, an unpacked one is a project someone can finish, a
+/// media-only folder probably cannot be salvaged at all, and a leftover cache
+/// has nothing to salvage. One "invalid" label would hide which is which.
 enum IntegrityVerdict {
   sound,
   packedSceneNoProject,
@@ -19,6 +19,7 @@ enum IntegrityVerdict {
   payloadMissing,
   projectUnreadable,
   empty,
+  shaderCacheOnly,
 }
 
 /// Sorts one folder by what is inside it.
@@ -32,6 +33,9 @@ IntegrityVerdict classifyFolder({
 }) {
   if (entries.isEmpty) return IntegrityVerdict.empty;
   if (!project.present) {
+    if (holdsOnlyRebuiltShaders(entries)) {
+      return IntegrityVerdict.shaderCacheOnly;
+    }
     if (_has(entries, 'scene.pkg')) {
       return IntegrityVerdict.packedSceneNoProject;
     }
@@ -73,6 +77,13 @@ bool _payloadPresent(
   final String stem = dot <= 0 ? file : file.substring(0, dot);
   return entries.any((FolderEntry e) => e.isDirectory && _same(e.name, stem));
 }
+
+/// What Steam leaves when it removes an unsubscribed wallpaper: the folder
+/// stands, because Wallpaper Engine wrote the cache in it rather than
+/// downloading it. The backup tab drops these too, so the rule lives here once.
+bool holdsOnlyRebuiltShaders(List<FolderEntry> entries) =>
+    entries.isNotEmpty &&
+    entries.every((FolderEntry e) => e.isDirectory && _same(e.name, 'shaders'));
 
 bool _has(List<FolderEntry> entries, String name) =>
     entries.any((FolderEntry e) => _same(e.name, name));

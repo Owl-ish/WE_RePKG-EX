@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/utils/folder_entries.dart';
+import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/wallpaper_integrity.dart';
 
 /// The four folders the check walks. Live and backup are reported apart, so a
@@ -134,7 +136,7 @@ Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
               root: f.root,
               name: f.name,
               verdict: f.verdict,
-              bytes: await _folderBytes(Directory(f.folder)),
+              bytes: await folderBytes(Directory(f.folder)),
               folder: f.folder,
             ),
     );
@@ -143,20 +145,10 @@ Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
 }
 
 Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
-  final List<FolderEntry> entries = <FolderEntry>[];
-  try {
-    await for (final FileSystemEntity entity in folder.list()) {
-      entries.add((
-        name: path.basename(entity.path),
-        isDirectory: entity is Directory,
-      ));
-    }
-  } on FileSystemException {
-    // A folder that moved mid-scan skips rather than aborting the root. It
-    // drops out of the checked count too, which is the honest answer: nobody
-    // read it.
-    return null;
-  }
+  // A folder that moved mid-scan drops out of the checked count too, which is
+  // the honest answer: nobody read it.
+  final List<FolderEntry>? entries = await listFolderEntries(folder);
+  if (entries == null) return null;
 
   final ProjectRead project = await _readProject(folder, entries);
   // Only looked up when `file` is absent, which is the only case the app falls
@@ -239,19 +231,4 @@ bool _typesUsable(Map<String, dynamic> project) {
       stringOrAbsent('preview') &&
       stringOrAbsent('file') &&
       (project['tags'] == null || project['tags'] is List);
-}
-
-Future<int> _folderBytes(Directory folder) async {
-  int total = 0;
-  try {
-    await for (final FileSystemEntity entity in folder.list(
-      recursive: true,
-      followLinks: false,
-    )) {
-      if (entity is File) total += await entity.length();
-    }
-  } on FileSystemException {
-    // A partial size still tells the user roughly what is at stake.
-  }
-  return total;
 }

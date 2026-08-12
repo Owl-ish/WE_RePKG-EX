@@ -59,7 +59,8 @@
       "mediaOnly": "Media only, nothing Wallpaper Engine reads",
       "payloadMissing": "Missing the file project.json names",
       "projectUnreadable": "project.json will not parse",
-      "empty": "Empty folder"
+      "empty": "Empty folder",
+      "shaderCacheOnly": "Leftover shader cache, the wallpaper itself is gone"
     }
   },
   "extract": {

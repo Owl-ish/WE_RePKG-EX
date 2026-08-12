@@ -20,16 +20,20 @@ const Map<IntegrityRoot, String> _rootLabels = <IntegrityRoot, String>{
   IntegrityRoot.backupMyProjects: AppI10n.integrityRootBackupMyProjects,
 };
 
-const Map<IntegrityVerdict, String> _verdictLabels = <IntegrityVerdict, String>{
-  IntegrityVerdict.sound: AppI10n.integrityVerdictSound,
-  IntegrityVerdict.packedSceneNoProject:
-      AppI10n.integrityVerdictPackedSceneNoProject,
-  IntegrityVerdict.unpackedSceneNoProject:
-      AppI10n.integrityVerdictUnpackedSceneNoProject,
-  IntegrityVerdict.mediaOnly: AppI10n.integrityVerdictMediaOnly,
-  IntegrityVerdict.payloadMissing: AppI10n.integrityVerdictPayloadMissing,
-  IntegrityVerdict.projectUnreadable: AppI10n.integrityVerdictProjectUnreadable,
-  IntegrityVerdict.empty: AppI10n.integrityVerdictEmpty,
+/// A switch rather than a map, so the next verdict added fails the analyzer
+/// instead of the app.
+String _verdictLabel(IntegrityVerdict verdict) => switch (verdict) {
+  IntegrityVerdict.sound => AppI10n.integrityVerdictSound,
+  IntegrityVerdict.packedSceneNoProject =>
+    AppI10n.integrityVerdictPackedSceneNoProject,
+  IntegrityVerdict.unpackedSceneNoProject =>
+    AppI10n.integrityVerdictUnpackedSceneNoProject,
+  IntegrityVerdict.mediaOnly => AppI10n.integrityVerdictMediaOnly,
+  IntegrityVerdict.payloadMissing => AppI10n.integrityVerdictPayloadMissing,
+  IntegrityVerdict.projectUnreadable =>
+    AppI10n.integrityVerdictProjectUnreadable,
+  IntegrityVerdict.empty => AppI10n.integrityVerdictEmpty,
+  IntegrityVerdict.shaderCacheOnly => AppI10n.integrityVerdictShaderCacheOnly,
 };
 
 /// Every folder in all four roots, judged on whether Wallpaper Engine could
@@ -164,7 +168,7 @@ class _Findings extends StatelessWidget {
                 padding: EdgeInsets.only(top: index == 0 ? 0 : 16, bottom: 4),
                 child: Text(
                   '${tr(_rootLabels[finding.root]!)}  •  '
-                  '${tr(_verdictLabels[finding.verdict]!)}',
+                  '${tr(_verdictLabel(finding.verdict))}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),

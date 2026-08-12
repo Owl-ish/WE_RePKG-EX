@@ -59,7 +59,8 @@
       "mediaOnly": "仅有媒体文件，壁纸引擎无法识别",
       "payloadMissing": "缺少 project.json 指定的文件",
       "projectUnreadable": "project.json 无法解析",
-      "empty": "空文件夹"
+      "empty": "空文件夹",
+      "shaderCacheOnly": "仅剩着色器缓存，壁纸本身已被删除"
     }
   },
   "extract": {

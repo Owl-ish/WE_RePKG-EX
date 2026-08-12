@@ -8,7 +8,9 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
+import 'package:we_repkg/utils/folder_entries.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
+import 'package:we_repkg/utils/wallpaper_integrity.dart';
 
 String? backupWorkshopPath(String? backupRoot) => backupRoot == null
     ? null
@@ -103,11 +105,23 @@ Future<BackupScan> scanBackup({
         name,
   };
 
+  // Names live holds and the backup does not, which are the ones that could be
+  // a folder Steam emptied. A folder its own backup covers is a wallpaper
+  // whatever is left of it live.
+  final Set<String> newWorkshop = _liveOnly(liveWorkshop, backupWorkshop);
+  final Set<String> newMyProjects = _liveOnly(liveMyProjects, backupMyProjects);
+
   // One counter across both libraries, since they walk at the same time and the
   // user is watching one line. Every shared folder is opened, whether or not it
   // is compared: the ones with a baseline are still checked for being empty.
-  // Counting only the compared ones is what made this read "3314 of 1193".
-  final int total = sharedWorkshop.length + sharedMyProjects.length;
+  // Counting only the compared ones is what made this read "3314 of 1193", and
+  // leaving the husk listings out would stall it on a first run, where they are
+  // the only per-folder work there is.
+  final int total =
+      sharedWorkshop.length +
+      sharedMyProjects.length +
+      newWorkshop.length +
+      newMyProjects.length;
   int done = 0;
   void walked(int folders) {
     done += folders;
@@ -124,6 +138,8 @@ Future<BackupScan> scanBackup({
   final (
     Map<String, CopyStanding> workshopStanding,
     Map<String, CopyStanding> myProjectsStanding,
+    Set<String> huskWorkshop,
+    Set<String> huskMyProjects,
   ) = await (
     copyStandings(
       livePath: liveWorkshopPath,
@@ -147,11 +163,13 @@ Future<BackupScan> scanBackup({
       shared: sharedMyProjects,
       compare: sharedMyProjects,
     ),
+    _shaderHusks(liveWorkshopPath, newWorkshop, onBatch: walked),
+    _shaderHusks(liveMyProjectsPath, newMyProjects, onBatch: walked),
   ).wait;
 
   final BackupDiffResult diff = backupDiff(
-    liveWorkshop: liveWorkshop,
-    liveMyProjects: liveMyProjects,
+    liveWorkshop: liveWorkshop.difference(huskWorkshop),
+    liveMyProjects: liveMyProjects.difference(huskMyProjects),
     backupWorkshop: backupWorkshop,
     backupMyProjects: backupMyProjects,
     liveWorkshopVersions: acf.byId,
@@ -369,14 +387,26 @@ Future<Map<String, CardFace>> readReconcileFaces({
 /// compare: the paths are joined rather than listed, and Windows resolves the
 /// case itself.
 Set<String> _shared(Set<String> live, Set<String> backup) {
-  final Set<String> backupKeys = <String>{
-    for (final String name in backup) name.toLowerCase(),
-  };
+  final Set<String> backupKeys = _lowered(backup);
   return <String>{
     for (final String name in live)
       if (backupKeys.contains(name.toLowerCase())) name.toLowerCase(),
   };
 }
+
+/// Live names the backup does not hold, in their own case so a path can be
+/// joined from them, unlike [_shared] which lowercases.
+Set<String> _liveOnly(Set<String> live, Set<String> backup) {
+  final Set<String> backupKeys = _lowered(backup);
+  return <String>{
+    for (final String name in live)
+      if (!backupKeys.contains(name.toLowerCase())) name,
+  };
+}
+
+Set<String> _lowered(Set<String> names) => <String>{
+  for (final String name in names) name.toLowerCase(),
+};
 
 Future<Set<BackupFolder>> _missingFolders(
   String? liveWorkshopPath,
@@ -397,6 +427,25 @@ Future<Set<BackupFolder>> _missingFolders(
 
 Future<bool> _folderPresent(String? folderPath) async =>
     folderPath != null && await Directory(folderPath).exists();
+
+/// Which of [names] are folders Steam emptied, so the tab can leave them out.
+///
+/// Narrow on purpose: only a folder holding nothing but the rebuilt shader cache
+/// counts. Anything else with content in it, however unloadable, keeps its card,
+/// or a wallpaper the user could still back up would quietly stop existing.
+Future<Set<String>> _shaderHusks(
+  String? root,
+  Set<String> names, {
+  void Function(int folders)? onBatch,
+}) async {
+  if (root == null || names.isEmpty) return const <String>{};
+  return (await _perFolder<bool>(root, names, onBatch: onBatch, (
+    Directory folder,
+  ) async {
+    final List<FolderEntry>? entries = await listFolderEntries(folder);
+    return entries != null && holdsOnlyRebuiltShaders(entries) ? true : null;
+  })).keys.toSet();
+}
 
 /// Folder names in a wallpaper library, for the backup diff.
 ///
