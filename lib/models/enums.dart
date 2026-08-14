@@ -30,13 +30,11 @@ extension SortTypeExtension on SortType {
 /// What the backup grid orders by. Size and update time are missing on purpose:
 /// neither is collected by the comparison, and working them out would mean
 /// walking every file in both libraries on every scan.
-enum BackupSortType { state, name, date }
+enum BackupSortType { name, date }
 
 extension BackupSortTypeExtension on BackupSortType {
   String get label {
     switch (this) {
-      case BackupSortType.state:
-        return tr(AppI10n.backupSortState);
       case BackupSortType.name:
         return tr(AppI10n.backupSortName);
       case BackupSortType.date:

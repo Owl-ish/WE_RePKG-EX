@@ -186,7 +186,13 @@ scanWallpapers(String? folderPath) async {
     acfInfoMap[acfInfo.id] = acfInfo;
   }
   // Directories only, in original order.
-  final folders = dirList.whereType<Directory>().toList();
+  final folders = dirList
+      .whereType<Directory>()
+      .where(
+        (Directory folder) =>
+            !WallpaperFiles.isLibraryRepairStage(path.basename(folder.path)),
+      )
+      .toList();
   // Batched, or a large library opens too many file handles at once.
   const int batchSize = 24;
   for (int i = 0; i < folders.length; i += batchSize) {

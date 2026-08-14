@@ -4,6 +4,7 @@ abstract final class WallpaperFiles {
   static const String project = 'project.json';
   static const String packedScene = 'scene.pkg';
   static const String unpackedScene = 'scene.json';
+  static const String webEntry = 'index.html';
   static const String previewStem = 'preview';
 
   /// Travels with a published rescue until its source reaches the Recycle Bin,
@@ -11,6 +12,9 @@ abstract final class WallpaperFiles {
   static const String rescueMarker = '.werepkg-ex-rescue-source';
   static const String rescueStagePrefix = '.werepkg-ex-rescue-';
   static const String projectStagePrefix = '.werepkg-ex-project-';
+
+  static bool isLibraryRepairStage(String name) =>
+      name.startsWith(rescueStagePrefix);
 }
 
 /// Directory names in Wallpaper Engine's on-disk wallpaper format.

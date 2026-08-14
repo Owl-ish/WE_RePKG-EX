@@ -31,3 +31,50 @@ class IntegrityShown extends _$IntegrityShown {
 
   void show(IntegrityVerdict verdict) => state = verdict;
 }
+
+enum IntegrityResolution {
+  restoredFile,
+  replacedProject,
+  extractedProject,
+  createdProject,
+  recycled,
+}
+
+typedef ResolvedIntegrityIssue = ({
+  IntegrityFinding finding,
+  IntegrityResolution resolution,
+});
+
+typedef IntegrityResolvedState = ({
+  List<ResolvedIntegrityIssue> issues,
+  bool shown,
+});
+
+/// Repairs completed during this app run. Nothing is persisted to disk.
+@Riverpod(keepAlive: true)
+class IntegrityResolved extends _$IntegrityResolved {
+  @override
+  IntegrityResolvedState build() =>
+      (issues: const <ResolvedIntegrityIssue>[], shown: false);
+
+  void addAll(Iterable<ResolvedIntegrityIssue> issues) {
+    final List<ResolvedIntegrityIssue> next = <ResolvedIntegrityIssue>[
+      ...state.issues,
+    ];
+    for (final ResolvedIntegrityIssue issue in issues) {
+      final IntegrityFinding finding = issue.finding;
+      if (next.any(
+        (ResolvedIntegrityIssue existing) =>
+            existing.finding.root == finding.root &&
+            existing.finding.folder == finding.folder &&
+            existing.finding.verdict == finding.verdict,
+      )) {
+        continue;
+      }
+      next.add(issue);
+    }
+    state = (issues: next, shown: state.shown);
+  }
+
+  void show(bool value) => state = (issues: state.issues, shown: value);
+}

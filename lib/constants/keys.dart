@@ -41,9 +41,9 @@ class AppKeys {
   /// `wallpaper_engine\projects\myprojects` beneath it.
   static const String backupRoot = 'backupRoot';
 
-  /// The backup grid's order, as a `BackupSortType` index, and whether it runs
-  /// the other way. Its own keys: that grid sorts on things the extract grid
-  /// has no idea about.
+  /// The backup grid's order (legacy values: 1 name, 2 date) and whether it
+  /// runs the other way. Its own keys: that grid sorts on things the extract
+  /// grid has no idea about.
   static const String backupSortType = 'backupSortType';
   static const String backupSortAscending = 'backupSortAscending';
 

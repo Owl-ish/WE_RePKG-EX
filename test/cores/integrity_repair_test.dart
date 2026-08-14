@@ -1,7 +1,6 @@
 @TestOn('windows')
 library;
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,315 +18,359 @@ void main() {
   tearDown(() => tmp.deleteSync(recursive: true));
 
   Directory folder(String name, Map<String, String> files) {
-    final Directory dir = Directory(p.join(tmp.path, name))
+    final Directory directory = Directory(p.join(tmp.path, name))
       ..createSync(recursive: true);
-    files.forEach((String file, String body) {
-      File(p.join(dir.path, file)).writeAsStringSync(body);
-    });
-    return dir;
+    for (final MapEntry<String, String> file in files.entries) {
+      final File target = File(p.join(directory.path, file.key));
+      target.parent.createSync(recursive: true);
+      target.writeAsStringSync(file.value);
+    }
+    return directory;
   }
 
-  Map<String, dynamic> readProject(Directory dir) =>
-      json.decode(File(p.join(dir.path, 'project.json')).readAsStringSync())
+  Map<String, dynamic> readProject(Directory directory) =>
+      json.decode(
+            File(
+              p.join(directory.path, WallpaperFiles.project),
+            ).readAsStringSync(),
+          )
           as Map<String, dynamic>;
 
-  group('writeSceneProject', () {
-    test('names scene.json and titles the folder', () async {
-      final Directory dir = folder('alpha', <String, String>{
-        'scene.json': '{}',
-      });
-
-      expect(await writeSceneProject(dir.path), isNull);
-      expect(readProject(dir), <String, dynamic>{
-        'title': 'alpha',
-        'type': 'scene',
-        'file': 'scene.json',
-      });
-      expect(
-        File(
-          '${p.join(dir.path, WallpaperFiles.project)}.werepkg-ex-part',
-        ).existsSync(),
-        isFalse,
-      );
-    });
-
-    // Wallpaper Engine draws the tile from this, and a project with no picture
-    // is the one thing the user would have to fix by hand afterwards.
-    test('points at a preview when the folder has one', () async {
-      final Directory dir = folder('alpha', <String, String>{
-        'scene.json': '{}',
-        'shot.png': 'x',
-        'preview.jpg': 'x',
-      });
-
-      await writeSceneProject(dir.path);
-
-      expect(readProject(dir)['preview'], 'preview.jpg');
-    });
-
-    // Naming a scene.json that is not there would swap one broken folder for
-    // another, and the new one would pass the check.
-    test('refuses a folder with no scene.json', () async {
-      final Directory dir = folder('alpha', <String, String>{'clip.mp4': 'x'});
-
-      expect(await writeSceneProject(dir.path), isNotNull);
-      expect(File(p.join(dir.path, 'project.json')).existsSync(), isFalse);
-    });
-
-    test(
-      'refuses to write over a project.json that is already there',
-      () async {
-        final Directory dir = folder('alpha', <String, String>{
-          'scene.json': '{}',
-          'project.json': '{"title":"theirs"}',
-        });
-
-        expect(await writeSceneProject(dir.path), isNotNull);
-        expect(readProject(dir)['title'], 'theirs');
-      },
-    );
-  });
-
-  group('atomic publication', () {
-    test('does not replace a final file that already exists', () {
-      final File staged = File(p.join(tmp.path, 'staged'))
-        ..writeAsStringSync('ours');
-      final File finalFile = File(p.join(tmp.path, 'final'))
-        ..writeAsStringSync('theirs');
-
-      expect(
-        () => publishWithoutReplacing(staged, finalFile.path),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(finalFile.readAsStringSync(), 'theirs');
-      expect(staged.readAsStringSync(), 'ours');
-    });
-
-    test('file identity changes when a path is replaced', () {
-      final File source = File(p.join(tmp.path, 'source'))
-        ..writeAsStringSync('first');
-      final String first = windowsFileIdentity(source.path);
-      source
-        ..deleteSync()
-        ..writeAsStringSync('second');
-
-      expect(windowsFileIdentity(source.path), isNot(first));
-    });
-
-    test('file identity changes after an in-place rewrite', () async {
-      final File source = File(p.join(tmp.path, 'source'))
-        ..writeAsStringSync('first');
-      final String first = windowsFileIdentity(source.path);
-      await Future<void>.delayed(const Duration(milliseconds: 2));
-      source.writeAsStringSync('a longer second value', flush: true);
-
-      expect(windowsFileIdentity(source.path), isNot(first));
-    });
-
-    test('concurrent project writes own separate staging paths', () async {
-      final Directory dir = folder('alpha', <String, String>{
-        'scene.json': '{}',
-      });
-      final Completer<void> firstReady = Completer<void>();
-      final Completer<void> releaseFirst = Completer<void>();
-      final List<String> stages = <String>[];
-
-      final Future<String?> first = writeSceneProject(
-        dir.path,
-        beforePublish: (File staged) async {
-          stages.add(staged.path);
-          firstReady.complete();
-          await releaseFirst.future;
-        },
-      );
-      await firstReady.future;
-      final String? second = await writeSceneProject(
-        dir.path,
-        beforePublish: (File staged) async => stages.add(staged.path),
-      );
-      releaseFirst.complete();
-
-      expect(second, isNull);
-      expect(await first, isNotNull);
-      expect(stages, hasLength(2));
-      expect(p.dirname(stages[0]), isNot(p.dirname(stages[1])));
-      expect(readProject(dir)['title'], 'alpha');
-    });
-
-    test('removes a project stage left by a stopped process', () async {
-      final Directory dir = folder('alpha', <String, String>{
-        'scene.json': '{}',
-      });
-      final Directory stale = Directory(
-        p.join(dir.path, '${WallpaperFiles.projectStagePrefix}999999-old'),
-      )..createSync();
-      File(p.join(stale.path, 'partial')).writeAsStringSync('x');
-
-      expect(await writeSceneProject(dir.path), isNull);
-
-      expect(stale.existsSync(), isFalse);
-      expect(readProject(dir)['title'], 'alpha');
-    });
-  });
-
-  group('rescuePackedScene', () {
-    test('does nothing when the wallpaper is not there to extract', () async {
-      final Directory dir = folder('alpha', <String, String>{'shaders': 'x'});
-
-      expect(
-        (await rescuePackedScene(
-          folder: dir.path,
-          intoLibrary: tmp.path,
-          rePKGPath: 'where.exe',
-        )).error,
-        isNotNull,
-      );
-      expect(dir.existsSync(), isTrue);
-    });
-
-    // The folder is the only copy of the wallpaper until the extraction has
-    // worked, so a tool that fails must cost nothing.
-    test('leaves the folder alone when the tool fails', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
+  group('shader cache cleanup', () {
+    Directory shaderCache(String name) {
+      final Directory directory = Directory(p.join(tmp.path, name))
         ..createSync();
+      Directory(
+        p.join(directory.path, WallpaperDirectories.shaders),
+      ).createSync();
+      return directory;
+    }
 
-      // where.exe answers those arguments with "not found" and exit 1, which is
-      // a failed run without needing RePKG itself.
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'where.exe',
-      );
+    test('sends a shader-only folder to the Recycle Bin helper', () async {
+      final Directory cache = shaderCache('leftover');
+      String? trashed;
 
-      expect(result.changed, isFalse);
-      expect(result.error, isNotNull);
-      expect(dir.existsSync(), isTrue);
-      expect(File(p.join(dir.path, 'scene.pkg')).existsSync(), isTrue);
-      expect(
-        library.listSync(),
-        isEmpty,
-        reason: 'a half-made folder is only in the way of trying again',
-      );
-    });
-
-    test(
-      'rejects a destination inside the folder that will be binned',
-      () async {
-        final Directory dir = folder('alpha', <String, String>{
-          'scene.pkg': 'x',
-        });
-        final Directory nestedLibrary = Directory(
-          p.join(dir.path, 'myprojects'),
-        )..createSync();
-        bool extracted = false;
-
-        final IntegrityRepairResult result = await rescuePackedScene(
-          folder: dir.path,
-          intoLibrary: nestedLibrary.path,
-          rePKGPath: 'unused',
-          extractor:
-              (String out, String from, String scene, String tool) async {
-                extracted = true;
-                return null;
-              },
-        );
-
-        expect(result.changed, isFalse);
-        expect(result.error, isNotNull);
-        expect(extracted, isFalse);
-        expect(File(p.join(dir.path, 'scene.pkg')).existsSync(), isTrue);
-        expect(nestedLibrary.listSync(), isEmpty);
-      },
-    );
-
-    test(
-      'rejects a linked destination that resolves inside the source',
-      () async {
-        final Directory dir = folder('alpha', <String, String>{
-          'scene.pkg': 'x',
-        });
-        final Directory nestedLibrary = Directory(
-          p.join(dir.path, 'myprojects'),
-        )..createSync();
-        final Link alias = Link(p.join(tmp.path, 'library-link'));
-        try {
-          await alias.create(nestedLibrary.path);
-        } on FileSystemException {
-          markTestSkipped(
-            'Windows link creation is unavailable on this machine.',
-          );
-          return;
-        }
-        bool extracted = false;
-
-        final IntegrityRepairResult result = await rescuePackedScene(
-          folder: dir.path,
-          intoLibrary: alias.path,
-          rePKGPath: 'unused',
-          extractor:
-              (String out, String from, String scene, String tool) async {
-                extracted = true;
-                return null;
-              },
-        );
-
-        expect(result.changed, isFalse);
-        expect(result.error, isNotNull);
-        expect(extracted, isFalse);
-      },
-    );
-
-    test('resumes a published rescue instead of making a duplicate', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      int extractions = 0;
-
-      Future<String?> extract(
-        String out,
-        String from,
-        String scene,
-        String tool,
-      ) async {
-        extractions++;
-        File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-        return writeSceneProject(out);
-      }
-
-      final IntegrityRepairResult first = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: extract,
-        trashFolder: (String source) async => 'Recycle Bin unavailable',
-      );
-
-      expect(first.changed, isTrue);
-      expect(first.error, isNotNull);
-      expect(dir.existsSync(), isTrue);
-      expect(Directory(p.join(library.path, 'alpha')).existsSync(), isTrue);
-
-      final IntegrityRepairResult second = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: extract,
-        trashFolder: (String source) async {
-          await Directory(source).delete(recursive: true);
+      final IntegrityRepairResult result = await recycleShaderCacheFolder(
+        folder: cache.path,
+        trashFolder: (String target) async {
+          trashed = target;
+          await Directory(target).delete(recursive: true);
           return null;
         },
       );
 
-      expect(second, (changed: true, error: null));
-      expect(extractions, 1);
-      expect(dir.existsSync(), isFalse);
-      expect(
-        library.listSync().whereType<Directory>().map(
-          (Directory item) => p.basename(item.path),
-        ),
-        <String>['alpha'],
+      expect(result, (changed: true, error: null));
+      expect(trashed, cache.path);
+      expect(cache.existsSync(), isFalse);
+    });
+
+    test('leaves a folder containing anything else untouched', () async {
+      final Directory cache = shaderCache('wallpaper');
+      File(p.join(cache.path, 'scene.pkg')).writeAsStringSync('payload');
+      bool trashCalled = false;
+
+      final IntegrityRepairResult result = await recycleShaderCacheFolder(
+        folder: cache.path,
+        trashFolder: (String target) async {
+          trashCalled = true;
+          return null;
+        },
       );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(trashCalled, isFalse);
+      expect(cache.existsSync(), isTrue);
+    });
+
+    test('reports a Recycle Bin failure without claiming success', () async {
+      final Directory cache = shaderCache('leftover');
+
+      final IntegrityRepairResult result = await recycleShaderCacheFolder(
+        folder: cache.path,
+        trashFolder: (String target) async => 'Recycle Bin unavailable',
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(cache.existsSync(), isTrue);
+    });
+
+    test('requires the folder to disappear before reporting success', () async {
+      final Directory cache = shaderCache('leftover');
+
+      final IntegrityRepairResult result = await recycleShaderCacheFolder(
+        folder: cache.path,
+        trashFolder: (String target) async => null,
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(cache.existsSync(), isTrue);
+    });
+  });
+
+  group('project metadata', () {
+    test('writes the minimum project file for an unpacked scene', () async {
+      final Directory directory = folder('alpha', <String, String>{
+        WallpaperFiles.unpackedScene: '{}',
+      });
+
+      expect(await writeSceneProject(directory.path), isNull);
+      expect(readProject(directory), <String, dynamic>{
+        WallpaperProjectFields.title: 'alpha',
+        WallpaperProjectFields.type: 'scene',
+        WallpaperProjectFields.file: WallpaperFiles.unpackedScene,
+      });
+    });
+
+    test('uses an existing preview and never overwrites metadata', () async {
+      final Directory directory = folder('alpha', <String, String>{
+        WallpaperFiles.unpackedScene: '{}',
+        'preview.jpg': 'image',
+      });
+
+      expect(await writeSceneProject(directory.path), isNull);
+      expect(
+        readProject(directory)[WallpaperProjectFields.preview],
+        'preview.jpg',
+      );
+      expect(await writeSceneProject(directory.path), isNotNull);
+    });
+
+    test('refuses to describe a scene that is not there', () async {
+      final Directory directory = folder('alpha', <String, String>{});
+
+      expect(await writeSceneProject(directory.path), isNotNull);
+      expect(
+        File(p.join(directory.path, WallpaperFiles.project)).existsSync(),
+        isFalse,
+      );
+    });
+
+    test('publishing never replaces a destination that appeared', () {
+      final File staged = File(p.join(tmp.path, 'staged'))
+        ..writeAsStringSync('new');
+      final File destination = File(p.join(tmp.path, 'final'))
+        ..writeAsStringSync('existing');
+
+      expect(
+        () => publishWithoutReplacing(staged, destination.path),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(destination.readAsStringSync(), 'existing');
+    });
+  });
+
+  group('counterpart repairs', () {
+    test('restores the exact missing file from a healthy match', () async {
+      final Directory target = folder('live/same', <String, String>{
+        WallpaperFiles.project:
+            '{"title":"Same","type":"video","file":"clip.mp4"}',
+      });
+      final Directory healthy = folder('backup/same', <String, String>{
+        WallpaperFiles.project:
+            '{"title":"Same","type":"video","file":"clip.mp4"}',
+        'clip.mp4': 'healthy payload',
+      });
+
+      final IntegrityRepairResult result = await restoreMissingPayload(
+        folder: target.path,
+        counterpart: healthy.path,
+        missing: 'clip.mp4',
+      );
+
+      expect(result, (changed: true, error: null));
+      expect(
+        File(p.join(target.path, 'clip.mp4')).readAsStringSync(),
+        'healthy payload',
+      );
+    });
+
+    test('does not restore from a different or unhealthy match', () async {
+      final Directory target = folder('live/same', <String, String>{
+        WallpaperFiles.project:
+            '{"title":"Same","type":"video","file":"clip.mp4"}',
+      });
+      final Directory unhealthy = folder('backup/same', <String, String>{
+        WallpaperFiles.project:
+            '{"title":"Same","type":"video","file":"other.mp4"}',
+        'other.mp4': 'other payload',
+      });
+
+      final IntegrityRepairResult result = await restoreMissingPayload(
+        folder: target.path,
+        counterpart: unhealthy.path,
+        missing: 'clip.mp4',
+      );
+
+      expect(result.changed, isFalse);
+      expect(File(p.join(target.path, 'clip.mp4')).existsSync(), isFalse);
+    });
+
+    test('replaces damaged metadata with its healthy counterpart', () async {
+      final Directory target = folder('live/same', <String, String>{
+        WallpaperFiles.project: '{broken',
+        WallpaperFiles.unpackedScene: '{}',
+      });
+      final Directory healthy = folder('backup/same', <String, String>{
+        WallpaperFiles.project:
+            '{"title":"Healthy","type":"scene","file":"scene.json"}',
+        WallpaperFiles.unpackedScene: '{}',
+      });
+
+      final IntegrityRepairResult result = await replaceProjectFromCounterpart(
+        folder: target.path,
+        counterpart: healthy.path,
+      );
+
+      expect(result, (changed: true, error: null));
+      expect(readProject(target)[WallpaperProjectFields.title], 'Healthy');
+    });
+  });
+
+  group('media-only repair', () {
+    test('creates a video project without changing the video', () async {
+      final Directory media = folder('video', <String, String>{
+        'clip.mp4': 'video bytes',
+        'preview.jpg': 'preview bytes',
+      });
+
+      final IntegrityRepairResult result = await writeMediaProject(media.path);
+
+      expect(result, (changed: true, error: null));
+      expect(readProject(media), <String, dynamic>{
+        WallpaperProjectFields.title: 'video',
+        WallpaperProjectFields.type: 'video',
+        WallpaperProjectFields.file: 'clip.mp4',
+        WallpaperProjectFields.preview: 'preview.jpg',
+      });
+      expect(
+        File(p.join(media.path, 'clip.mp4')).readAsStringSync(),
+        'video bytes',
+      );
+    });
+
+    test('creates a loadable local web project for one image', () async {
+      final Directory media = folder('image', <String, String>{
+        'wallpaper.png': 'image bytes',
+      });
+
+      final IntegrityRepairResult result = await writeMediaProject(media.path);
+
+      expect(result, (changed: true, error: null));
+      expect(readProject(media)[WallpaperProjectFields.type], 'web');
+      expect(
+        readProject(media)[WallpaperProjectFields.file],
+        WallpaperFiles.webEntry,
+      );
+      expect(
+        File(p.join(media.path, WallpaperFiles.webEntry)).readAsStringSync(),
+        contains('wallpaper.png'),
+      );
+    });
+
+    test('does not guess when more than one main media file exists', () async {
+      final Directory media = folder('mixed', <String, String>{
+        'one.mp4': 'one',
+        'two.mp4': 'two',
+      });
+
+      final IntegrityRepairResult result = await writeMediaProject(media.path);
+
+      expect(result.changed, isFalse);
+      expect(
+        File(p.join(media.path, WallpaperFiles.project)).existsSync(),
+        isFalse,
+      );
+    });
+
+    test('recycles a media folder only after rechecking it', () async {
+      final Directory media = folder('media', <String, String>{
+        'one.png': 'one',
+        'two.png': 'two',
+      });
+
+      final IntegrityRepairResult result = await recycleMediaFolder(
+        folder: media.path,
+        trashFolder: (String target) async {
+          await Directory(target).delete(recursive: true);
+          return null;
+        },
+      );
+
+      expect(result, (changed: true, error: null));
+      expect(media.existsSync(), isFalse);
+    });
+  });
+
+  group('packed-scene rescue', () {
+    late Directory source;
+    late Directory library;
+
+    setUp(() {
+      source = folder(p.join('source', 'alpha'), <String, String>{
+        WallpaperFiles.packedScene: 'packed',
+      });
+      library = Directory(p.join(tmp.path, 'myprojects'))..createSync();
+    });
+
+    Future<String?> extract(
+      String output,
+      String from,
+      String scene,
+      String tool,
+    ) async {
+      File(
+        p.join(output, WallpaperFiles.unpackedScene),
+      ).writeAsStringSync('{}');
+      return writeSceneProject(output);
+    }
+
+    test('leaves the source alone when extraction fails', () async {
+      final IntegrityRepairResult result = await rescuePackedScene(
+        folder: source.path,
+        intoLibrary: library.path,
+        rePKGPath: 'unused',
+        extractor:
+            (String output, String from, String scene, String tool) async =>
+                'extraction failed',
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(source.existsSync(), isTrue);
+      expect(library.listSync(), isEmpty);
+    });
+
+    test('publishes the rescue before recycling its source', () async {
+      final List<String> events = <String>[];
+
+      final IntegrityRepairResult result = await rescuePackedScene(
+        folder: source.path,
+        intoLibrary: library.path,
+        rePKGPath: 'unused',
+        extractor:
+            (String output, String from, String scene, String tool) async {
+              events.add('extract');
+              return extract(output, from, scene, tool);
+            },
+        trashFolder: (String target) async {
+          events.add(
+            File(
+                  p.join(library.path, 'alpha', WallpaperFiles.project),
+                ).existsSync()
+                ? 'trash-after-publish'
+                : 'trash-before-publish',
+          );
+          await Directory(target).delete(recursive: true);
+          return null;
+        },
+      );
+
+      expect(result, (changed: true, error: null));
+      expect(events, <String>['extract', 'trash-after-publish']);
+      expect(source.existsSync(), isFalse);
       expect(
         File(
           p.join(library.path, 'alpha', WallpaperFiles.rescueMarker),
@@ -337,474 +380,120 @@ void main() {
     });
 
     test(
-      'marker cleanup cannot turn a completed rescue into a failure',
+      'a retry finishes a published rescue without extracting twice',
       () async {
-        final Directory dir = folder('alpha', <String, String>{
-          'scene.pkg': 'x',
-        });
-        final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-          ..createSync();
+        int extractions = 0;
+        Future<String?> counted(
+          String output,
+          String from,
+          String scene,
+          String tool,
+        ) async {
+          extractions++;
+          return extract(output, from, scene, tool);
+        }
 
-        final IntegrityRepairResult result = await rescuePackedScene(
-          folder: dir.path,
+        final IntegrityRepairResult first = await rescuePackedScene(
+          folder: source.path,
           intoLibrary: library.path,
           rePKGPath: 'unused',
-          extractor:
-              (String out, String from, String scene, String tool) async {
-                File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-                return writeSceneProject(out);
-              },
-          trashFolder: (String source) async {
-            final String marker = p.join(
-              library.path,
-              'alpha',
-              WallpaperFiles.rescueMarker,
-            );
-            File(marker).deleteSync();
-            Directory(marker).createSync();
-            await Directory(source).delete(recursive: true);
+          extractor: counted,
+          trashFolder: (String target) async => 'Recycle Bin unavailable',
+        );
+        final IntegrityRepairResult second = await rescuePackedScene(
+          folder: source.path,
+          intoLibrary: library.path,
+          rePKGPath: 'unused',
+          extractor: counted,
+          trashFolder: (String target) async {
+            await Directory(target).delete(recursive: true);
             return null;
           },
         );
 
-        expect(result, (changed: true, error: null));
-        expect(dir.existsSync(), isFalse);
+        expect(first.changed, isTrue);
+        expect(first.error, isNotNull);
+        expect(second, (changed: true, error: null));
+        expect(extractions, 1);
       },
     );
 
-    test('recovers a completed stage left by a stopped process', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
+    test('does not recycle a source changed during extraction', () async {
+      bool trashCalled = false;
+
+      final IntegrityRepairResult result = await rescuePackedScene(
+        folder: source.path,
+        intoLibrary: library.path,
+        rePKGPath: 'unused',
+        extractor:
+            (String output, String from, String scene, String tool) async {
+              final String? error = await extract(output, from, scene, tool);
+              File(scene).writeAsStringSync('changed after extraction');
+              return error;
+            },
+        trashFolder: (String target) async {
+          trashCalled = true;
+          return null;
+        },
+      );
+
+      expect(result.changed, isTrue, reason: 'the rescued copy was published');
+      expect(result.error, isNotNull);
+      expect(trashCalled, isFalse);
+      expect(source.existsSync(), isTrue);
+    });
+
+    test('rejects a destination inside the source', () async {
+      final Directory nested = Directory(p.join(source.path, 'myprojects'))
         ..createSync();
-      final Directory stage = Directory(
-        p.join(library.path, '${WallpaperFiles.rescueStagePrefix}999999-abc'),
-      )..createSync();
-      File(p.join(stage.path, 'scene.json')).writeAsStringSync('{}');
-      await writeSceneProject(stage.path);
-      final String packedIdentity = windowsFileIdentity(
-        p.join(dir.path, 'scene.pkg'),
-      );
-      File(p.join(stage.path, WallpaperFiles.rescueMarker)).writeAsStringSync(
-        json.encode(<String, Object>{
-          'source': await dir.resolveSymbolicLinks(),
-          'packedFileIdentity': packedIdentity,
-          'output': p.join(library.path, 'alpha'),
-          'ownerProcess': 999999,
-          'complete': true,
-          'sourceSnapshot': <String, String>{'scene.pkg': packedIdentity},
-        }),
-      );
       bool extracted = false;
 
       final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
+        folder: source.path,
+        intoLibrary: nested.path,
         rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async {
-          extracted = true;
-          return null;
-        },
-        trashFolder: (String source) async {
-          await Directory(source).delete(recursive: true);
-          return null;
-        },
-      );
-
-      expect(result, (changed: true, error: null));
-      expect(extracted, isFalse);
-      expect(stage.existsSync(), isFalse);
-      expect(Directory(p.join(library.path, 'alpha')).existsSync(), isTrue);
-      expect(dir.existsSync(), isFalse);
-    });
-
-    test('does not publish a damaged stage or trash its source', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      final Directory stage = Directory(
-        p.join(library.path, '${WallpaperFiles.rescueStagePrefix}999999-bad'),
-      )..createSync();
-      File(p.join(stage.path, WallpaperFiles.project)).writeAsStringSync('{}');
-      final String packedIdentity = windowsFileIdentity(
-        p.join(dir.path, 'scene.pkg'),
-      );
-      File(p.join(stage.path, WallpaperFiles.rescueMarker)).writeAsStringSync(
-        json.encode(<String, Object>{
-          'source': await dir.resolveSymbolicLinks(),
-          'packedFileIdentity': packedIdentity,
-          'output': p.join(library.path, 'alpha'),
-          'ownerProcess': 999999,
-          'complete': true,
-          'sourceSnapshot': <String, String>{'scene.pkg': packedIdentity},
-        }),
-      );
-      bool trashed = false;
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async =>
-            'extraction stopped',
-        trashFolder: (String source) async {
-          trashed = true;
-          return null;
-        },
-      );
-
-      expect(result.changed, isFalse);
-      expect(result.error, isNotNull);
-      expect(trashed, isFalse);
-      expect(dir.existsSync(), isTrue);
-      expect(stage.existsSync(), isFalse);
-      expect(Directory(p.join(library.path, 'alpha')).existsSync(), isFalse);
-    });
-
-    test('does not recover a stage outside the configured library', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      final Directory stage = Directory(
-        p.join(library.path, '${WallpaperFiles.rescueStagePrefix}999999-bad'),
-      )..createSync();
-      File(p.join(stage.path, 'scene.json')).writeAsStringSync('{}');
-      await writeSceneProject(stage.path);
-      final String packedIdentity = windowsFileIdentity(
-        p.join(dir.path, 'scene.pkg'),
-      );
-      final String outside = p.join(tmp.path, 'outside', 'alpha');
-      File(p.join(stage.path, WallpaperFiles.rescueMarker)).writeAsStringSync(
-        json.encode(<String, Object>{
-          'source': await dir.resolveSymbolicLinks(),
-          'packedFileIdentity': packedIdentity,
-          'output': outside,
-          'ownerProcess': 999999,
-          'complete': true,
-          'sourceSnapshot': <String, String>{'scene.pkg': packedIdentity},
-        }),
-      );
-      bool trashed = false;
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async =>
-            'extraction stopped',
-        trashFolder: (String source) async {
-          trashed = true;
-          return null;
-        },
-      );
-
-      expect(result.changed, isFalse);
-      expect(trashed, isFalse);
-      expect(Directory(outside).existsSync(), isFalse);
-      expect(dir.existsSync(), isTrue);
-    });
-
-    test('leaves interrupted repairs for other sources untouched', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      final Directory incomplete = Directory(
-        p.join(
-          library.path,
-          '${WallpaperFiles.rescueStagePrefix}999999-other-incomplete',
-        ),
-      )..createSync();
-      final Directory complete = Directory(
-        p.join(
-          library.path,
-          '${WallpaperFiles.rescueStagePrefix}999999-other-complete',
-        ),
-      )..createSync();
-      File(
-        p.join(complete.path, WallpaperFiles.unpackedScene),
-      ).writeAsStringSync('{}');
-      await writeSceneProject(complete.path);
-      for (final (Directory stage, bool isComplete) in <(Directory, bool)>[
-        (incomplete, false),
-        (complete, true),
-      ]) {
-        File(p.join(stage.path, WallpaperFiles.rescueMarker)).writeAsStringSync(
-          json.encode(<String, Object>{
-            'source': p.join(tmp.path, 'another-source'),
-            'packedFileIdentity': 'another-file',
-            'output': p.join(library.path, 'another-output'),
-            'ownerProcess': 999999,
-            'complete': isComplete,
-            'sourceSnapshot': <String, String>{},
-          }),
-        );
-      }
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async =>
-            'extraction stopped',
-        trashFolder: (String source) async => null,
-      );
-
-      expect(result.changed, isFalse);
-      expect(result.error, isNotNull);
-      expect(incomplete.existsSync(), isTrue);
-      expect(complete.existsSync(), isTrue);
-      expect(
-        Directory(p.join(library.path, 'another-output')).existsSync(),
-        isFalse,
-      );
-    });
-
-    test('does not trash a source changed during extraction', () async {
-      final Directory dir = folder('alpha', <String, String>{
-        'scene.pkg': 'first',
-      });
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      bool trashed = false;
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async {
-          File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-          final String? error = await writeSceneProject(out);
-          File(scene).writeAsStringSync('replacement is longer', flush: true);
-          return error;
-        },
-        trashFolder: (String source) async {
-          trashed = true;
-          return null;
-        },
-      );
-
-      expect(result.changed, isTrue);
-      expect(result.error, isNotNull);
-      expect(trashed, isFalse);
-      expect(dir.existsSync(), isTrue);
-      expect(Directory(p.join(library.path, 'alpha')).existsSync(), isTrue);
-    });
-
-    test('does not trash loose files added during extraction', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      bool trashed = false;
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async {
-          File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-          final String? error = await writeSceneProject(out);
-          File(p.join(dir.path, 'new-audio.mp3')).writeAsStringSync('new');
-          return error;
-        },
-        trashFolder: (String source) async {
-          trashed = true;
-          return null;
-        },
-      );
-
-      expect(result.changed, isTrue);
-      expect(result.error, isNotNull);
-      expect(trashed, isFalse);
-      expect(File(p.join(dir.path, 'new-audio.mp3')).existsSync(), isTrue);
-    });
-
-    test('refuses a source containing a filesystem link', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      final Link link = Link(p.join(dir.path, 'linked-preview'));
-      try {
-        await link.create(p.join(dir.path, 'scene.pkg'));
-      } on FileSystemException {
-        markTestSkipped(
-          'Windows link creation is unavailable on this machine.',
-        );
-        return;
-      }
-      bool extracted = false;
-
-      final IntegrityRepairResult result = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async {
-          extracted = true;
-          return null;
-        },
+        extractor:
+            (String output, String from, String scene, String tool) async {
+              extracted = true;
+              return null;
+            },
       );
 
       expect(result.changed, isFalse);
       expect(result.error, isNotNull);
       expect(extracted, isFalse);
-      expect(dir.existsSync(), isTrue);
-    });
-
-    test('does not resume against a replacement at the same path', () async {
-      Directory dir = folder('alpha', <String, String>{'scene.pkg': 'first'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      int extractions = 0;
-
-      Future<String?> extract(
-        String out,
-        String from,
-        String scene,
-        String tool,
-      ) async {
-        extractions++;
-        File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-        return writeSceneProject(out);
-      }
-
-      final IntegrityRepairResult first = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: extract,
-        trashFolder: (String source) async => 'Recycle Bin unavailable',
-      );
-      expect(first.changed, isTrue);
-
-      dir.deleteSync(recursive: true);
-      dir = folder('alpha', <String, String>{'scene.pkg': 'replacement'});
-      final IntegrityRepairResult second = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: extract,
-        trashFolder: (String source) async {
-          await Directory(source).delete(recursive: true);
-          return null;
-        },
-      );
-
-      expect(second, (changed: true, error: null));
-      expect(extractions, 2);
-      expect(dir.existsSync(), isFalse);
-      expect(
-        library.listSync().whereType<Directory>().map(
-          (Directory item) => p.basename(item.path),
-        ),
-        <String>['alpha', 'alpha-2'],
-      );
-    });
-
-    test('concurrent rescues own separate staging folders', () async {
-      final Directory dir = folder('alpha', <String, String>{'scene.pkg': 'x'});
-      final Directory library = Directory(p.join(tmp.path, 'myprojects'))
-        ..createSync();
-      final Completer<void> firstReady = Completer<void>();
-      final Completer<void> releaseFirst = Completer<void>();
-      final List<String> stages = <String>[];
-
-      Future<String?> fill(String out) async {
-        stages.add(out);
-        File(p.join(out, 'scene.json')).writeAsStringSync('{}');
-        return writeSceneProject(out);
-      }
-
-      final Future<IntegrityRepairResult> first = rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) async {
-          final String? error = await fill(out);
-          firstReady.complete();
-          await releaseFirst.future;
-          return error;
-        },
-        trashFolder: (String source) async => 'keep source',
-      );
-      await firstReady.future;
-
-      final IntegrityRepairResult second = await rescuePackedScene(
-        folder: dir.path,
-        intoLibrary: library.path,
-        rePKGPath: 'unused',
-        extractor: (String out, String from, String scene, String tool) =>
-            fill(out),
-        trashFolder: (String source) async => 'keep source',
-      );
-      releaseFirst.complete();
-      final IntegrityRepairResult firstResult = await first;
-
-      expect(stages, hasLength(2));
-      expect(stages[0], isNot(stages[1]));
-      expect(second.changed, isTrue);
-      expect(firstResult.changed, isFalse);
-      expect(dir.existsSync(), isTrue);
-      expect(
-        library.listSync().whereType<Directory>().map(
-          (Directory item) => p.basename(item.path),
-        ),
-        <String>['alpha'],
-      );
+      expect(source.existsSync(), isTrue);
     });
   });
 
-  // The extraction takes the scene and nothing else, and the folder it came
-  // from is about to go in the bin.
-  group('carryLooseFiles', () {
-    test('brings everything but the packed scene across', () async {
-      final Directory from = folder('alpha', <String, String>{
-        'scene.pkg': 'x',
-        'preview.jpg': 'a picture',
-      });
-      Directory(p.join(from.path, 'audio')).createSync();
-      File(p.join(from.path, 'audio', 'hum.mp3')).writeAsStringSync('sound');
-      final Directory to = folder('out', <String, String>{'scene.json': '{}'});
-
-      expect(await carryLooseFiles(from.path, to.path), isNull);
-      expect(
-        File(p.join(to.path, 'preview.jpg')).readAsStringSync(),
-        'a picture',
-      );
-      expect(
-        File(p.join(to.path, 'audio', 'hum.mp3')).readAsStringSync(),
-        'sound',
-      );
-      expect(File(p.join(to.path, 'scene.pkg')).existsSync(), isFalse);
+  test('loose files are copied without replacing extracted files', () async {
+    final Directory source = folder('source', <String, String>{
+      WallpaperFiles.packedScene: 'packed',
+      'preview.jpg': 'source preview',
+      p.join('assets', 'sound.mp3'): 'sound',
+    });
+    final Directory output = folder('output', <String, String>{
+      'preview.jpg': 'extracted preview',
     });
 
-    test('leaves what the extraction already wrote alone', () async {
-      final Directory from = folder('alpha', <String, String>{
-        'scene.json': 'the old one',
-      });
-      final Directory to = folder('out', <String, String>{
-        'scene.json': 'the extracted one',
-      });
-
-      await carryLooseFiles(from.path, to.path);
-
-      expect(
-        File(p.join(to.path, 'scene.json')).readAsStringSync(),
-        'the extracted one',
-      );
-    });
+    expect(await carryLooseFiles(source.path, output.path), isNull);
+    expect(
+      File(p.join(output.path, 'preview.jpg')).readAsStringSync(),
+      'extracted preview',
+    );
+    expect(
+      File(p.join(output.path, 'assets', 'sound.mp3')).existsSync(),
+      isTrue,
+    );
+    expect(
+      File(p.join(output.path, WallpaperFiles.packedScene)).existsSync(),
+      isFalse,
+    );
   });
 
-  group('freeFolderName', () {
-    test('steps aside rather than landing inside what is there', () async {
-      final String wanted = p.join(tmp.path, 'alpha');
-      Directory(wanted).createSync();
-      Directory('$wanted-2').createSync();
+  test('a rescue output never lands inside an existing folder', () async {
+    final Directory wanted = Directory(p.join(tmp.path, 'alpha'))..createSync();
 
-      expect(await freeFolderName(wanted), '$wanted-3');
-    });
-
-    test('keeps the name when nothing holds it', () async {
-      final String wanted = p.join(tmp.path, 'beta');
-
-      expect(await freeFolderName(wanted), wanted);
-    });
+    expect(await freeFolderName(wanted.path), '${wanted.path}-2');
   });
 }

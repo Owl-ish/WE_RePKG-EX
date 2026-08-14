@@ -141,3 +141,16 @@ bool holds(List<FolderEntry> entries, String name) =>
 
 /// Windows sees one file whatever the case, so the comparison has to too.
 bool sameName(String a, String b) => a.toLowerCase() == b.toLowerCase();
+
+/// Whether the fields read by the wallpaper grid have their expected shapes.
+bool projectFieldsUsable(Map<String, dynamic> project) {
+  bool stringOrAbsent(String key) =>
+      project[key] == null || project[key] is String;
+  return stringOrAbsent(WallpaperProjectFields.title) &&
+      stringOrAbsent(WallpaperProjectFields.contentRating) &&
+      stringOrAbsent(WallpaperProjectFields.type) &&
+      stringOrAbsent(WallpaperProjectFields.preview) &&
+      stringOrAbsent(WallpaperProjectFields.file) &&
+      (project[WallpaperProjectFields.tags] == null ||
+          project[WallpaperProjectFields.tags] is List);
+}

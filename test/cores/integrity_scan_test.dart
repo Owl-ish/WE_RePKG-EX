@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/cores/integrity_scan.dart';
 
@@ -21,7 +22,9 @@ void main() {
           p.join(dir.path, file.substring(0, file.length - 1)),
         ).createSync(recursive: true);
       } else {
-        File(p.join(dir.path, file)).writeAsStringSync(content);
+        final File target = File(p.join(dir.path, file));
+        target.parent.createSync(recursive: true);
+        target.writeAsStringSync(content);
       }
     });
   }
@@ -62,6 +65,26 @@ void main() {
       expect(report.scanned[IntegrityRoot.liveWorkshop], 1);
     },
   );
+
+  test('an interrupted repair stage is not reported as a wallpaper', () async {
+    wallpaper('live_workshop', '111', <String, String>{
+      'project.json': sceneProject,
+      'scene.pkg': 'x',
+    });
+    wallpaper(
+      'live_workshop',
+      '${WallpaperFiles.rescueStagePrefix}123-abc',
+      <String, String>{r'claimed\wallpaper.pkg': 'keep'},
+    );
+
+    final IntegrityReport report = await scan();
+
+    expect(report.scanned[IntegrityRoot.liveWorkshop], 1);
+    expect(
+      report.findings.map((IntegrityFinding finding) => finding.name),
+      isNot(contains('${WallpaperFiles.rescueStagePrefix}123-abc')),
+    );
+  });
 
   test('each broken shape is named rather than lumped together', () async {
     wallpaper('live_myprojects', 'bare_pkg', <String, String>{
@@ -228,6 +251,26 @@ void main() {
     final IntegrityReport report = await scan();
 
     expect(report.findings.single.bytes, 500);
+  });
+
+  test('sizes every finding across multiple batches', () async {
+    wallpaper('live_myprojects', 'ok', <String, String>{
+      'project.json': sceneProject,
+      'scene.pkg': 'x',
+    });
+    for (int i = 0; i < 30; i++) {
+      wallpaper('live_myprojects', 'broken_$i', <String, String>{
+        'payload.mp4': 'x' * (i + 1),
+      });
+    }
+
+    final IntegrityReport report = await scan();
+
+    expect(report.findings, hasLength(30));
+    expect(
+      report.findings.map((IntegrityFinding finding) => finding.bytes).toSet(),
+      <int>{for (int i = 1; i <= 30; i++) i},
+    );
   });
 
   // A root where not one folder is loadable is a path pointed somewhere else,

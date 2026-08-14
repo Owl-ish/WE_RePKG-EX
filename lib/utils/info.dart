@@ -143,10 +143,13 @@ Future<int> folderBytes(Directory folder) async {
 }
 
 bool isImage(String filePath) {
-  List<String> imgs = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  const List<String> imgs = <String>['jpg', 'jpeg', 'png', 'gif', 'webp'];
   String ext = filePath.split('.').last.toLowerCase();
   return imgs.contains(ext);
 }
+
+bool isVideo(String filePath) =>
+    path.extension(filePath).toLowerCase() == '.mp4';
 
 Future<bool> toolExist(String? toolPath) async {
   if (toolPath == null) return false;

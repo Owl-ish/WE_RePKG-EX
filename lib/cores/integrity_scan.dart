@@ -109,7 +109,10 @@ Future<List<IntegrityFinding>?> _scanRoot(
 
   final List<Directory> folders = <Directory>[];
   await for (final FileSystemEntity entity in dir.list()) {
-    if (entity is Directory) folders.add(entity);
+    if (entity is Directory &&
+        !WallpaperFiles.isLibraryRepairStage(path.basename(entity.path))) {
+      folders.add(entity);
+    }
   }
 
   final List<IntegrityFinding> found = <IntegrityFinding>[];
@@ -137,18 +140,21 @@ Future<List<IntegrityFinding>?> _scanRoot(
 /// library never pays for a recursive walk.
 Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
   final List<IntegrityFinding> sized = <IntegrityFinding>[];
-  for (final IntegrityFinding f in found) {
-    sized.add(
-      f.verdict == IntegrityVerdict.sound
-          ? f
-          : (
-              root: f.root,
-              name: f.name,
-              verdict: f.verdict,
-              bytes: await folderBytes(Directory(f.folder)),
-              folder: f.folder,
-              missing: f.missing,
-            ),
+  for (int i = 0; i < found.length; i += _batchSize) {
+    sized.addAll(
+      await Future.wait(
+        found.skip(i).take(_batchSize).map((IntegrityFinding f) async {
+          if (f.verdict == IntegrityVerdict.sound) return f;
+          return (
+            root: f.root,
+            name: f.name,
+            verdict: f.verdict,
+            bytes: await folderBytes(Directory(f.folder)),
+            folder: f.folder,
+            missing: f.missing,
+          );
+        }),
+      ),
     );
   }
   return sized;
@@ -199,6 +205,15 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
   );
 }
 
+/// Reuses the scan's loadability rules before a repair trusts a counterpart.
+Future<bool> isHealthyWallpaperFolder(String folder) async =>
+    (await _inspect(IntegrityRoot.liveWorkshop, Directory(folder)))?.verdict ==
+    IntegrityVerdict.sound;
+
+Future<bool> isMediaOnlyWallpaperFolder(String folder) async =>
+    (await _inspect(IntegrityRoot.liveWorkshop, Directory(folder)))?.verdict ==
+    IntegrityVerdict.mediaOnly;
+
 /// Whether `file` names something on disk after all.
 ///
 /// `project.json` may point into a subfolder, which the app resolves by joining
@@ -223,7 +238,7 @@ Future<ProjectRead> _readProject(
     final Object? decoded = json.decode(
       await File(path.join(folder.path, WallpaperFiles.project)).readAsString(),
     );
-    if (decoded is! Map<String, dynamic> || !_typesUsable(decoded)) {
+    if (decoded is! Map<String, dynamic> || !projectFieldsUsable(decoded)) {
       return (present: true, readable: false, file: null);
     }
     final Object? file = decoded[WallpaperProjectFields.file];
@@ -231,22 +246,4 @@ Future<ProjectRead> _readProject(
   } catch (_) {
     return (present: true, readable: false, file: null);
   }
-}
-
-/// Whether the grid could read this `project.json` too.
-///
-/// `_parseWallpaperFolder` assigns these fields straight into typed locals
-/// under a bare `catch`, so a number where a string belongs drops the wallpaper
-/// out of the library without a word. Calling such a folder sound would send
-/// someone here to be told nothing is wrong with the wallpaper they cannot see.
-bool _typesUsable(Map<String, dynamic> project) {
-  bool stringOrAbsent(String key) =>
-      project[key] == null || project[key] is String;
-  return stringOrAbsent(WallpaperProjectFields.title) &&
-      stringOrAbsent(WallpaperProjectFields.contentRating) &&
-      stringOrAbsent(WallpaperProjectFields.type) &&
-      stringOrAbsent(WallpaperProjectFields.preview) &&
-      stringOrAbsent(WallpaperProjectFields.file) &&
-      (project[WallpaperProjectFields.tags] == null ||
-          project[WallpaperProjectFields.tags] is List);
 }

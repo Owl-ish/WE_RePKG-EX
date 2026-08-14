@@ -11,8 +11,8 @@ class PillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 6,
+    spacing: LayoutNums.smallGap,
+    runSpacing: LayoutNums.compactGap,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: children,
   );
@@ -54,7 +54,12 @@ class _CountPillState extends State<CountPill>
   /// Slow enough to read as breathing rather than blinking, and faint enough to
   /// sit behind text without moving the eye off the grid.
   static const Duration _period = Duration(milliseconds: 2600);
-  static const double _peak = .22;
+  static const double _idleFill = .07;
+  static const double _selectedFill = .14;
+  static const double _disabledFill = .05;
+  static const double _pulse = .08;
+  static const double _selectedBorder = .55;
+  static const double _idleBorder = .2;
 
   late final AnimationController _glow = AnimationController(
     vsync: this,
@@ -93,13 +98,19 @@ class _CountPillState extends State<CountPill>
   @override
   Widget build(BuildContext context) {
     final bool live = widget.count > 0;
-    final Color tint = live ? widget.colour : Theme.of(context).disabledColor;
+    final ThemeData theme = Theme.of(context);
+    final Color tint = live ? widget.colour : theme.disabledColor;
+    final double baseFill = !live
+        ? _disabledFill
+        : widget.on
+        ? _selectedFill
+        : _idleFill;
     return AnimatedBuilder(
       animation: _glow,
       builder: (BuildContext context, Widget? child) => Material(
         // Cosine, so it swells and fades rather than snapping at either end.
-        color: widget.colour.withValues(
-          alpha: _peak * (1 - cos(_glow.value * 2 * pi)) / 2,
+        color: tint.withValues(
+          alpha: baseFill + _pulse * (1 - cos(_glow.value * 2 * pi)) / 2,
         ),
         borderRadius: LayoutNums.pill,
         child: child,
@@ -113,7 +124,9 @@ class _CountPillState extends State<CountPill>
           decoration: BoxDecoration(
             borderRadius: LayoutNums.pill,
             border: Border.all(
-              color: widget.on && live ? tint : Colors.transparent,
+              color: tint.withValues(
+                alpha: widget.on && live ? _selectedBorder : _idleBorder,
+              ),
             ),
           ),
           child: Row(

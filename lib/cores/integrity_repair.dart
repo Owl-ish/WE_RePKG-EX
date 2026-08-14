@@ -7,6 +7,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/cores/extract.dart';
+import 'package:we_repkg/cores/integrity_scan.dart';
 import 'package:we_repkg/src/rust/api/simple.dart';
 import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/info.dart';
@@ -18,10 +19,6 @@ import 'package:we_repkg/utils/windows_file_transaction.dart';
 /// Indented, because this file lands in the user's library and they open it.
 const JsonEncoder _json = JsonEncoder.withIndent('  ');
 const String _markerSource = 'source';
-const String _markerFileIdentity = 'packedFileIdentity';
-const String _markerOutput = 'output';
-const String _markerOwner = 'ownerProcess';
-const String _markerComplete = 'complete';
 const String _markerSourceSnapshot = 'sourceSnapshot';
 
 typedef IntegrityRepairResult = ({bool changed, String? error});
@@ -33,17 +30,82 @@ typedef RescueExtractor =
       String rePKGPath,
     );
 typedef TrashFolder = Future<String?> Function(String folder);
-typedef BeforeProjectPublish = Future<void> Function(File staged);
+
+/// Moves a folder to the Recycle Bin after one final contents check.
+Future<IntegrityRepairResult> recycleShaderCacheFolder({
+  required String folder,
+  TrashFolder? trashFolder,
+}) => _recycleCheckedFolder(
+  folder: folder,
+  isSafe: _isShaderCacheOnlyFolder,
+  changedMessage: AppI10n.integrityFixCacheChanged,
+  trashFolder: trashFolder,
+);
+
+/// Moves a media-only folder to the Recycle Bin after rechecking its contents.
+Future<IntegrityRepairResult> recycleMediaFolder({
+  required String folder,
+  TrashFolder? trashFolder,
+}) => _recycleCheckedFolder(
+  folder: folder,
+  isSafe: (String target) async =>
+      await isMediaOnlyWallpaperFolder(target) && !await _containsLink(target),
+  changedMessage: AppI10n.integrityFixMediaChanged,
+  trashFolder: trashFolder,
+);
+
+Future<IntegrityRepairResult> _recycleCheckedFolder({
+  required String folder,
+  required Future<bool> Function(String folder) isSafe,
+  required String changedMessage,
+  TrashFolder? trashFolder,
+}) async {
+  final TrashFolder trash =
+      trashFolder ?? (String source) => deleteToTrash(filePath: source);
+  final String target = path.normalize(folder);
+  try {
+    if (!await isSafe(target)) {
+      return (changed: false, error: tr(changedMessage));
+    }
+    final String? error = await trash(target);
+    if (await FileSystemEntity.type(target, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      return (changed: true, error: error);
+    }
+    if (error != null) return (changed: false, error: error);
+    return (changed: false, error: tr(AppI10n.integrityFixTrashUnconfirmed));
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+Future<bool> _isShaderCacheOnlyFolder(String folder) async {
+  try {
+    if (await FileSystemEntity.type(folder, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      return false;
+    }
+    final List<FolderEntry> entries = <FolderEntry>[];
+    await for (final FileSystemEntity entity in Directory(
+      folder,
+    ).list(followLinks: false)) {
+      // A link can point outside the folder the confirmation named.
+      if (entity is Link) return false;
+      entries.add((
+        name: path.basename(entity.path),
+        isDirectory: entity is Directory,
+      ));
+    }
+    return holdsOnlyRebuiltShaders(entries);
+  } on FileSystemException {
+    return false;
+  }
+}
 
 /// What Wallpaper Engine needs before it will list an unpacked scene: a title,
 /// the type, and the file to load. The preview is optional and only added when
 /// the folder already has an image to point at.
-Future<String?> writeSceneProject(
-  String folder, {
-  BeforeProjectPublish? beforePublish,
-}) async {
-  final File file = File(path.join(folder, WallpaperFiles.project));
-  Directory? stage;
+Future<String?> writeSceneProject(String folder) async {
   final List<FolderEntry>? entries = await listFolderEntries(Directory(folder));
   if (entries == null) return tr(AppI10n.integrityFixUnreadable);
   if (holds(entries, WallpaperFiles.project)) {
@@ -55,30 +117,307 @@ Future<String?> writeSceneProject(
     return tr(AppI10n.integrityFixNoScene);
   }
   try {
-    await _sweepProjectStages(Directory(folder));
-    stage = await Directory(
-      folder,
-    ).createTemp('${WallpaperFiles.projectStagePrefix}$pid-');
-    final File staged = File(path.join(stage.path, WallpaperFiles.project));
-    await staged.writeAsString(
-      _json.convert(<String, String>{
-        WallpaperProjectFields.title: path.basename(folder),
-        WallpaperProjectFields.type: WallpaperType.scene,
-        WallpaperProjectFields.file: WallpaperFiles.unpackedScene,
-        if (_preview(entries) case final String preview)
-          WallpaperProjectFields.preview: preview,
-      }),
-      flush: true,
-    );
-    if (beforePublish != null) await beforePublish(staged);
-    publishWithoutReplacing(staged, file.path);
-  } catch (e) {
-    return '$e';
-  } finally {
-    if (stage != null) await _deleteDirectoryQuietly(stage);
+    await _writeProject(folder, <String, String>{
+      WallpaperProjectFields.title: path.basename(folder),
+      WallpaperProjectFields.type: WallpaperType.scene,
+      WallpaperProjectFields.file: WallpaperFiles.unpackedScene,
+      if (_preview(entries) case final String preview)
+        WallpaperProjectFields.preview: preview,
+    });
+    return null;
+  } catch (error) {
+    return '$error';
   }
-  return null;
 }
+
+/// Restores one missing payload from the same wallpaper in its paired library.
+Future<IntegrityRepairResult> restoreMissingPayload({
+  required String folder,
+  required String? counterpart,
+  required String? missing,
+}) async {
+  try {
+    if (counterpart == null || missing == null || missing.isEmpty) {
+      return (changed: false, error: tr(AppI10n.integrityFixNoCounterpart));
+    }
+    if (!_safeRelativePath(folder, missing)) {
+      return (changed: false, error: tr(AppI10n.integrityFixUnsafeFile));
+    }
+    final Map<String, dynamic>? targetProject = await _readProject(folder);
+    if (!_projectNames(targetProject, missing)) {
+      return (changed: false, error: tr(AppI10n.integrityFixTargetChanged));
+    }
+    if (!await isHealthyWallpaperFolder(counterpart)) {
+      return (changed: false, error: tr(AppI10n.integrityFixNoCounterpart));
+    }
+    final Map<String, dynamic>? sourceProject = await _readProject(counterpart);
+    if (!_projectNames(sourceProject, missing)) {
+      return (changed: false, error: tr(AppI10n.integrityFixNoCounterpart));
+    }
+    final File source = File(path.join(counterpart, missing));
+    final File destination = File(path.join(folder, missing));
+    if (await FileSystemEntity.type(source.path, followLinks: false) !=
+            FileSystemEntityType.file ||
+        await FileSystemEntity.type(destination.path, followLinks: false) !=
+            FileSystemEntityType.notFound) {
+      return (changed: false, error: tr(AppI10n.integrityFixTargetChanged));
+    }
+    await _copyWithoutReplacing(source, destination, folder);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+/// Replaces unreadable metadata with the healthy matching wallpaper's copy.
+Future<IntegrityRepairResult> replaceProjectFromCounterpart({
+  required String folder,
+  required String? counterpart,
+}) async {
+  try {
+    if (counterpart == null || !await isHealthyWallpaperFolder(counterpart)) {
+      return (changed: false, error: tr(AppI10n.integrityFixNoCounterpart));
+    }
+    final Map<String, dynamic>? targetProject = await _readProject(folder);
+    if (targetProject != null && projectFieldsUsable(targetProject)) {
+      return (changed: false, error: tr(AppI10n.integrityFixTargetChanged));
+    }
+    final File source = File(path.join(counterpart, WallpaperFiles.project));
+    final File destination = File(path.join(folder, WallpaperFiles.project));
+    if (await FileSystemEntity.type(source.path, followLinks: false) !=
+            FileSystemEntityType.file ||
+        await FileSystemEntity.type(destination.path, followLinks: false) !=
+            FileSystemEntityType.file) {
+      return (changed: false, error: tr(AppI10n.integrityFixTargetChanged));
+    }
+    await _copyReplacing(source, destination, folder);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+/// Creates a loadable Wallpaper Engine project around one image or MP4.
+Future<IntegrityRepairResult> writeMediaProject(String folder) async {
+  final ({String file, String type, String? preview})? media =
+      await _mediaProject(folder);
+  if (media == null) {
+    return (changed: false, error: tr(AppI10n.integrityFixMediaAmbiguous));
+  }
+  final String? html = media.type == WallpaperType.web
+      ? _imageWallpaperHtml(media.file)
+      : null;
+  bool wroteHtml = false;
+  try {
+    if (html != null) {
+      final File entry = File(path.join(folder, WallpaperFiles.webEntry));
+      await _writeTextWithoutReplacing(entry, html, folder);
+      wroteHtml = true;
+    }
+    await _writeProject(folder, <String, String>{
+      WallpaperProjectFields.title: path.basename(folder),
+      WallpaperProjectFields.type: media.type,
+      WallpaperProjectFields.file: html == null
+          ? media.file
+          : WallpaperFiles.webEntry,
+      if (media.preview case final String preview)
+        WallpaperProjectFields.preview: preview,
+    });
+    return (changed: true, error: null);
+  } catch (error) {
+    if (wroteHtml && html != null) {
+      await _deleteMatchingFile(
+        File(path.join(folder, WallpaperFiles.webEntry)),
+        html,
+      );
+    }
+    return (changed: false, error: '$error');
+  }
+}
+
+Future<void> _writeProject(String folder, Map<String, String> project) =>
+    _writeTextWithoutReplacing(
+      File(path.join(folder, WallpaperFiles.project)),
+      _json.convert(project),
+      folder,
+    );
+
+Future<({String file, String type, String? preview})?> _mediaProject(
+  String folder,
+) async {
+  final List<FolderEntry>? entries = await _mediaEntries(folder);
+  if (entries == null || !_holdsOnlyMedia(entries)) {
+    return null;
+  }
+  final List<String> files = entries
+      .map((FolderEntry entry) => entry.name)
+      .toList();
+  List<String> primary = files
+      .where(
+        (String name) => !sameName(
+          path.basenameWithoutExtension(name),
+          WallpaperFiles.previewStem,
+        ),
+      )
+      .toList();
+  if (primary.isEmpty && files.length == 1) primary = files;
+  if (primary.length != 1) return null;
+  final String file = primary.single;
+  return (
+    file: file,
+    type: isVideo(file) ? WallpaperType.video : WallpaperType.web,
+    preview: _preview(entries),
+  );
+}
+
+Future<List<FolderEntry>?> _mediaEntries(String folder) async {
+  final List<FolderEntry> entries = <FolderEntry>[];
+  try {
+    await for (final FileSystemEntity entity in Directory(
+      folder,
+    ).list(followLinks: false)) {
+      if (entity is! File) return null;
+      entries.add((name: path.basename(entity.path), isDirectory: false));
+    }
+    return entries;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+Future<bool> _containsLink(String folder) async {
+  try {
+    await for (final FileSystemEntity entity in Directory(
+      folder,
+    ).list(recursive: true, followLinks: false)) {
+      if (entity is Link) return true;
+    }
+    return false;
+  } on FileSystemException {
+    return true;
+  }
+}
+
+bool _holdsOnlyMedia(List<FolderEntry> entries) =>
+    entries.isNotEmpty &&
+    entries.every(
+      (FolderEntry entry) =>
+          !entry.isDirectory && (isImage(entry.name) || isVideo(entry.name)),
+    );
+
+Future<Map<String, dynamic>?> _readProject(String folder) async {
+  try {
+    final Object? decoded = json.decode(
+      await File(path.join(folder, WallpaperFiles.project)).readAsString(),
+    );
+    return decoded is Map<String, dynamic> ? decoded : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+bool _projectNames(Map<String, dynamic>? project, String expected) =>
+    project != null &&
+    projectFieldsUsable(project) &&
+    project[WallpaperProjectFields.file] is String &&
+    path.equals(
+      path.normalize(project[WallpaperProjectFields.file] as String),
+      path.normalize(expected),
+    );
+
+bool _safeRelativePath(String folder, String relative) {
+  if (path.isAbsolute(relative)) return false;
+  final String root = path.normalize(path.absolute(folder));
+  final String target = path.normalize(
+    path.absolute(path.join(root, relative)),
+  );
+  return path.isWithin(root, target);
+}
+
+Future<void> _copyWithoutReplacing(
+  File source,
+  File destination,
+  String folder,
+) async {
+  await destination.parent.create(recursive: true);
+  await _publishNewFile(
+    destination,
+    folder,
+    (File staged) => _copyStable(source, staged),
+  );
+}
+
+Future<void> _copyReplacing(
+  File source,
+  File destination,
+  String folder,
+) async {
+  final Directory stage = await Directory(
+    folder,
+  ).createTemp(WallpaperFiles.projectStagePrefix);
+  try {
+    final File staged = File(
+      path.join(stage.path, path.basename(destination.path)),
+    );
+    await _copyStable(source, staged);
+    await staged.rename(destination.path);
+  } finally {
+    await _deleteDirectoryQuietly(stage);
+  }
+}
+
+Future<void> _copyStable(File source, File destination) async {
+  final FileStat before = await source.stat();
+  await source.copy(destination.path);
+  final FileStat after = await source.stat();
+  if (before.size != after.size || before.modified != after.modified) {
+    throw FileSystemException(
+      'The healthy copy changed while it was read',
+      source.path,
+    );
+  }
+}
+
+Future<void> _writeTextWithoutReplacing(
+  File destination,
+  String contents,
+  String folder,
+) => _publishNewFile(destination, folder, (File staged) async {
+  await staged.writeAsString(contents, flush: true);
+});
+
+Future<void> _publishNewFile(
+  File destination,
+  String folder,
+  Future<void> Function(File staged) prepare,
+) async {
+  final Directory stage = await Directory(
+    folder,
+  ).createTemp(WallpaperFiles.projectStagePrefix);
+  try {
+    final File staged = File(
+      path.join(stage.path, path.basename(destination.path)),
+    );
+    await prepare(staged);
+    publishWithoutReplacing(staged, destination.path);
+  } finally {
+    await _deleteDirectoryQuietly(stage);
+  }
+}
+
+Future<void> _deleteMatchingFile(File file, String expected) async {
+  try {
+    if (await file.exists() && await file.readAsString() == expected) {
+      await file.delete();
+    }
+  } catch (_) {}
+}
+
+String _imageWallpaperHtml(String image) =>
+    '<!doctype html><html><head><meta charset="utf-8">'
+    '<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;'
+    'background:#000}img{width:100%;height:100%;object-fit:cover}</style>'
+    '</head><body><img src="${Uri.encodeComponent(image)}"></body></html>';
 
 /// Extracts a packed wallpaper whose `project.json` is gone into [intoLibrary]
 /// as a project, gives it one, and puts the folder it came from in the Recycle
@@ -97,7 +436,6 @@ Future<IntegrityRepairResult> rescuePackedScene({
       trashFolder ?? (String source) => deleteToTrash(filePath: source);
   final String scene = path.join(folder, WallpaperFiles.packedScene);
   final String sourcePath;
-  final String sourceFileIdentity;
   final Map<String, String> sourceSnapshot;
   final String out;
   final String staged;
@@ -112,11 +450,10 @@ Future<IntegrityRepairResult> rescuePackedScene({
     }
     sourcePath = path.normalize(source);
     sourceSnapshot = await _sourceSnapshot(Directory(folder));
-    sourceFileIdentity = windowsFileIdentity(scene);
     final Directory? pending = await _pendingRescue(
       intoLibrary,
       sourcePath,
-      sourceFileIdentity,
+      sourceSnapshot,
     );
     if (pending != null) {
       return _finishRescue(pending, folder, trash);
@@ -124,15 +461,7 @@ Future<IntegrityRepairResult> rescuePackedScene({
     out = await freeFolderName(path.join(intoLibrary, path.basename(folder)));
     staged = (await Directory(
       intoLibrary,
-    ).createTemp('${WallpaperFiles.rescueStagePrefix}$pid-')).path;
-    await _writeRescueMarker(
-      Directory(staged),
-      source: sourcePath,
-      sourceFileIdentity: sourceFileIdentity,
-      output: out,
-      sourceSnapshot: sourceSnapshot,
-      complete: false,
-    );
+    ).createTemp(WallpaperFiles.rescueStagePrefix)).path;
   } catch (e) {
     return (changed: false, error: '$e');
   }
@@ -146,10 +475,7 @@ Future<IntegrityRepairResult> rescuePackedScene({
     await _writeRescueMarker(
       Directory(staged),
       source: sourcePath,
-      sourceFileIdentity: sourceFileIdentity,
-      output: out,
       sourceSnapshot: sourceSnapshot,
-      complete: true,
     );
     if (await FileSystemEntity.type(out) != FileSystemEntityType.notFound) {
       await _deleteDirectoryQuietly(Directory(staged));
@@ -167,104 +493,38 @@ Future<IntegrityRepairResult> rescuePackedScene({
 Future<Directory?> _pendingRescue(
   String library,
   String source,
-  String sourceFileIdentity,
+  Map<String, String> sourceSnapshot,
 ) async {
-  final List<FileSystemEntity> entities = await Directory(
+  await for (final FileSystemEntity entity in Directory(
     library,
-  ).list(followLinks: false).toList();
-  for (final FileSystemEntity entity in entities) {
+  ).list(followLinks: false)) {
     if (entity is! Directory) continue;
     if (path
         .basename(entity.path)
         .startsWith(WallpaperFiles.rescueStagePrefix)) {
       continue;
     }
-    if (await _matchingRescueMarker(entity, source, sourceFileIdentity)) {
+    if (await _matchingRescueMarker(entity, source, sourceSnapshot)) {
       return entity;
     }
   }
-  for (final FileSystemEntity entity in entities) {
-    if (entity is! Directory ||
-        !path
-            .basename(entity.path)
-            .startsWith(WallpaperFiles.rescueStagePrefix)) {
-      continue;
-    }
-    final File marker = File(
-      path.join(entity.path, WallpaperFiles.rescueMarker),
-    );
-    try {
-      final Map<String, dynamic>? transaction = await _readRescueMarker(marker);
-      final int? owner =
-          transaction?[_markerOwner] as int? ??
-          _stageOwner(entity.path, WallpaperFiles.rescueStagePrefix);
-      if (owner != null && windowsProcessIsRunning(owner)) continue;
-      if (transaction == null ||
-          transaction[_markerSource] is! String ||
-          transaction[_markerFileIdentity] is! String ||
-          transaction[_markerOutput] is! String) {
-        continue;
-      }
-      final bool isCurrent =
-          path.equals(transaction[_markerSource] as String, source) &&
-          transaction[_markerFileIdentity] == sourceFileIdentity;
-      if (!isCurrent) continue;
-      if (transaction[_markerComplete] != true) {
-        await _deleteDirectoryQuietly(entity);
-        continue;
-      }
-      if (!await _rescueFilesComplete(entity)) {
-        await _deleteDirectoryQuietly(entity);
-        continue;
-      }
-      final String wanted = path.normalize(
-        transaction[_markerOutput] as String,
-      );
-      if (!path.equals(path.dirname(wanted), path.normalize(library))) continue;
-      final String recovered = await freeFolderName(wanted);
-      publishWithoutReplacing(entity, recovered);
-      return Directory(recovered);
-    } catch (_) {}
-  }
   return null;
-}
-
-int? _stageOwner(String stage, String prefix) {
-  final String name = path.basename(stage);
-  if (!name.startsWith(prefix)) return null;
-  return int.tryParse(name.substring(prefix.length).split('-').first);
-}
-
-Future<void> _sweepProjectStages(Directory folder) async {
-  await for (final FileSystemEntity entity in folder.list(followLinks: false)) {
-    if (entity is! Directory ||
-        !path
-            .basename(entity.path)
-            .startsWith(WallpaperFiles.projectStagePrefix)) {
-      continue;
-    }
-    final int? owner = _stageOwner(
-      entity.path,
-      WallpaperFiles.projectStagePrefix,
-    );
-    if (owner != null && !windowsProcessIsRunning(owner)) {
-      await _deleteDirectoryQuietly(entity);
-    }
-  }
 }
 
 Future<bool> _matchingRescueMarker(
   Directory directory,
   String source,
-  String sourceFileIdentity,
+  Map<String, String> sourceSnapshot,
 ) async {
   final Map<String, dynamic>? transaction = await _readRescueMarker(
     File(path.join(directory.path, WallpaperFiles.rescueMarker)),
   );
-  return transaction?[_markerComplete] == true &&
-      transaction?[_markerSource] is String &&
+  return transaction?[_markerSource] is String &&
       path.equals(transaction![_markerSource] as String, source) &&
-      transaction[_markerFileIdentity] == sourceFileIdentity &&
+      _sameSnapshot(
+        _snapshotFromMarker(transaction) ?? const {},
+        sourceSnapshot,
+      ) &&
       await _rescueFilesComplete(directory);
 }
 
@@ -287,10 +547,7 @@ Future<Map<String, dynamic>?> _readRescueMarker(File marker) async {
 Future<void> _writeRescueMarker(
   Directory directory, {
   required String source,
-  required String sourceFileIdentity,
-  required String output,
   required Map<String, String> sourceSnapshot,
-  required bool complete,
 }) async {
   final File marker = File(
     path.join(directory.path, WallpaperFiles.rescueMarker),
@@ -299,10 +556,6 @@ Future<void> _writeRescueMarker(
   await staged.writeAsString(
     json.encode(<String, Object>{
       _markerSource: source,
-      _markerFileIdentity: sourceFileIdentity,
-      _markerOutput: output,
-      _markerOwner: pid,
-      _markerComplete: complete,
       _markerSourceSnapshot: sourceSnapshot,
     }),
     flush: true,
@@ -364,7 +617,9 @@ Future<Map<String, String>> _sourceSnapshot(Directory source) async {
       );
     }
     if (entity is File) {
-      snapshot[relative] = windowsFileIdentity(entity.path);
+      final FileStat stat = await entity.stat();
+      snapshot[relative] =
+          '${stat.size}:${stat.modified.millisecondsSinceEpoch}';
     } else if (entity is Directory) {
       snapshot['$relative${path.separator}'] = 'directory';
     }

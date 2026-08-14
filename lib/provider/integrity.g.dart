@@ -122,3 +122,62 @@ abstract class _$IntegrityShown extends $Notifier<IntegrityVerdict?> {
     element.handleCreate(ref, build);
   }
 }
+
+/// Repairs completed during this app run. Nothing is persisted to disk.
+
+@ProviderFor(IntegrityResolved)
+final integrityResolvedProvider = IntegrityResolvedProvider._();
+
+/// Repairs completed during this app run. Nothing is persisted to disk.
+final class IntegrityResolvedProvider
+    extends $NotifierProvider<IntegrityResolved, IntegrityResolvedState> {
+  /// Repairs completed during this app run. Nothing is persisted to disk.
+  IntegrityResolvedProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'integrityResolvedProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$integrityResolvedHash();
+
+  @$internal
+  @override
+  IntegrityResolved create() => IntegrityResolved();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(IntegrityResolvedState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<IntegrityResolvedState>(value),
+    );
+  }
+}
+
+String _$integrityResolvedHash() => r'be5b1843716b6c499ecc324a70128a8539ab5f7b';
+
+/// Repairs completed during this app run. Nothing is persisted to disk.
+
+abstract class _$IntegrityResolved extends $Notifier<IntegrityResolvedState> {
+  IntegrityResolvedState build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref =
+        this.ref as $Ref<IntegrityResolvedState, IntegrityResolvedState>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<IntegrityResolvedState, IntegrityResolvedState>,
+              IntegrityResolvedState,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

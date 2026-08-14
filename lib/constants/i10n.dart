@@ -76,6 +76,18 @@ class AppI10n {
   static const String integrityFailed = 'integrity.failed';
   static const String integrityOpenFolder = 'integrity.openFolder';
   static const String integrityMissingFile = 'integrity.missingFile';
+  static const String integrityResolved = 'integrity.resolved';
+  static const String integrityResolvedAdvice = 'integrity.resolvedAdvice';
+  static const String integrityResolutionRestoredFile =
+      'integrity.resolution.restoredFile';
+  static const String integrityResolutionReplacedProject =
+      'integrity.resolution.replacedProject';
+  static const String integrityResolutionExtractedProject =
+      'integrity.resolution.extractedProject';
+  static const String integrityResolutionCreatedProject =
+      'integrity.resolution.createdProject';
+  static const String integrityResolutionRecycled =
+      'integrity.resolution.recycled';
   static const String integrityFixResolve = 'integrity.fix.resolve';
   static const String integrityFixTitle = 'integrity.fix.title';
   static const String integrityFixTitleMany = 'integrity.fix.titleMany';
@@ -83,6 +95,36 @@ class AppI10n {
   static const String integrityFixRescueMany = 'integrity.fix.rescueMany';
   static const String integrityFixWriteOne = 'integrity.fix.writeOne';
   static const String integrityFixWriteMany = 'integrity.fix.writeMany';
+  static const String integrityFixRestoreOne = 'integrity.fix.restoreOne';
+  static const String integrityFixRestoreMany = 'integrity.fix.restoreMany';
+  static const String integrityFixReplaceOne = 'integrity.fix.replaceOne';
+  static const String integrityFixReplaceMany = 'integrity.fix.replaceMany';
+  static const String integrityFixMediaChoiceTitle =
+      'integrity.fix.mediaChoiceTitle';
+  static const String integrityFixMediaChoiceOne =
+      'integrity.fix.mediaChoiceOne';
+  static const String integrityFixMediaChoiceMany =
+      'integrity.fix.mediaChoiceMany';
+  static const String integrityFixMediaCreate = 'integrity.fix.mediaCreate';
+  static const String integrityFixMediaRecycle = 'integrity.fix.mediaRecycle';
+  static const String integrityFixMediaCreateOne =
+      'integrity.fix.mediaCreateOne';
+  static const String integrityFixMediaCreateMany =
+      'integrity.fix.mediaCreateMany';
+  static const String integrityFixMediaRecycleOne =
+      'integrity.fix.mediaRecycleOne';
+  static const String integrityFixMediaRecycleMany =
+      'integrity.fix.mediaRecycleMany';
+  static const String integrityFixCacheOne = 'integrity.fix.cacheOne';
+  static const String integrityFixCacheMany = 'integrity.fix.cacheMany';
+  static const String integrityFixFolderLabel = 'integrity.fix.folderLabel';
+  static const String integrityFixMissingFileLabel =
+      'integrity.fix.missingFileLabel';
+  static const String integrityFixFromLabel = 'integrity.fix.fromLabel';
+  static const String integrityFixToLabel = 'integrity.fix.toLabel';
+  static const String integrityFixCacheChanged = 'integrity.fix.cacheChanged';
+  static const String integrityFixTrashUnconfirmed =
+      'integrity.fix.trashUnconfirmed';
   static const String integrityFixAll = 'integrity.fix.all';
   static const String integrityFixDone = 'integrity.fix.done';
   static const String integrityFixFailed = 'integrity.fix.failed';
@@ -92,6 +134,12 @@ class AppI10n {
   static const String integrityFixNoPkg = 'integrity.fix.noPkg';
   static const String integrityFixAlreadyThere = 'integrity.fix.alreadyThere';
   static const String integrityFixUnreadable = 'integrity.fix.unreadable';
+  static const String integrityFixNoCounterpart = 'integrity.fix.noCounterpart';
+  static const String integrityFixTargetChanged = 'integrity.fix.targetChanged';
+  static const String integrityFixUnsafeFile = 'integrity.fix.unsafeFile';
+  static const String integrityFixMediaChanged = 'integrity.fix.mediaChanged';
+  static const String integrityFixMediaAmbiguous =
+      'integrity.fix.mediaAmbiguous';
   static const String integrityFixUnsafeDestination =
       'integrity.fix.unsafeDestination';
   static const String integrityFixSourceChanged = 'integrity.fix.sourceChanged';
@@ -129,7 +177,6 @@ class AppI10n {
   static const String backupReadingDetails = 'backup.readingDetails';
   static const String backupReadingDetailsCount = 'backup.readingDetailsCount';
   static const String extractNothingWritten = 'extract.nothingWritten';
-  static const String backupSortState = 'backup.sort.state';
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';
   static const String backupOpenLiveFolder = 'backup.openLiveFolder';
@@ -164,6 +211,7 @@ class AppI10n {
   static const String dialogCancelled = 'dialog.cancelled';
   static const String cancel = 'cancel';
   static const String confirm = 'confirm';
+  static const String ok = 'ok';
   static const String dialogDeleteConfirmTitle = 'dialog.deleteConfirmTitle';
   static const String dialogDeleteConfirmOne = 'dialog.deleteConfirmOne';
   static const String dialogDeleteConfirmMany = 'dialog.deleteConfirmMany';
@@ -262,8 +310,6 @@ class AppI10n {
   static const String errorParseAcfFailed = 'error.parseAcfFailed';
   static const String errorReadBackupRecordsFailed =
       'error.readBackupRecordsFailed';
-  static const String errorSeedBackupRecordsFailed =
-      'error.seedBackupRecordsFailed';
   static const String errorWallpaperId = 'error.wallpaperId';
   static const String errorSourcePath = 'error.sourcePath';
   static const String errorOutputPath = 'error.outputPath';

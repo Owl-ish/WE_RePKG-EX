@@ -1,12 +1,20 @@
+import 'dart:io';
+
+import 'package:bot_toast/bot_toast.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/cores/integrity_scan.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -54,6 +62,44 @@ void main() {
     container.read(currentStateProvider.notifier).update(RunState.complete);
     return container;
   }
+
+  test('counterparts stay within the matching library pair', () {
+    const IntegrityFinding liveWorkshop = (
+      root: IntegrityRoot.liveWorkshop,
+      name: '123',
+      verdict: IntegrityVerdict.payloadMissing,
+      bytes: 1,
+      folder: r'C:\live-workshop\123',
+      missing: 'clip.mp4',
+    );
+    const IntegrityFinding backupProjects = (
+      root: IntegrityRoot.backupMyProjects,
+      name: 'mine',
+      verdict: IntegrityVerdict.projectUnreadable,
+      bytes: 1,
+      folder: r'C:\backup\wallpaper_engine\projects\myprojects\mine',
+      missing: null,
+    );
+
+    expect(
+      integrityCounterpartFolder(
+        liveWorkshop,
+        workshop: r'C:\live-workshop',
+        myProjects: r'C:\myprojects',
+        backupRoot: r'C:\backup',
+      ),
+      r'C:\backup\431960\123',
+    );
+    expect(
+      integrityCounterpartFolder(
+        backupProjects,
+        workshop: r'C:\live-workshop',
+        myProjects: r'C:\myprojects',
+        backupRoot: r'C:\backup',
+      ),
+      r'C:\myprojects\mine',
+    );
+  });
 
   test('a myprojects rescue does not remove the same Workshop id', () async {
     final ProviderContainer container = await grid(WallpaperLibrary.workshop);
@@ -107,5 +153,146 @@ void main() {
 
     expect(container.read(wallpaperListProvider), hasLength(1));
     expect(container.read(currentStateProvider), RunState.complete);
+  });
+
+  test('a partial live cache cleanup marks its matching grid stale', () async {
+    final ProviderContainer container = await grid(WallpaperLibrary.workshop);
+
+    markExtractGridStaleAfterIntegrityRepair(
+      container,
+      IntegrityRepair.recycleShaderCache,
+      <IntegrityFinding>[finding(IntegrityRoot.liveWorkshop)],
+    );
+
+    expect(container.read(wallpaperListProvider), isEmpty);
+    expect(container.read(currentStateProvider), RunState.initial);
+  });
+
+  test('a backup cache cleanup leaves both live grids mounted', () async {
+    final ProviderContainer container = await grid(WallpaperLibrary.workshop);
+
+    markExtractGridStaleAfterIntegrityRepair(
+      container,
+      IntegrityRepair.recycleShaderCache,
+      <IntegrityFinding>[finding(IntegrityRoot.backupWorkshop)],
+    );
+
+    expect(container.read(wallpaperListProvider), hasLength(1));
+    expect(container.read(currentStateProvider), RunState.complete);
+  });
+
+  test('a cache cleanup leaves the other live grid mounted', () async {
+    final ProviderContainer container = await grid(WallpaperLibrary.myProjects);
+
+    markExtractGridStaleAfterIntegrityRepair(
+      container,
+      IntegrityRepair.recycleShaderCache,
+      <IntegrityFinding>[finding(IntegrityRoot.liveWorkshop)],
+    );
+
+    expect(container.read(wallpaperListProvider), hasLength(1));
+    expect(container.read(currentStateProvider), RunState.complete);
+  });
+
+  testWidgets('Cancel stops shader cleanup before its core action', (
+    tester,
+  ) async {
+    final Directory temporary = Directory.systemTemp.createTempSync(
+      'werepkg-integrity-cancel-',
+    );
+    addTearDown(() async {
+      if (await temporary.exists()) await temporary.delete(recursive: true);
+    });
+    final Directory cacheFolder = Directory(path.join(temporary.path, 'cache'))
+      ..createSync();
+    Directory(
+      path.join(cacheFolder.path, WallpaperDirectories.shaders),
+    ).createSync();
+
+    late BuildContext context;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          builder: BotToastInit(),
+          navigatorObservers: <NavigatorObserver>[BotToastNavigatorObserver()],
+          home: Builder(
+            builder: (BuildContext value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    final IntegrityFinding target = (
+      root: IntegrityRoot.liveWorkshop,
+      name: 'cache',
+      verdict: IntegrityVerdict.shaderCacheOnly,
+      bytes: 1,
+      folder: cacheFolder.path,
+      missing: null,
+    );
+
+    final Future<void> action = applyIntegrityRepair(
+      context,
+      IntegrityRepair.recycleShaderCache,
+      <IntegrityFinding>[target],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppI10n.cancel));
+    await tester.pumpAndSettle();
+    await action;
+
+    expect(cacheFolder.existsSync(), isTrue);
+  });
+
+  testWidgets('a successful repair is added to the session history', (
+    tester,
+  ) async {
+    late BuildContext context;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          builder: BotToastInit(),
+          navigatorObservers: <NavigatorObserver>[BotToastNavigatorObserver()],
+          home: Builder(
+            builder: (BuildContext value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    final IntegrityFinding target = (
+      root: IntegrityRoot.liveMyProjects,
+      name: 'project',
+      verdict: IntegrityVerdict.unpackedSceneNoProject,
+      bytes: 2,
+      folder: r'C:\myprojects\project',
+      missing: null,
+    );
+
+    final Future<void> action = applyIntegrityRepair(
+      context,
+      IntegrityRepair.writeProject,
+      <IntegrityFinding>[target],
+      runRepair: (_, _) async => (changed: true, error: null),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(AppI10n.ok));
+    await tester.pumpAndSettle();
+    await action;
+
+    final ProviderContainer container = ProviderScope.containerOf(
+      context,
+      listen: false,
+    );
+    expect(
+      container.read(integrityResolvedProvider).issues,
+      <ResolvedIntegrityIssue>[
+        (finding: target, resolution: IntegrityResolution.createdProject),
+      ],
+    );
   });
 }

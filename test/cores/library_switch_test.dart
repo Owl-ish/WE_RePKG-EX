@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
@@ -39,6 +40,7 @@ void main() {
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('we_repkg_library');
     wallpaper('431960', '793602574');
+    wallpaper('431960', '${WallpaperFiles.rescueStagePrefix}123-abc');
     wallpaper('myprojects', 'my own wallpaper');
     SharedPreferences.setMockInitialValues(<String, Object>{
       AppKeys.wallpaperPath: p.join(tmp.path, '431960'),

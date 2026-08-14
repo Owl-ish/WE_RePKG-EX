@@ -18,6 +18,13 @@ import 'package:we_repkg/widgets/scan_progress.dart';
 /// the confirmation's job, since it is a sentence rather than a word.
 const IconData _resolveIcon = Icons.build_outlined;
 
+typedef IntegrityRepairHandler =
+    Future<void> Function(
+      BuildContext context,
+      IntegrityRepair repair,
+      List<IntegrityFinding> targets,
+    );
+
 /// Beside their enums rather than in `models/enums.dart`, which would drag
 /// `dart:io` into every widget that imports it. `BackupFolder`'s labels sit in
 /// the backup view for the same reason.
@@ -36,7 +43,7 @@ typedef VerdictLook = ({
   Color colour,
   String label,
   String advice,
-  IntegrityRepair repair,
+  IntegrityRepair? repair,
 });
 
 VerdictLook _verdictLook(
@@ -49,22 +56,19 @@ VerdictLook _verdictLook(
     colour: colours.note,
     label: AppI10n.integrityVerdictSound,
     advice: AppI10n.integrityClean,
-    repair: IntegrityRepair.none,
+    repair: null,
   ),
   IntegrityVerdict.payloadMissing => (
     colour: colours.bad,
     label: AppI10n.integrityVerdictPayloadMissing,
     advice: AppI10n.integrityAdvicePayloadMissing,
-    // The missing file is the wallpaper itself. Nothing here can conjure it.
-    repair: IntegrityRepair.none,
+    repair: IntegrityRepair.restorePayload,
   ),
   IntegrityVerdict.projectUnreadable => (
     colour: colours.bad,
     label: AppI10n.integrityVerdictProjectUnreadable,
     advice: AppI10n.integrityAdviceProjectUnreadable,
-    // Overwriting a file the user hand-edited would throw away whatever they
-    // were trying to do to it.
-    repair: IntegrityRepair.none,
+    repair: IntegrityRepair.replaceProject,
   ),
   IntegrityVerdict.packedSceneNoProject => (
     colour: colours.warn,
@@ -82,26 +86,47 @@ VerdictLook _verdictLook(
     colour: colours.warn,
     label: AppI10n.integrityVerdictMediaOnly,
     advice: AppI10n.integrityAdviceMediaOnly,
-    repair: IntegrityRepair.none,
+    repair: IntegrityRepair.resolveMedia,
   ),
   IntegrityVerdict.shaderCacheOnly => (
     colour: colours.note,
     label: AppI10n.integrityVerdictShaderCacheOnly,
     advice: AppI10n.integrityAdviceShaderCacheOnly,
-    repair: IntegrityRepair.none,
+    repair: IntegrityRepair.recycleShaderCache,
   ),
+};
+
+VerdictLook _resolvedLook(StatusPalette colours) => (
+  colour: colours.good,
+  label: AppI10n.integrityResolved,
+  advice: AppI10n.integrityResolvedAdvice,
+  repair: null,
+);
+
+String _resolutionLabel(IntegrityResolution resolution) => switch (resolution) {
+  IntegrityResolution.restoredFile => AppI10n.integrityResolutionRestoredFile,
+  IntegrityResolution.replacedProject =>
+    AppI10n.integrityResolutionReplacedProject,
+  IntegrityResolution.extractedProject =>
+    AppI10n.integrityResolutionExtractedProject,
+  IntegrityResolution.createdProject =>
+    AppI10n.integrityResolutionCreatedProject,
+  IntegrityResolution.recycled => AppI10n.integrityResolutionRecycled,
 };
 
 /// Every folder in all four roots, judged on whether Wallpaper Engine could
 /// load it, with a repair only where the result is unambiguous.
 class IntegrityView extends ConsumerWidget {
-  const IntegrityView({super.key});
+  const IntegrityView({super.key, this.onRepair});
+
+  final IntegrityRepairHandler? onRepair;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (ref.watch(integrityScanProvider)) {
       AsyncData<IntegrityReport>(:final IntegrityReport value) => _Report(
         report: value,
+        onRepair: onRepair ?? applyIntegrityRepair,
       ),
       AsyncError<IntegrityReport>(:final Object error) => Center(
         child: Text('${tr(AppI10n.integrityFailed)} $error'),
@@ -112,9 +137,10 @@ class IntegrityView extends ConsumerWidget {
 }
 
 class _Report extends ConsumerWidget {
-  const _Report({required this.report});
+  const _Report({required this.report, required this.onRepair});
 
   final IntegrityReport report;
+  final IntegrityRepairHandler onRepair;
 
   /// One pill per concern that holds something: a row of zeroes is a list of
   /// things that did not happen.
@@ -122,6 +148,8 @@ class _Report extends ConsumerWidget {
     WidgetRef ref,
     Map<IntegrityVerdict, int> counts,
     IntegrityVerdict shown,
+    bool resolvedShown,
+    int resolvedCount,
     StatusPalette colours,
   ) {
     final List<Widget> pills = <Widget>[];
@@ -134,12 +162,28 @@ class _Report extends ConsumerWidget {
           colour: look.colour,
           label: tr(look.label),
           count: count,
-          on: verdict == shown,
+          on: !resolvedShown && verdict == shown,
           // Every one of these is worth a look, so a glow apiece would be a
           // wall of them.
           nags: false,
+          onPressed: () {
+            ref.read(integrityResolvedProvider.notifier).show(false);
+            ref.read(integrityShownProvider.notifier).show(verdict);
+          },
+        ),
+      );
+    }
+    if (resolvedCount > 0) {
+      final VerdictLook look = _resolvedLook(colours);
+      pills.add(
+        CountPill(
+          colour: look.colour,
+          label: tr(look.label),
+          count: resolvedCount,
+          on: resolvedShown,
+          nags: false,
           onPressed: () =>
-              ref.read(integrityShownProvider.notifier).show(verdict),
+              ref.read(integrityResolvedProvider.notifier).show(true),
         ),
       );
     }
@@ -156,10 +200,31 @@ class _Report extends ConsumerWidget {
     final Map<IntegrityVerdict, int> counts = verdictCounts(
       report.findings.map((IntegrityFinding f) => f.verdict),
     );
+    final IntegrityResolvedState resolvedState = ref.watch(
+      integrityResolvedProvider,
+    );
+    final List<ResolvedIntegrityIssue> resolved = resolvedState.issues;
     final IntegrityVerdict shown = shownVerdict(
       ref.watch(integrityShownProvider),
       counts,
     );
+    final bool resolvedShown =
+        resolved.isNotEmpty && (resolvedState.shown || report.findings.isEmpty);
+    final VerdictLook shownLook = resolvedShown
+        ? _resolvedLook(colours)
+        : _verdictLook(shown, colours);
+    final List<IntegrityFinding> resolvedFindings =
+        resolved.map((ResolvedIntegrityIssue item) => item.finding).toList()
+          ..sort(
+            (IntegrityFinding a, IntegrityFinding b) =>
+                a.root.index.compareTo(b.root.index),
+          );
+    final Map<IntegrityFinding, IntegrityResolution> resolutions =
+        <IntegrityFinding, IntegrityResolution>{
+          for (final ResolvedIntegrityIssue item in resolved)
+            item.finding: item.resolution,
+        };
+    final bool hasPills = report.findings.isNotEmpty || resolved.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(top: LayoutNums.contentGap),
@@ -170,13 +235,44 @@ class _Report extends ConsumerWidget {
           _Summary(
             checked: checked,
             found: report.findings.length,
-            onRecheck: () => ref.invalidate(integrityScanProvider),
+            onRecheck: () {
+              ref.read(integrityResolvedProvider.notifier).show(false);
+              ref.invalidate(integrityScanProvider);
+            },
           ),
           if (report.missing.isNotEmpty) _MissingRoots(missing: report.missing),
-          if (report.findings.isNotEmpty)
-            PillRow(children: _pills(ref, counts, shown, colours)),
+          if (hasPills)
+            PillRow(
+              children: _pills(
+                ref,
+                counts,
+                shown,
+                resolvedShown,
+                resolved.length,
+                colours,
+              ),
+            ),
+          if (hasPills)
+            _Note(
+              colour: shownLook.colour,
+              icon: Icons.info_outline_rounded,
+              child: Text(
+                tr(shownLook.advice),
+                style: Theme.of(
+                  context,
+                ).meta.mediumStyle.copyWith(height: 1.35),
+              ),
+            ),
           Expanded(
-            child: report.findings.isNotEmpty
+            child: resolvedShown
+                ? _Findings(
+                    key: const ValueKey<String>('resolved'),
+                    findings: resolvedFindings,
+                    look: shownLook,
+                    onRepair: onRepair,
+                    resolutions: resolutions,
+                  )
+                : report.findings.isNotEmpty
                 ? _Findings(
                     // Keyed, or scrolling deep into a long concern leaves the
                     // next one part way down.
@@ -184,7 +280,8 @@ class _Report extends ConsumerWidget {
                     findings: report.findings
                         .where((IntegrityFinding f) => f.verdict == shown)
                         .toList(),
-                    look: _verdictLook(shown, colours),
+                    look: shownLook,
+                    onRepair: onRepair,
                   )
                 // Nothing read is not a clean bill of health, and the roots
                 // above already say why.
@@ -209,9 +306,14 @@ class _Summary extends StatelessWidget {
   final int found;
   final VoidCallback onRecheck;
 
+  static const double _titleIconBackgroundSize = 34;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final Color resultColour = found > 0
+        ? theme.status.warn
+        : theme.status.good;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(LayoutNums.contentGap),
@@ -225,10 +327,18 @@ class _Summary extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Icon(
-                Icons.health_and_safety_outlined,
-                size: 20,
-                color: theme.primaryColor,
+              Container(
+                width: _titleIconBackgroundSize,
+                height: _titleIconBackgroundSize,
+                decoration: BoxDecoration(
+                  color: theme.primaryColor.withValues(alpha: .1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.health_and_safety_outlined,
+                  size: 20,
+                  color: theme.primaryColor,
+                ),
               ),
               const SizedBox(width: LayoutNums.smallGap),
               Expanded(
@@ -247,21 +357,37 @@ class _Summary extends StatelessWidget {
               ),
             ],
           ),
-          Text(tr(AppI10n.integrityAbout), style: theme.meta.captionStyle),
           Text(
-            found > 0
-                ? tr(
-                    AppI10n.integrityFound,
-                    namedArgs: <String, String>{
-                      'checked': '$checked',
-                      'found': '$found',
-                    },
-                  )
-                : tr(
-                    AppI10n.integrityFoundNothing,
-                    namedArgs: <String, String>{'checked': '$checked'},
-                  ),
-            style: theme.meta.mediumStyle,
+            tr(AppI10n.integrityAbout),
+            style: theme.meta.mediumStyle.copyWith(height: 1.4),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LayoutNums.mediumGap,
+              vertical: LayoutNums.compactGap,
+            ),
+            decoration: BoxDecoration(
+              color: resultColour.withValues(alpha: .09),
+              borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+            ),
+            child: Text(
+              found > 0
+                  ? tr(
+                      AppI10n.integrityFound,
+                      namedArgs: <String, String>{
+                        'checked': '$checked',
+                        'found': '$found',
+                      },
+                    )
+                  : tr(
+                      AppI10n.integrityFoundNothing,
+                      namedArgs: <String, String>{'checked': '$checked'},
+                    ),
+              style: theme.meta.mediumStyle.copyWith(
+                color: resultColour,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -339,7 +465,7 @@ class _Note extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: LayoutNums.smallGap,
         children: <Widget>[
-          Icon(icon, size: 16, color: colour),
+          Icon(icon, size: 18, color: colour),
           Expanded(child: child),
         ],
       ),
@@ -347,17 +473,23 @@ class _Note extends StatelessWidget {
   }
 }
 
-/// The one concern the pills have picked, under a line saying what to do about
-/// it, with a heading per library since the findings arrive sorted by that.
+/// The one concern the pills have picked, grouped by library.
 class _Findings extends StatelessWidget {
-  const _Findings({super.key, required this.findings, required this.look});
+  const _Findings({
+    super.key,
+    required this.findings,
+    required this.look,
+    required this.onRepair,
+    this.resolutions = const <IntegrityFinding, IntegrityResolution>{},
+  });
 
   final List<IntegrityFinding> findings;
   final VerdictLook look;
+  final IntegrityRepairHandler onRepair;
+  final Map<IntegrityFinding, IntegrityResolution> resolutions;
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
     final Map<IntegrityRoot, List<IntegrityFinding>> perRoot =
         <IntegrityRoot, List<IntegrityFinding>>{};
     for (final IntegrityFinding finding in findings) {
@@ -366,23 +498,9 @@ class _Findings extends StatelessWidget {
           .add(finding);
     }
     return ListView.builder(
-      // The advice sits in the list rather than above it, so a long one
-      // scrolls away instead of eating the window.
-      itemCount: findings.length + 1,
+      itemCount: findings.length,
       itemBuilder: (BuildContext context, int row) {
-        if (row == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: LayoutNums.mediumGap),
-            child: _Note(
-              colour: look.colour,
-              icon: Icons.info_outline_rounded,
-              // The tab's own text colour rather than the muted one the paths
-              // wear: this is the line the user is here to read.
-              child: Text(tr(look.advice)),
-            ),
-          );
-        }
-        final int index = row - 1;
+        final int index = row;
         final IntegrityFinding finding = findings[index];
         final IntegrityFinding? previous = index == 0
             ? null
@@ -394,43 +512,22 @@ class _Findings extends StatelessWidget {
             if (newGroup)
               Padding(
                 padding: EdgeInsets.only(
-                  top: index == 0 ? LayoutNums.tinyGap : LayoutNums.sectionGap,
+                  top: index == 0 ? 0 : LayoutNums.sectionGap,
                   bottom: LayoutNums.smallGap,
                 ),
-                child: Row(
-                  spacing: LayoutNums.smallGap,
-                  children: <Widget>[
-                    Text(
-                      tr(_rootLabels[finding.root]!),
-                      style: theme.meta.mediumStyle.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${perRoot[finding.root]!.length}',
-                      style: theme.meta.captionStyle,
-                    ),
-                    // The whole library at once, since these arrive in dozens
-                    // and every one of them wants the same answer.
-                    if (look.repair != IntegrityRepair.none)
-                      TextButton.icon(
-                        icon: const Icon(_resolveIcon, size: 16),
-                        onPressed: () => applyIntegrityRepair(
-                          context,
-                          look.repair,
-                          perRoot[finding.root]!,
-                        ),
-                        label: Text(
-                          tr(
-                            AppI10n.integrityFixAll,
-                            args: <String>['${perRoot[finding.root]!.length}'],
-                          ),
-                        ),
-                      ),
-                  ],
+                child: _GroupHeader(
+                  root: finding.root,
+                  findings: perRoot[finding.root]!,
+                  look: look,
+                  onRepair: onRepair,
                 ),
               ),
-            _FindingRow(finding: finding, look: look),
+            _FindingRow(
+              finding: finding,
+              look: look,
+              onRepair: onRepair,
+              resolution: resolutions[finding],
+            ),
           ],
         );
       },
@@ -438,14 +535,85 @@ class _Findings extends StatelessWidget {
   }
 }
 
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({
+    required this.root,
+    required this.findings,
+    required this.look,
+    required this.onRepair,
+  });
+
+  final IntegrityRoot root;
+  final List<IntegrityFinding> findings;
+  final VerdictLook look;
+  final IntegrityRepairHandler onRepair;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: LayoutNums.smallGap,
+      runSpacing: LayoutNums.tinyGap,
+      children: <Widget>[
+        Text(
+          tr(_rootLabels[root]!),
+          style: theme.meta.largeStyle.copyWith(fontWeight: FontWeight.w600),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: LayoutNums.smallGap,
+            vertical: LayoutNums.tinyGap,
+          ),
+          decoration: BoxDecoration(
+            color: look.colour.withValues(alpha: .1),
+            borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+          ),
+          child: Text(
+            '${findings.length}',
+            style: theme.meta.captionStyle.copyWith(
+              color: look.colour,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (look.repair case final IntegrityRepair repair)
+          TextButton.icon(
+            icon: const Icon(_resolveIcon, size: 16),
+            onPressed: () => onRepair(context, repair, findings),
+            style: TextButton.styleFrom(
+              foregroundColor: look.colour,
+              backgroundColor: look.colour.withValues(alpha: .1),
+              padding: const EdgeInsets.symmetric(
+                horizontal: LayoutNums.mediumGap,
+                vertical: LayoutNums.smallGap,
+              ),
+              shape: const StadiumBorder(),
+            ),
+            label: Text(
+              tr(AppI10n.integrityFixAll, args: <String>['${findings.length}']),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _FindingRow extends StatelessWidget {
-  const _FindingRow({required this.finding, required this.look});
+  const _FindingRow({
+    required this.finding,
+    required this.look,
+    required this.onRepair,
+    this.resolution,
+  });
 
   final IntegrityFinding finding;
   final VerdictLook look;
+  final IntegrityRepairHandler onRepair;
+  final IntegrityResolution? resolution;
 
-  static const double _height = 52;
-  static const double _stripe = 3;
+  static const double _height = 58;
+  static const double _stripe = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -456,36 +624,37 @@ class _FindingRow extends StatelessWidget {
         color: theme.inputDecorationTheme.fillColor,
         borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => browserFolder(finding.folder),
-          child: SizedBox(
-            height: _height,
-            child: Row(
-              children: <Widget>[
-                Container(
-                  width: _stripe,
-                  height: double.infinity,
-                  color: look.colour,
-                ),
-                const SizedBox(width: LayoutNums.mediumGap),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      Row(
-                        spacing: LayoutNums.smallGap,
-                        children: <Widget>[
-                          Flexible(
-                            child: Text(
-                              finding.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.meta.mediumStyle,
+        child: SizedBox(
+          height: _height,
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: _stripe,
+                height: double.infinity,
+                color: look.colour,
+              ),
+              const SizedBox(width: LayoutNums.mediumGap),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Row(
+                      spacing: LayoutNums.smallGap,
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            finding.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.meta.mediumStyle.copyWith(
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          // Which file, since "missing files" on its own sends
-                          // the user into the folder to work it out.
+                        ),
+                        // Which file, since "missing files" on its own sends
+                        // the user into the folder to work it out.
+                        if (resolution == null)
                           if (finding.missing case final String missing)
                             Text(
                               tr(
@@ -498,46 +667,81 @@ class _FindingRow extends StatelessWidget {
                                 color: look.colour,
                               ),
                             ),
-                        ],
-                      ),
-                      Text(
-                        finding.folder,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.meta.captionStyle,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: LayoutNums.contentGap),
-                // Zero means unsized, not empty: a root holding no loadable
-                // wallpaper is not walked. An empty folder has its own verdict.
-                if (finding.bytes > 0)
-                  Text(
-                    formatSize(finding.bytes),
-                    style: theme.meta.captionStyle,
-                  ),
-                const SizedBox(width: LayoutNums.contentGap),
-                if (look.repair != IntegrityRepair.none)
-                  AppIconButton(
-                    icon: _resolveIcon,
-                    tooltip: tr(AppI10n.integrityFixResolve),
-                    onPressed: () => applyIntegrityRepair(
-                      context,
-                      look.repair,
-                      <IntegrityFinding>[finding],
+                        if (resolution case final IntegrityResolution value)
+                          Text(
+                            tr(_resolutionLabel(value)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.meta.captionStyle.copyWith(
+                              color: look.colour,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
                     ),
+                    Text(
+                      finding.folder,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.meta.captionStyle,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: LayoutNums.contentGap),
+              // Zero means unsized, not empty: a root holding no loadable
+              // wallpaper is not walked. An empty folder has its own verdict.
+              if (finding.bytes > 0)
+                Text(formatSize(finding.bytes), style: theme.meta.captionStyle),
+              const SizedBox(width: LayoutNums.contentGap),
+              if (resolution == null)
+                if (look.repair case final IntegrityRepair repair)
+                  _ResolveButton(
+                    colour: look.colour,
+                    onPressed: () =>
+                        onRepair(context, repair, <IntegrityFinding>[finding]),
                   ),
+              const SizedBox(width: LayoutNums.smallGap),
+              if (resolution == null)
                 AppIconButton(
                   icon: Icons.folder_open_rounded,
                   tooltip: tr(AppI10n.integrityOpenFolder),
                   onPressed: () => browserFolder(finding.folder),
-                ),
-                const SizedBox(width: LayoutNums.smallGap),
-              ],
-            ),
+                )
+              else
+                Icon(Icons.check_circle_outline_rounded, color: look.colour),
+              const SizedBox(width: LayoutNums.smallGap),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ResolveButton extends StatelessWidget {
+  const _ResolveButton({required this.colour, required this.onPressed});
+
+  final Color colour;
+  final VoidCallback onPressed;
+
+  static const double _size = 36;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: .13),
+        shape: BoxShape.circle,
+      ),
+      child: AppIconButton(
+        icon: _resolveIcon,
+        iconSize: 18,
+        width: _size,
+        height: _size,
+        color: colour,
+        tooltip: tr(AppI10n.integrityFixResolve),
+        onPressed: onPressed,
       ),
     );
   }

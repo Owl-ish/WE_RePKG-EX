@@ -41,3 +41,37 @@ class AppDialogSurface extends StatelessWidget {
     );
   }
 }
+
+/// The icon and title shared by modal surfaces.
+class AppDialogHeader extends StatelessWidget {
+  const AppDialogHeader({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.foreground,
+    required this.background,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color foreground;
+  final Color background;
+
+  static const double _iconSize = 40;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: <Widget>[
+      Container(
+        width: _iconSize,
+        height: _iconSize,
+        decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+        child: Icon(icon, color: foreground, size: 21),
+      ),
+      const SizedBox(width: LayoutNums.mediumGap),
+      Expanded(
+        child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+      ),
+    ],
+  );
+}

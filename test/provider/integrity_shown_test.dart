@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/cores/integrity_scan.dart';
 import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
@@ -36,4 +37,33 @@ void main() {
 
     expect(c.read(integrityShownProvider), isNull);
   });
+
+  test(
+    'resolved issues last for this app run and are not duplicated',
+    () async {
+      final ProviderContainer c = container();
+      await c.read(integrityScanProvider.future);
+      const ResolvedIntegrityIssue issue = (
+        finding: (
+          root: IntegrityRoot.liveMyProjects,
+          name: 'demo',
+          verdict: IntegrityVerdict.unpackedSceneNoProject,
+          bytes: 3,
+          folder: r'C:\myprojects\demo',
+          missing: null,
+        ),
+        resolution: IntegrityResolution.createdProject,
+      );
+
+      c.read(integrityResolvedProvider.notifier).addAll(
+        <ResolvedIntegrityIssue>[issue, issue],
+      );
+      c.read(integrityResolvedProvider.notifier).show(true);
+      c.invalidate(integrityScanProvider);
+
+      expect(c.read(integrityResolvedProvider).issues, <ResolvedIntegrityIssue>[
+        issue,
+      ]);
+    },
+  );
 }
