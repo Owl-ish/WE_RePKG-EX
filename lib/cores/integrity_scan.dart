@@ -144,7 +144,10 @@ Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
     sized.addAll(
       await Future.wait(
         found.skip(i).take(_batchSize).map((IntegrityFinding f) async {
-          if (f.verdict == IntegrityVerdict.sound) return f;
+          if (f.verdict == IntegrityVerdict.sound ||
+              !integrityVerdictOrder.contains(f.verdict)) {
+            return f;
+          }
           return (
             root: f.root,
             name: f.name,

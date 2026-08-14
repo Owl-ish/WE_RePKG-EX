@@ -6,15 +6,20 @@ abstract final class WallpaperFiles {
   static const String unpackedScene = 'scene.json';
   static const String webEntry = 'index.html';
   static const String previewStem = 'preview';
+  static const String shaderCacheExtension = '.dxs';
 
   /// Travels with a published rescue until its source reaches the Recycle Bin,
   /// allowing an interrupted repair to resume instead of creating a duplicate.
   static const String rescueMarker = '.werepkg-ex-rescue-source';
   static const String rescueStagePrefix = '.werepkg-ex-rescue-';
   static const String projectStagePrefix = '.werepkg-ex-project-';
+  static const String restoreStagePrefix = '.werepkg-ex-restore-';
+  static const String emptyBackupStagePrefix = '.werepkg-ex-empty-';
 
   static bool isLibraryRepairStage(String name) =>
-      name.startsWith(rescueStagePrefix);
+      name.startsWith(rescueStagePrefix) ||
+      name.startsWith(restoreStagePrefix) ||
+      name.startsWith(emptyBackupStagePrefix);
 }
 
 /// Directory names in Wallpaper Engine's on-disk wallpaper format.
@@ -22,6 +27,7 @@ abstract final class WallpaperDirectories {
   static const String container = 'directories';
   static const String custom = 'customdirectory';
   static const String shaders = 'shaders';
+  static const String shaderCache = 'blobsSM40';
 }
 
 /// Keys in Wallpaper Engine's project metadata.

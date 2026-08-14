@@ -131,7 +131,7 @@ final class BackupScanProvider
   }
 }
 
-String _$backupScanHash() => r'6e355d8d2b6c09db393058cb18bacad3a63a4801';
+String _$backupScanHash() => r'ec9bd5ae2c7796469a752b7843a2f0b47a36b62e';
 
 /// The scan's cards in grid order, each with the title and preview to draw.
 ///
@@ -187,7 +187,7 @@ final class BackupTilesProvider
   }
 }
 
-String _$backupTilesHash() => r'f5df592929c1158fe4db3afac08467e7d66a3724';
+String _$backupTilesHash() => r'c033ad5a5f23b0bac56a0bf32ee38b7ad0515a28';
 
 /// The names waiting to be reconciled, each with the title and preview to draw.
 ///
@@ -323,7 +323,8 @@ abstract class _$BackupSearch extends $Notifier<String> {
 /// looked at now, and returning to a grid narrowed by a pill switched off days
 /// ago is how a wallpaper goes missing quietly.
 ///
-/// Opens on the one state with an obvious next step. Every other pill holding
+/// Opens on the worst state that holds something, which on a library with work
+/// waiting is the one with an obvious next step. Every other pill holding
 /// anything glows for itself, so nothing is hidden by starting narrow.
 
 @ProviderFor(BackupStateFilter)
@@ -333,7 +334,8 @@ final backupStateFilterProvider = BackupStateFilterProvider._();
 /// looked at now, and returning to a grid narrowed by a pill switched off days
 /// ago is how a wallpaper goes missing quietly.
 ///
-/// Opens on the one state with an obvious next step. Every other pill holding
+/// Opens on the worst state that holds something, which on a library with work
+/// waiting is the one with an obvious next step. Every other pill holding
 /// anything glows for itself, so nothing is hidden by starting narrow.
 final class BackupStateFilterProvider
     extends $NotifierProvider<BackupStateFilter, BackupShown> {
@@ -341,7 +343,8 @@ final class BackupStateFilterProvider
   /// looked at now, and returning to a grid narrowed by a pill switched off days
   /// ago is how a wallpaper goes missing quietly.
   ///
-  /// Opens on the one state with an obvious next step. Every other pill holding
+  /// Opens on the worst state that holds something, which on a library with work
+  /// waiting is the one with an obvious next step. Every other pill holding
   /// anything glows for itself, so nothing is hidden by starting narrow.
   BackupStateFilterProvider._()
     : super(
@@ -370,13 +373,14 @@ final class BackupStateFilterProvider
   }
 }
 
-String _$backupStateFilterHash() => r'30134908244dd0e49f9b42ed4fe07c5781552bc9';
+String _$backupStateFilterHash() => r'dfbcfc720f3a9144612e633e006136864237d1f1';
 
 /// Session state rather than a setting: the pills are how the tab is being
 /// looked at now, and returning to a grid narrowed by a pill switched off days
 /// ago is how a wallpaper goes missing quietly.
 ///
-/// Opens on the one state with an obvious next step. Every other pill holding
+/// Opens on the worst state that holds something, which on a library with work
+/// waiting is the one with an obvious next step. Every other pill holding
 /// anything glows for itself, so nothing is hidden by starting narrow.
 
 abstract class _$BackupStateFilter extends $Notifier<BackupShown> {
@@ -429,7 +433,7 @@ final class BackupSortOrderProvider
   }
 }
 
-String _$backupSortOrderHash() => r'983107ce4592037a5bb0bc174ff6c74322671246';
+String _$backupSortOrderHash() => r'1eb0bd7aa21c257682ed279a6484bef65ca69193';
 
 abstract class _$BackupSortOrder extends $Notifier<BackupSortType> {
   BackupSortType build();
@@ -515,10 +519,10 @@ final class BackupVisibleTilesProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<BackupTile>>,
-          List<BackupTile>,
-          FutureOr<List<BackupTile>>
+          AsyncValue<List<BackupTile>>,
+          AsyncValue<List<BackupTile>>
         >
-    with $FutureModifier<List<BackupTile>>, $FutureProvider<List<BackupTile>> {
+    with $Provider<AsyncValue<List<BackupTile>>> {
   /// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
   /// a list in memory rather than re-reading a few thousand folders.
   BackupVisibleTilesProvider._()
@@ -537,18 +541,26 @@ final class BackupVisibleTilesProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<BackupTile>> $createElement(
+  $ProviderElement<AsyncValue<List<BackupTile>>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $ProviderElement(pointer);
 
   @override
-  FutureOr<List<BackupTile>> create(Ref ref) {
+  AsyncValue<List<BackupTile>> create(Ref ref) {
     return backupVisibleTiles(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AsyncValue<List<BackupTile>> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AsyncValue<List<BackupTile>>>(value),
+    );
   }
 }
 
 String _$backupVisibleTilesHash() =>
-    r'0be871f44ec37642c05e5d1bedcdbc23969545d7';
+    r'48e3d223d036e043679a937185c26f3ba2cdd06f';
 
 /// The reconcile tiles the grid draws, under the same search, filter and order.
 
@@ -562,12 +574,10 @@ final class BackupVisibleReconcileTilesProvider
     extends
         $FunctionalProvider<
           AsyncValue<List<ReconcileTile>>,
-          List<ReconcileTile>,
-          FutureOr<List<ReconcileTile>>
+          AsyncValue<List<ReconcileTile>>,
+          AsyncValue<List<ReconcileTile>>
         >
-    with
-        $FutureModifier<List<ReconcileTile>>,
-        $FutureProvider<List<ReconcileTile>> {
+    with $Provider<AsyncValue<List<ReconcileTile>>> {
   /// The reconcile tiles the grid draws, under the same search, filter and order.
   BackupVisibleReconcileTilesProvider._()
     : super(
@@ -585,18 +595,28 @@ final class BackupVisibleReconcileTilesProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<ReconcileTile>> $createElement(
+  $ProviderElement<AsyncValue<List<ReconcileTile>>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $ProviderElement(pointer);
 
   @override
-  FutureOr<List<ReconcileTile>> create(Ref ref) {
+  AsyncValue<List<ReconcileTile>> create(Ref ref) {
     return backupVisibleReconcileTiles(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AsyncValue<List<ReconcileTile>> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AsyncValue<List<ReconcileTile>>>(
+        value,
+      ),
+    );
   }
 }
 
 String _$backupVisibleReconcileTilesHash() =>
-    r'7a2ea85d721ed6bdc65e0f400335edd6a71ab794';
+    r'5f2e3abff6c84a74699de79ee5abb00562e559d4';
 
 /// Ids of whatever the grid is drawing, which is what the selection is pruned
 /// against: a tile out of view is out of the selection.
@@ -611,10 +631,10 @@ final class BackupVisibleIdsProvider
     extends
         $FunctionalProvider<
           AsyncValue<Set<String>>,
-          Set<String>,
-          FutureOr<Set<String>>
+          AsyncValue<Set<String>>,
+          AsyncValue<Set<String>>
         >
-    with $FutureModifier<Set<String>>, $FutureProvider<Set<String>> {
+    with $Provider<AsyncValue<Set<String>>> {
   /// Ids of whatever the grid is drawing, which is what the selection is pruned
   /// against: a tile out of view is out of the selection.
   BackupVisibleIdsProvider._()
@@ -633,17 +653,25 @@ final class BackupVisibleIdsProvider
 
   @$internal
   @override
-  $FutureProviderElement<Set<String>> $createElement(
+  $ProviderElement<AsyncValue<Set<String>>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $ProviderElement(pointer);
 
   @override
-  FutureOr<Set<String>> create(Ref ref) {
+  AsyncValue<Set<String>> create(Ref ref) {
     return backupVisibleIds(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AsyncValue<Set<String>> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AsyncValue<Set<String>>>(value),
+    );
   }
 }
 
-String _$backupVisibleIdsHash() => r'a5ec082652e9a0687e8bfa62b39d0f48fc8cd4b2';
+String _$backupVisibleIdsHash() => r'6b3c591c21c02f42a5240c77531ce3e2560bba4b';
 
 /// Which backup cards are selected, by [BackupCard.id].
 ///

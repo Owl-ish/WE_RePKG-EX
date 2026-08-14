@@ -171,6 +171,12 @@ void main() {
       backupTilesProvider.future,
     );
 
+    expect(
+      container.read(backupScanProgressProvider).value?.phase,
+      BackupScanPhase.preparing,
+      reason: 'the final status stays visible until the tiles replace it',
+    );
+
     // Worst state first, then by name. Filesystem order would not give this.
     expect(tiles.map((BackupTile t) => t.card.name), <String>[
       '999',
@@ -230,10 +236,14 @@ void main() {
       return container;
     }
 
-    Future<List<String>> visible(ProviderContainer container) async =>
-        (await container.read(
-          backupVisibleTilesProvider.future,
-        )).map((BackupTile t) => t.card.name).toList();
+    Future<List<String>> visible(ProviderContainer container) async {
+      await container.read(backupTilesProvider.future);
+      return container
+          .read(backupVisibleTilesProvider)
+          .requireValue
+          .map((BackupTile t) => t.card.name)
+          .toList();
+    }
 
     test('an empty box shows everything', () async {
       final ProviderContainer container = await library();

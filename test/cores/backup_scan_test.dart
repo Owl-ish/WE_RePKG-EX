@@ -55,6 +55,8 @@ void main() {
       wallpaper(lib, '793602574');
       wallpaper(lib, '833227004');
       wallpaper(lib, '${WallpaperFiles.rescueStagePrefix}123-abc');
+      wallpaper(lib, '${WallpaperFiles.restoreStagePrefix}123-abc');
+      wallpaper(lib, '${WallpaperFiles.emptyBackupStagePrefix}123-abc');
       File(p.join(lib.path, 'readme.txt')).writeAsStringSync('x');
 
       expect(await listFolderNames(lib.path), <String>{
@@ -318,6 +320,7 @@ void main() {
         );
         project(wallpaper(backupW, 'beta'), '{"title":"Wrong Beta"}');
 
+        final List<BackupScanProgress> progress = <BackupScanProgress>[];
         final Map<BackupCard, CardFace> faces = await readCardFaces(
           backupRoot: p.join(tmp.path, 'backup'),
           liveWorkshopPath: liveW.path,
@@ -330,6 +333,7 @@ void main() {
             const BackupCard(WallpaperLibrary.myProjects, 'beta'):
                 BackupState.vanished,
           },
+          onProgress: progress.add,
         );
 
         expect(
@@ -344,6 +348,16 @@ void main() {
         expect(
           faces[const BackupCard(WallpaperLibrary.myProjects, 'beta')]!.title,
           'Gone Beta',
+        );
+        expect(progress.last.phase, BackupScanPhase.preparing);
+        expect(progress.last.done, progress.last.total);
+        expect(
+          progress.where(
+            (value) =>
+                value.phase == BackupScanPhase.details &&
+                value.done == value.total,
+          ),
+          isEmpty,
         );
       },
     );
@@ -476,13 +490,16 @@ void main() {
 
       expect(
         seen.map((BackupScanProgress p) => p.phase),
-        everyElement(BackupScanPhase.details),
+        containsAllInOrder(<BackupScanPhase>[
+          BackupScanPhase.details,
+          BackupScanPhase.preparing,
+        ]),
       );
       expect(seen.first.done, 0, reason: 'the line starts before the reading');
       expect(
         seen.last,
-        (phase: BackupScanPhase.details, done: 30, total: 30),
-        reason: 'a bar that stops short reads as the app having given up',
+        (phase: BackupScanPhase.preparing, done: 30, total: 30),
+        reason: 'the full count belongs to the uncounted preparation handoff',
       );
     });
   });
@@ -757,8 +774,8 @@ void main() {
 
     // AC 2.
     test('with no root every live wallpaper is not backed up', () async {
-      wallpaper(liveWorkshop, '793602574');
-      wallpaper(liveMyProjects, 'alpha');
+      filled(liveWorkshop, '793602574');
+      filled(liveMyProjects, 'alpha');
 
       final BackupScan result = await scan();
 
@@ -775,16 +792,27 @@ void main() {
     // because Wallpaper Engine wrote the shader cache in it. Twenty-seven of
     // these were sitting in the grid as blank cards offering to back up nothing.
     group('a folder Steam left behind', () {
-      test('gets no card, in either library', () async {
+      test('appears under Empty/Junk in either live library', () async {
         filled(liveWorkshop, '793602574');
         husk(liveWorkshop, '3776838872');
         husk(liveMyProjects, 'abandoned');
 
         final BackupScan result = await scan(root: backupRoot.path);
 
-        expect(result.cards.keys, <BackupCard>[
-          const BackupCard(WallpaperLibrary.workshop, '793602574'),
-        ]);
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '3776838872',
+          )],
+          BackupState.emptyBackup,
+        );
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.myProjects,
+            'abandoned',
+          )],
+          BackupState.emptyBackup,
+        );
       });
 
       // The backup is the only copy left of what used to be there, so the card
@@ -800,7 +828,7 @@ void main() {
             WallpaperLibrary.workshop,
             '3776838872',
           )],
-          BackupState.synced,
+          BackupState.emptyBackup,
         );
       });
 
@@ -840,8 +868,62 @@ void main() {
           )],
           BackupState.vanished,
         );
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '3776838872',
+          )],
+          BackupState.emptyBackup,
+        );
         expect(result.reconcile, isEmpty);
       });
+
+      test('an empty live folder also appears under Empty/Junk', () async {
+        wallpaper(liveWorkshop, 'empty');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(WallpaperLibrary.workshop, 'empty')],
+          BackupState.emptyBackup,
+        );
+        expect(result.presence['workshop/empty'], (live: true, backup: false));
+      });
+
+      test(
+        'valid backups keep their status when they also have cache',
+        () async {
+          final Directory live = filled(liveMyProjects, 'alpha');
+          final Directory backup = filled(backupMyProjects(), 'alpha');
+          for (final Directory folder in <Directory>[live, backup]) {
+            File(p.join(folder.path, 'shaders', 'blobsSM40', 'cache.bin'))
+              ..createSync(recursive: true)
+              ..writeAsStringSync('cache');
+          }
+          final Directory liveOnly = filled(liveMyProjects, 'beta');
+          File(p.join(liveOnly.path, 'shaders', 'blobsSM40', 'cache.bin'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync('cache');
+
+          final BackupScan result = await scan(root: backupRoot.path);
+
+          expect(
+            result.cards[const BackupCard(
+              WallpaperLibrary.myProjects,
+              'alpha',
+            )],
+            BackupState.synced,
+          );
+          expect(result.presence['myprojects/alpha'], (
+            live: true,
+            backup: true,
+          ));
+          expect(
+            result.cards[const BackupCard(WallpaperLibrary.myProjects, 'beta')],
+            BackupState.notBackedUp,
+          );
+        },
+      );
     });
 
     test('finds both backup libraries under the root', () async {
@@ -873,13 +955,17 @@ void main() {
         seen.map((BackupScanProgress p) => p.phase),
         contains(BackupScanPhase.comparing),
       );
-      expect(seen.last.total, 30);
+      expect(seen.last, (
+        phase: BackupScanPhase.preparing,
+        done: 30,
+        total: 30,
+      ));
       expect(
-        seen.last.done,
-        30,
-        reason: 'the count has to reach the total, or it stalls on screen',
+        seen.where((p) => p.phase == BackupScanPhase.comparing && p.done == 30),
+        isEmpty,
+        reason: 'comparison must not claim 100% while another arm is running',
       );
-      // Batched at 24, so 30 folders is more than one report. A single jump
+      // Batched below 30, so this is more than one report. A single jump
       // from nothing to done would tell the user nothing while it runs.
       expect(
         seen.where((BackupScanProgress p) => p.done > 0).length,
@@ -921,10 +1007,25 @@ void main() {
       );
     });
 
+    test('a backup holding only nested dxs files is Empty/Junk', () async {
+      filled(liveMyProjects, 'alpha');
+      final Directory folder = wallpaper(backupMyProjects(), 'alpha');
+      File(p.join(folder.path, 'nested', 'cache.dxs'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('rebuilt');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.emptyBackup,
+      );
+    });
+
     // The case the whole tab exists for: Steam removed a delisted item and only
     // the backup still has it.
     test('a name left only in the backup is vanished', () async {
-      wallpaper(backupWorkshop(), '793602574');
+      filled(backupWorkshop(), '793602574');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
@@ -932,15 +1033,19 @@ void main() {
         const BackupCard(WallpaperLibrary.workshop, '793602574'):
             BackupState.vanished,
       });
+      expect(result.presence['workshop/793602574'], (
+        live: false,
+        backup: true,
+      ));
       expect(result.reconcile, isEmpty);
     });
 
     // The unsubscribed packed original still sitting in the backup, with the
     // extraction live in myprojects.
     test('an orphan backup copy goes to reconcile, not the grid', () async {
-      wallpaper(liveMyProjects, '793602574');
-      wallpaper(backupWorkshop(), '793602574');
-      wallpaper(backupMyProjects(), '793602574');
+      filled(liveMyProjects, '793602574');
+      filled(backupWorkshop(), '793602574');
+      filled(backupMyProjects(), '793602574');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
@@ -1076,10 +1181,7 @@ void main() {
         );
 
         expect(
-          result.cards[const BackupCard(
-            WallpaperLibrary.workshop,
-            '793602574',
-          )],
+          result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
           BackupState.synced,
         );
         expect(

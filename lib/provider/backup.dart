@@ -49,7 +49,6 @@ Future<BackupScan> backupScan(Ref ref) async {
     progress.value = null;
     rethrow;
   }
-  progress.value = null;
   return scan;
 }
 
@@ -74,13 +73,17 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
       liveWorkshopPath: ref.watch(wallpaperPathProvider),
       liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
       cards: scan.cards,
+      presence: scan.presence,
       onProgress: (BackupScanProgress value) => progress.value = value,
     );
-  } finally {
+  } catch (_) {
     // A read that threw must not leave its last count sitting on the line for
     // the next thing that waits to inherit.
     progress.value = null;
+    rethrow;
   }
+  // Keep the final preparing state until the completed tiles replace the
+  // progress view. Clearing it here can win the frame and hide that state.
   return <BackupTile>[
     for (final BackupCard card in sortedCards(scan.cards))
       (card: card, state: scan.cards[card]!, face: faces[card]),
@@ -210,47 +213,58 @@ class BackupSortAscending extends _$BackupSortAscending {
 /// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
 /// a list in memory rather than re-reading a few thousand folders.
 @Riverpod(keepAlive: true)
-Future<List<BackupTile>> backupVisibleTiles(Ref ref) async {
-  return visibleBackupTiles(
-    tiles: await ref.watch(backupTilesProvider.future),
-    state: ref.watch(backupStateFilterProvider).state,
-    needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
-    filter: ref.watch(filterStateProvider),
-    sort: ref.watch(backupSortOrderProvider),
-    ascending: ref.watch(backupSortAscendingProvider),
-  );
+AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
+  return ref
+      .watch(backupTilesProvider)
+      .whenData(
+        (List<BackupTile> tiles) => visibleBackupTiles(
+          tiles: tiles,
+          state: ref.watch(backupStateFilterProvider).state,
+          needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
+          filter: ref.watch(filterStateProvider),
+          sort: ref.watch(backupSortOrderProvider),
+          ascending: ref.watch(backupSortAscendingProvider),
+        ),
+      );
 }
 
 /// The reconcile tiles the grid draws, under the same search, filter and order.
 @Riverpod(keepAlive: true)
-Future<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) async {
-  return visibleReconcileTiles(
-    tiles: await ref.watch(backupReconcileTilesProvider.future),
-    needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
-    filter: ref.watch(filterStateProvider),
-    sort: ref.watch(backupSortOrderProvider),
-    ascending: ref.watch(backupSortAscendingProvider),
-  );
+AsyncValue<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) {
+  return ref
+      .watch(backupReconcileTilesProvider)
+      .whenData(
+        (List<ReconcileTile> tiles) => visibleReconcileTiles(
+          tiles: tiles,
+          needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
+          filter: ref.watch(filterStateProvider),
+          sort: ref.watch(backupSortOrderProvider),
+          ascending: ref.watch(backupSortAscendingProvider),
+        ),
+      );
 }
 
 /// Ids of whatever the grid is drawing, which is what the selection is pruned
 /// against: a tile out of view is out of the selection.
 @Riverpod(keepAlive: true)
-Future<Set<String>> backupVisibleIds(Ref ref) async {
+AsyncValue<Set<String>> backupVisibleIds(Ref ref) {
   if (ref.watch(backupStateFilterProvider).reconcile) {
-    return <String>{
-      for (final ReconcileTile tile in await ref.watch(
-        backupVisibleReconcileTilesProvider.future,
-      ))
-        reconcileTileId(tile.entry.name),
-    };
+    return ref
+        .watch(backupVisibleReconcileTilesProvider)
+        .whenData(
+          (List<ReconcileTile> tiles) => <String>{
+            for (final ReconcileTile tile in tiles)
+              reconcileTileId(tile.entry.name),
+          },
+        );
   }
-  return <String>{
-    for (final BackupTile tile in await ref.watch(
-      backupVisibleTilesProvider.future,
-    ))
-      tile.card.id,
-  };
+  return ref
+      .watch(backupVisibleTilesProvider)
+      .whenData(
+        (List<BackupTile> tiles) => <String>{
+          for (final BackupTile tile in tiles) tile.card.id,
+        },
+      );
 }
 
 /// Which backup cards are selected, by [BackupCard.id].

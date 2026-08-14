@@ -103,6 +103,9 @@ void main() {
       'scene.pkg': 'x',
     });
     Directory(p.join(tmp.path, 'live_myprojects', 'nothing')).createSync();
+    wallpaper('live_myprojects', 'cache', <String, String>{
+      r'shaders\blobsSM40\cache.dxs': 'x',
+    });
 
     final IntegrityReport report = await scan();
     final Map<String, IntegrityVerdict> byName = <String, IntegrityVerdict>{
@@ -115,7 +118,7 @@ void main() {
       'media': IntegrityVerdict.mediaOnly,
       'no_payload': IntegrityVerdict.payloadMissing,
       'broken_json': IntegrityVerdict.projectUnreadable,
-    }, reason: 'an empty folder is the backup tab\'s to answer for');
+    }, reason: 'empty and cache-only folders belong to the backup tab');
   });
 
   // The user's 3675770605: sound in the live library, payload never copied to
