@@ -41,6 +41,12 @@ class AppKeys {
   /// `wallpaper_engine\projects\myprojects` beneath it.
   static const String backupRoot = 'backupRoot';
 
+  /// The backup grid's order, as a `BackupSortType` index, and whether it runs
+  /// the other way. Its own keys: that grid sorts on things the extract grid
+  /// has no idea about.
+  static const String backupSortType = 'backupSortType';
+  static const String backupSortAscending = 'backupSortAscending';
+
   /// Which library the grid is browsing, as a `WallpaperLibrary` index, so
   /// reordering that enum changes which library a returning user lands on.
   static const String currentLibrary = 'currentLibrary';
