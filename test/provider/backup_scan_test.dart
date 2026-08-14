@@ -113,45 +113,10 @@ void main() {
     );
   });
 
-  // The scan works out the baselines and hands them back; this is the only
-  // place anything writes them. Without the write, every Workshop card would be
-  // compared folder-against-folder on every scan forever and nothing would say
-  // so, which is exactly what the records exist to stop.
-  test('a baseline the scan earned reaches the backup root', () async {
+  test('scanning does not write into the backup root', () async {
     livePaths();
     backupBoth();
     final String backupRoot = p.join(tmp.path, 'backup');
-    final File acf = File(p.join(tmp.path, 'appworkshop_431960.acf'))
-      ..writeAsStringSync(acfBody);
-    final ProviderContainer container = await seeded(<String, Object>{
-      AppKeys.wallpaperPath: p.join(tmp.path, 'live', '431960'),
-      AppKeys.myProjectsLibrary: p.join(tmp.path, 'live', 'myprojects'),
-      AppKeys.backupRoot: backupRoot,
-      AppKeys.acfPath: acf.path,
-    });
-
-    final BackupScan scan = await container.read(backupScanProvider.future);
-
-    expect(scan.seeds, <String, String>{
-      'workshop/793602574': '6791066680065157913',
-    });
-    expect(
-      (await readBackupRecords(
-        backupRoot,
-      ))['workshop/793602574']?.backedUpVersion,
-      '6791066680065157913',
-      reason: 'the scan returned it, so something has to have written it',
-    );
-  });
-
-  // Bookkeeping must never cost the user the answer. A read-only backup drive
-  // would otherwise replace the vanished list with an error string.
-  test('a baseline that cannot be written still leaves the scan', () async {
-    livePaths();
-    backupBoth();
-    final String backupRoot = p.join(tmp.path, 'backup');
-    // A directory where the records file needs to go, so the rename fails.
-    Directory(p.join(backupRoot, backupRecordsName)).createSync();
     final File acf = File(p.join(tmp.path, 'appworkshop_431960.acf'))
       ..writeAsStringSync(acfBody);
     final ProviderContainer container = await seeded(<String, Object>{
@@ -165,6 +130,7 @@ void main() {
 
     expect(scan.cards, hasLength(2));
     expect(scan.missing, isEmpty);
+    expect(File(p.join(backupRoot, backupRecordsName)).existsSync(), isFalse);
   });
 
   // The grid's own four-path wiring, which is the mistake this feature has

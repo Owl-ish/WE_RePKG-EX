@@ -46,9 +46,6 @@ typedef BackupScan = ({
   List<ReconcileEntry> reconcile,
   bool acfRead,
   Set<BackupFolder> missing,
-
-  /// Baselines this scan earned. [seedBackupRecords] is what writes them.
-  Map<String, String> seeds,
 });
 
 /// Everything the differ needs, read in one pass, then the comparison.
@@ -66,27 +63,26 @@ Future<BackupScan> scanBackup({
   onProgress?.call((phase: BackupScanPhase.reading, done: 0, total: 0));
   final (
     Set<String> liveWorkshop,
-    Set<String> liveMyProjects,
+    ({Set<String> names, Map<String, String> versions}) myProjects,
     Set<String> backupWorkshop,
     Set<String> backupMyProjects,
-    Map<String, String> myProjectsVersions,
     ({Map<String, String> byId, bool acfRead}) acf,
     Map<String, BackupRecord> records,
     Set<BackupFolder> missing,
   ) = await (
     listFolderNames(liveWorkshopPath),
-    listFolderNames(liveMyProjectsPath),
+    _myProjectsInventory(liveMyProjectsPath),
     listFolderNames(backupWorkshopPath(backupRoot)),
     listFolderNames(backupMyProjectsPath(backupRoot)),
-    folderVersions(liveMyProjectsPath),
     workshopVersions(acfPath),
     readBackupRecords(backupRoot),
     _missingFolders(liveWorkshopPath, liveMyProjectsPath, backupRoot),
   ).wait;
+  final Set<String> liveMyProjects = myProjects.names;
 
   // Comparing folders is the expensive half, so it runs on as little as
   // possible: only names both sides hold, and for Workshop only cards with no
-  // baseline yet, which empties out as records accumulate. An empty backup
+  // saved backup version yet. An empty backup
   // folder is judged without any of that, so it is caught even on a card whose
   // record would otherwise answer for it.
   final Map<String, BackupRecord> byId = <String, BackupRecord>{
@@ -98,7 +94,7 @@ Future<BackupScan> scanBackup({
     liveMyProjects,
     backupMyProjects,
   );
-  final Set<String> unseeded = <String>{
+  final Set<String> workshopToCompare = <String>{
     for (final String name in sharedWorkshop)
       if (byId[BackupCard(WallpaperLibrary.workshop, name).id]
               ?.backedUpVersion ==
@@ -152,7 +148,7 @@ Future<BackupScan> scanBackup({
       // rebuilt shader cache.
       recursive: false,
       shared: sharedWorkshop,
-      compare: unseeded,
+      compare: workshopToCompare,
     ),
     copyStandings(
       livePath: liveMyProjectsPath,
@@ -174,7 +170,7 @@ Future<BackupScan> scanBackup({
     backupWorkshop: backupWorkshop,
     backupMyProjects: backupMyProjects,
     liveWorkshopVersions: acf.byId,
-    liveMyProjectsVersions: myProjectsVersions,
+    liveMyProjectsVersions: myProjects.versions,
     workshopStanding: workshopStanding,
     myProjectsStanding: myProjectsStanding,
     records: records,
@@ -184,7 +180,6 @@ Future<BackupScan> scanBackup({
     reconcile: diff.reconcile,
     acfRead: acf.acfRead,
     missing: missing,
-    seeds: diff.seeds,
   );
 }
 
@@ -481,7 +476,9 @@ Future<Set<String>> listFolderNames(String? folderPath) async {
   final Directory dir = Directory(folderPath);
   if (!await dir.exists()) return names;
   await for (final FileSystemEntity entity in dir.list()) {
-    if (entity is Directory) names.add(path.basename(entity.path));
+    if (entity is! Directory) continue;
+    final String name = path.basename(entity.path);
+    if (!WallpaperFiles.isLibraryRepairStage(name)) names.add(name);
   }
   return names;
 }
@@ -520,33 +517,6 @@ Future<Map<String, BackupRecord>> readBackupRecords(String? backupRoot) async {
     debugPrint('${tr(AppI10n.errorReadBackupRecordsFailed)} $e');
     return <String, BackupRecord>{};
   }
-}
-
-/// Records the baselines a scan earned, keeping any dismissal already filed.
-///
-/// The only write this feature makes into the user's backup. Existing keys are
-/// folded to lowercase on the way through, so a file hand-edited with a
-/// different spelling converges rather than growing a second entry for one
-/// wallpaper.
-Future<void> seedBackupRecords(
-  String? backupRoot,
-  Map<String, String> seeds,
-) async {
-  if (backupRoot == null || seeds.isEmpty) return;
-  final Map<String, BackupRecord> existing = await readBackupRecords(
-    backupRoot,
-  );
-  final Map<String, BackupRecord> merged = <String, BackupRecord>{
-    for (final MapEntry<String, BackupRecord> entry in existing.entries)
-      entry.key.toLowerCase(): entry.value,
-  };
-  seeds.forEach((String id, String version) {
-    merged[id] = BackupRecord(
-      backedUpVersion: version,
-      dismissedVersion: merged[id]?.dismissedVersion,
-    );
-  });
-  await writeBackupRecords(backupRoot, merged);
 }
 
 /// Runs [work] over [names] under [root], keeping whatever comes back non-null.
@@ -602,6 +572,29 @@ Future<List<FileEntry>?> _files(
   return files;
 }
 
+/// Whether a backup folder holds any file that counts as wallpaper content.
+/// Stops on the first one and never stats file sizes: an uncompared Workshop
+/// backup only needs an empty/not-empty answer.
+Future<bool?> _hasComparableFile(
+  Directory folder, {
+  required bool recursive,
+}) async {
+  try {
+    await for (final FileSystemEntity entity in folder.list(
+      recursive: recursive,
+      followLinks: false,
+    )) {
+      if (entity is File &&
+          !isRebuiltShaderPath(path.relative(entity.path, from: folder.path))) {
+        return true;
+      }
+    }
+    return false;
+  } on FileSystemException {
+    return null;
+  }
+}
+
 /// Where each backup folder stands against its live counterpart.
 ///
 /// [shared] is every name both sides hold; [compare] is the subset worth a full
@@ -623,19 +616,18 @@ Future<Map<String, CopyStanding>> copyStandings({
     Directory backupFolder,
   ) async {
     final String name = path.basename(backupFolder.path);
+    if (!compare.contains(name)) {
+      final bool? hasContent = await _hasComparableFile(
+        backupFolder,
+        recursive: recursive,
+      );
+      return hasContent == false ? CopyStanding.empty : null;
+    }
     final List<FileEntry>? backup = await _files(
       backupFolder,
       recursive: recursive,
     );
     if (backup == null) return null;
-    if (!compare.contains(name)) {
-      // Not worth a full comparison, so the only question left is whether
-      // anything is in there at all.
-      return compareCopy(live: const <FileEntry>[], backup: backup) ==
-              CopyStanding.empty
-          ? CopyStanding.empty
-          : null;
-    }
     final List<FileEntry>? live = await _files(
       Directory(path.join(livePath, name)),
       recursive: recursive,
@@ -653,8 +645,8 @@ Future<void> writeBackupRecords(
   final Map<String, Map<String, String>> encoded =
       <String, Map<String, String>>{};
   // Sorted, and indented below, because this file sits in the user's backup
-  // where they read it by hand. It is also rewritten on every scan, so a stable
-  // order keeps one changed wallpaper from rewriting the whole thing.
+  // where they read it by hand. A stable order also keeps one changed wallpaper
+  // from rewriting the whole thing.
   final List<String> ids = records.keys.toList()..sort();
   for (final String id in ids) {
     final BackupRecord record = records[id]!;
@@ -669,8 +661,7 @@ Future<void> writeBackupRecords(
   // Written beside itself and renamed over, the way copyFileReplacing does it.
   // A plain write truncates first, so a run killed mid-write would leave a
   // short file that readBackupRecords parses as no records at all, silently
-  // discarding every baseline and every dismissal. This file is rewritten on
-  // every scan, so that window would be open constantly.
+  // discarding every baseline and every dismissal.
   final File file = File(path.join(backupRoot, backupRecordsName));
   final File part = File('${file.path}$backupRecordsPartSuffix');
   await part.writeAsString(_records.convert(encoded), flush: true);
@@ -714,11 +705,16 @@ Future<({Map<String, String> byId, bool acfRead})> workshopVersions(
 /// Folders with no top-level files are left out, so the differ sees them as
 /// uncomparable rather than as changed.
 Future<Map<String, String>> folderVersions(String? folderPath) async {
-  if (folderPath == null) return <String, String>{};
-  return _perFolder<String>(
-    folderPath,
-    await listFolderNames(folderPath),
-    _folderToken,
+  return (await _myProjectsInventory(folderPath)).versions;
+}
+
+Future<({Set<String> names, Map<String, String> versions})>
+_myProjectsInventory(String? folderPath) async {
+  final Set<String> names = await listFolderNames(folderPath);
+  if (folderPath == null) return (names: names, versions: <String, String>{});
+  return (
+    names: names,
+    versions: await _perFolder<String>(folderPath, names, _folderToken),
   );
 }
 

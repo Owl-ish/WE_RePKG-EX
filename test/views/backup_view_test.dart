@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
@@ -25,6 +26,7 @@ import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
+import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
 import 'package:we_repkg/widgets/selection_tint.dart';
@@ -47,13 +49,7 @@ BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
-}) => (
-  cards: cards,
-  reconcile: reconcile,
-  acfRead: true,
-  missing: missing,
-  seeds: const <String, String>{},
-);
+}) => (cards: cards, reconcile: reconcile, acfRead: true, missing: missing);
 
 void main() {
   setUp(() async {
@@ -286,6 +282,50 @@ void main() {
 
     expect(container.read(backupRootProvider), isNull);
     expect(fieldText(tester), isEmpty);
+  });
+
+  testWidgets('finishing a scan does not change a pill during build', (
+    WidgetTester tester,
+  ) async {
+    final Completer<BackupScan> scan = Completer<BackupScan>();
+    const BackupTile tile = (
+      card: BackupCard(WallpaperLibrary.workshop, 'safe'),
+      state: BackupState.synced,
+      face: null,
+    );
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        backupRootProvider.overrideWithValue(r'C:\backup'),
+        backupScanProvider.overrideWith((Ref ref) => scan.future),
+        backupTilesProvider.overrideWith((Ref ref) => <BackupTile>[tile]),
+        backupReconcileTilesProvider.overrideWith(
+          (Ref ref) => const <ReconcileTile>[],
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(backupStateFilterProvider);
+    scan.complete(
+      scanOf(
+        cards: <BackupCard, BackupState>{
+          const BackupCard(WallpaperLibrary.workshop, 'safe'):
+              BackupState.synced,
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: const Scaffold(body: BackupView()),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(container.read(backupStateFilterProvider).state, BackupState.synced);
   });
 
   group('with a root set', () {
@@ -811,6 +851,28 @@ void main() {
 
         expect(find.byType(BackupTileView), findsOneWidget);
         expect(find.text('fresh'), findsOneWidget);
+      });
+
+      testWidgets('the selected status border stays subtle', (tester) async {
+        await pumpPills(tester, tiles: three());
+
+        final Finder selected = find.ancestor(
+          of: find.text('${AppI10n.backupStateNotBackedUp} 1'),
+          matching: find.byType(CountPill),
+        );
+        final Container surface = tester
+            .widgetList<Container>(
+              find.descendant(of: selected, matching: find.byType(Container)),
+            )
+            .singleWhere(
+              (Container container) =>
+                  container.decoration is BoxDecoration &&
+                  (container.decoration! as BoxDecoration).borderRadius ==
+                      LayoutNums.pill,
+            );
+        final Border border =
+            (surface.decoration! as BoxDecoration).border! as Border;
+        expect(border.top.color.a, closeTo(.55, .001));
       });
 
       // On a library with nothing to back up that pill is dead, and opening on

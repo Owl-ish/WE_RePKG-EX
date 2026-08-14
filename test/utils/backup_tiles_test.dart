@@ -35,22 +35,19 @@ BackupTile tileOf(
   CardFace? face,
 }) => (card: BackupCard(library, name), state: state, face: face);
 
-/// Everything showing, which is what a test that is not about the pills wants.
-final Set<BackupState> allStates = BackupState.values.toSet();
-
 List<String> namesOf(List<BackupTile> tiles) =>
     tiles.map((BackupTile t) => t.card.name).toList();
 
 List<BackupTile> visible(
   List<BackupTile> tiles, {
-  Set<BackupState>? states,
+  BackupState state = BackupState.synced,
   String needle = '',
   WallpaperFilter? filter,
-  BackupSortType sort = BackupSortType.state,
+  BackupSortType sort = BackupSortType.name,
   bool ascending = false,
 }) => visibleBackupTiles(
   tiles: tiles,
-  states: states ?? allStates,
+  state: state,
   needle: needle,
   filter: filter ?? filterOf(),
   sort: sort,
@@ -67,20 +64,10 @@ void main() {
 
       final List<BackupTile> shown = visible(
         tiles,
-        states: <BackupState>{BackupState.vanished},
+        state: BackupState.vanished,
       );
 
       expect(namesOf(shown), <String>['gone']);
-    });
-
-    // Emptied on purpose. Showing everything instead would make the last click
-    // do the opposite of the five before it.
-    test('no pills lit shows nothing', () {
-      final List<BackupTile> shown = visible(<BackupTile>[
-        tileOf('safe'),
-      ], states: const <BackupState>{});
-
-      expect(shown, isEmpty);
     });
   });
 
@@ -147,12 +134,12 @@ void main() {
       ),
       tileOf(
         'alpha',
-        state: BackupState.vanished,
+        state: BackupState.synced,
         face: faceOf(modified: old),
       ),
     ];
 
-    test('by state puts the worst first', () {
+    test('the default order is by name', () {
       expect(namesOf(visible(tiles())), <String>['alpha', 'beta']);
     });
 
@@ -225,42 +212,6 @@ void main() {
         ],
       );
     });
-
-    // A reconcile tile can stand for a live copy in each library.
-    test('a reconcile tile sorts by the worst of its live states', () {
-      ReconcileTile entry(String name, Map<WallpaperLibrary, BackupState> s) =>
-          (
-            entry: ReconcileEntry(
-              name: name,
-              states: s,
-              backupWorkshop: true,
-              backupMyProjects: false,
-            ),
-            face: null,
-          );
-      final List<ReconcileTile> tiles = <ReconcileTile>[
-        entry('safe', const <WallpaperLibrary, BackupState>{
-          WallpaperLibrary.myProjects: BackupState.synced,
-        }),
-        entry('exposed', const <WallpaperLibrary, BackupState>{
-          WallpaperLibrary.myProjects: BackupState.synced,
-          WallpaperLibrary.workshop: BackupState.notBackedUp,
-        }),
-      ];
-
-      final List<ReconcileTile> shown = visibleReconcileTiles(
-        tiles: tiles,
-        needle: '',
-        filter: filterOf(),
-        sort: BackupSortType.state,
-        ascending: false,
-      );
-
-      expect(shown.map((ReconcileTile t) => t.entry.name), <String>[
-        'exposed',
-        'safe',
-      ]);
-    });
   });
 
   group('reconcile tiles', () {
@@ -286,7 +237,7 @@ void main() {
         tiles: tiles,
         needle: 'neon',
         filter: filterOf(),
-        sort: BackupSortType.state,
+        sort: BackupSortType.name,
         ascending: false,
       );
 

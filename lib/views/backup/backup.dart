@@ -349,7 +349,7 @@ class _Loaded extends ConsumerWidget {
                   colour: looks[state]!.colour,
                   label: tr(looks[state]!.label),
                   count: counts[state]!,
-                  on: !shown.reconcile && shown.states.contains(state),
+                  on: !shown.reconcile && shown.state == state,
                   // Synced is the one state with nothing to come back to, and
                   // on a looked-after library it is most of the grid.
                   nags: state != BackupState.synced,

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
 
@@ -53,6 +54,7 @@ void main() {
       final Directory lib = library('431960');
       wallpaper(lib, '793602574');
       wallpaper(lib, '833227004');
+      wallpaper(lib, '${WallpaperFiles.rescueStagePrefix}123-abc');
       File(p.join(lib.path, 'readme.txt')).writeAsStringSync('x');
 
       expect(await listFolderNames(lib.path), <String>{
@@ -209,6 +211,20 @@ void main() {
       expect(standings['alpha'], CopyStanding.empty);
     });
 
+    test('an uncompared shader-only folder is still empty', () async {
+      final Directory backupFolder = pair('alpha');
+      File(p.join(backupFolder.path, 'shaders', 'blobsSM40', 'cache.bin'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('rebuilt');
+
+      final Map<String, CopyStanding> standings = await run(
+        shared: <String>{'alpha'},
+        compare: const <String>{},
+      );
+
+      expect(standings['alpha'], CopyStanding.empty);
+    });
+
     // Outside compare, a folder with content is left unjudged rather than
     // guessed at, so the record can answer for it.
     test('an uncompared folder with content gets no verdict', () async {
@@ -216,6 +232,13 @@ void main() {
 
       expect(
         await run(shared: <String>{'alpha'}, compare: const <String>{}),
+        isEmpty,
+      );
+    });
+
+    test('an uncompared folder that disappears gets no verdict', () async {
+      expect(
+        await run(shared: <String>{'gone'}, compare: const <String>{}),
         isEmpty,
       );
     });
@@ -536,93 +559,6 @@ void main() {
 
       expect(folders.live, liveM);
       expect(folders.backup, isNull);
-    });
-  });
-
-  group('seedBackupRecords', () {
-    test('records the baseline a scan earned', () async {
-      await seedBackupRecords(tmp.path, <String, String>{
-        'workshop/793602574': 'manifest-1',
-      });
-
-      expect(
-        (await readBackupRecords(
-          tmp.path,
-        ))['workshop/793602574']!.backedUpVersion,
-        'manifest-1',
-      );
-    });
-
-    // Seeding is not the only thing in the file, and it must not wipe a
-    // dismissal the user filed earlier.
-    test('an existing dismissal survives', () async {
-      await writeBackupRecords(tmp.path, <String, BackupRecord>{
-        'workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
-      });
-
-      await seedBackupRecords(tmp.path, <String, String>{
-        'workshop/793602574': 'manifest-1',
-      });
-
-      final BackupRecord record = (await readBackupRecords(
-        tmp.path,
-      ))['workshop/793602574']!;
-      expect(record.backedUpVersion, 'manifest-1');
-      expect(record.dismissedVersion, 'waved-off');
-    });
-
-    // A hand-edited file can hold any spelling. Merging without folding it
-    // would leave one wallpaper with two entries and no way to say which wins.
-    test('a differently cased key is folded rather than duplicated', () async {
-      await writeBackupRecords(tmp.path, <String, BackupRecord>{
-        'Workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
-      });
-
-      await seedBackupRecords(tmp.path, <String, String>{
-        'workshop/793602574': 'manifest-1',
-      });
-
-      final Map<String, BackupRecord> records = await readBackupRecords(
-        tmp.path,
-      );
-      expect(records.keys, <String>{'workshop/793602574'});
-      expect(records['workshop/793602574']!.dismissedVersion, 'waved-off');
-    });
-
-    // Not merely "reads back empty": a backup that has earned nothing should
-    // not gain a file at its root at all.
-    test('nothing to seed writes no file', () async {
-      await seedBackupRecords(tmp.path, const <String, String>{});
-      await seedBackupRecords(null, <String, String>{'workshop/1': 'manifest'});
-
-      expect(File(p.join(tmp.path, backupRecordsName)).existsSync(), isFalse);
-    });
-
-    // Truncate-then-write would leave a short file if the app died mid-write,
-    // and a short file reads as no records at all: every baseline and every
-    // dismissal silently gone. This file is rewritten on every scan.
-    test('the file is renamed into place, never truncated in place', () async {
-      await writeBackupRecords(tmp.path, <String, BackupRecord>{
-        'workshop/793602574': const BackupRecord(dismissedVersion: 'waved-off'),
-      });
-
-      await seedBackupRecords(tmp.path, <String, String>{
-        'workshop/793602574': 'manifest-1',
-      });
-
-      expect(
-        File(
-          '${p.join(tmp.path, backupRecordsName)}$backupRecordsPartSuffix',
-        ).existsSync(),
-        isFalse,
-        reason: 'the part file is renamed, not left behind',
-      );
-      expect(
-        (await readBackupRecords(
-          tmp.path,
-        ))['workshop/793602574']?.dismissedVersion,
-        'waved-off',
-      );
     });
   });
 
@@ -1053,7 +989,6 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.updateAvailable,
       );
-      expect(result.seeds, isEmpty, reason: 'myprojects records no baseline');
     });
 
     // The other half: a copy that still matches is left alone, and the copy's
@@ -1124,36 +1059,37 @@ void main() {
       );
     });
 
-    // Seeding is what gives a hand-made Workshop backup a baseline, and the
-    // manifest is what must land there: recording the fingerprint instead would
-    // leave every Workshop card comparing a fingerprint against a manifest and
-    // reading as out of date for good.
-    test('a matching workshop backup seeds its manifest', () async {
-      final Directory live = wallpaper(liveWorkshop, '793602574');
-      final Directory backup = wallpaper(backupWorkshop(), '793602574');
-      for (final Directory folder in <Directory>[live, backup]) {
-        File(p.join(folder.path, 'project.json')).writeAsStringSync('{}');
-      }
-      final File acfFile = File(p.join(tmp.path, 'appworkshop_431960.acf'))
-        ..writeAsStringSync(acf);
+    test(
+      'a matching workshop backup is synced without writing state',
+      () async {
+        final Directory live = wallpaper(liveWorkshop, '793602574');
+        final Directory backup = wallpaper(backupWorkshop(), '793602574');
+        for (final Directory folder in <Directory>[live, backup]) {
+          File(p.join(folder.path, 'project.json')).writeAsStringSync('{}');
+        }
+        final File acfFile = File(p.join(tmp.path, 'appworkshop_431960.acf'))
+          ..writeAsStringSync(acf);
 
-      final BackupScan result = await scan(
-        root: backupRoot.path,
-        acfPath: acfFile.path,
-      );
+        final BackupScan result = await scan(
+          root: backupRoot.path,
+          acfPath: acfFile.path,
+        );
 
-      expect(
-        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
-        BackupState.synced,
-      );
-      expect(result.seeds, <String, String>{
-        'workshop/793602574': '6791066680065157913',
-      });
-    });
+        expect(
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '793602574',
+          )],
+          BackupState.synced,
+        );
+        expect(
+          File(p.join(backupRoot.path, backupRecordsName)).existsSync(),
+          isFalse,
+        );
+      },
+    );
 
-    // Not matching writes nothing, so the card stays on the fingerprint path
-    // and fixes itself the moment a real backup lands.
-    test('a workshop backup that differs reports rather than seeds', () async {
+    test('a workshop backup that differs reports an update', () async {
       File(
         p.join(wallpaper(liveWorkshop, '793602574').path, 'project.json'),
       ).writeAsStringSync('{"republished":true}');
@@ -1172,7 +1108,6 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
         BackupState.updateAvailable,
       );
-      expect(result.seeds, isEmpty);
     });
 
     // myprojects folder names come from wallpaper titles, so they are not all
@@ -1228,7 +1163,6 @@ void main() {
         BackupState.synced,
         reason: 'the manifest matches the baseline, whatever the folders hold',
       );
-      expect(result.seeds, isEmpty);
     });
 
     // False is what puts the banner on the tab. Without the flag an unreadable

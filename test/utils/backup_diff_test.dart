@@ -599,12 +599,12 @@ void main() {
     });
   });
 
-  // Steam's manifest names the live version only, so a hand-made backup has no
-  // baseline until one comparison earns it.
-  group('seeding a workshop baseline', () {
+  // Steam's manifest names the live version only, so a hand-made backup with
+  // no saved backup operation is compared directly.
+  group('workshop without a saved baseline', () {
     const String n = '793602574';
 
-    BackupDiffResult seeded({
+    BackupDiffResult workshopResult({
       Map<String, CopyStanding> standings = nothingCompared,
       Map<String, String> versions = const <String, String>{n: 'manifest-1'},
       Map<String, BackupRecord> records = const <String, BackupRecord>{},
@@ -619,40 +619,37 @@ void main() {
     // The manifest, never a digest of the folder: recording one would leave
     // every later scan comparing a digest against a manifest, so no card would
     // ever match again.
-    test('a covering backup records the live manifest', () {
-      final BackupDiffResult result = seeded(
+    test('a covering backup is synced', () {
+      final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.covers),
       );
 
       expect(result.cards[workshop(n)], BackupState.synced);
-      expect(result.seeds, <String, String>{'workshop/$n': 'manifest-1'});
     });
 
-    test('a backup behind live reports it and records nothing', () {
-      final BackupDiffResult result = seeded(
+    test('a backup behind live reports it', () {
+      final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.behind),
       );
 
       expect(result.cards[workshop(n)], BackupState.updateAvailable);
-      expect(result.seeds, isEmpty);
     });
 
     // A folder dropped in by hand has no ACF entry and never will, so flagging
     // it leaves a card nagging forever with no version to dismiss.
-    test('a wallpaper with no manifest is left alone and not seeded', () {
-      final BackupDiffResult result = seeded(
+    test('a wallpaper with no manifest is left alone', () {
+      final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.behind),
         versions: const <String, String>{},
       );
 
       expect(result.cards[workshop(n)], BackupState.synced);
-      expect(result.seeds, isEmpty);
     });
 
     // Once the baseline is there the manifests answer the question, which is
     // what lets the scan skip comparing the folders at all.
     test('a recorded baseline wins over the comparison', () {
-      final BackupDiffResult result = seeded(
+      final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.behind),
         records: const <String, BackupRecord>{
           'workshop/$n': BackupRecord(backedUpVersion: 'manifest-1'),
@@ -660,22 +657,20 @@ void main() {
       );
 
       expect(result.cards[workshop(n)], BackupState.synced);
-      expect(result.seeds, isEmpty);
     });
 
     // Nothing compared is not the same as compared and matched.
-    test('an uncompared card is left alone and not seeded', () {
-      final BackupDiffResult result = seeded();
+    test('an uncompared card is left alone', () {
+      final BackupDiffResult result = workshopResult();
 
       expect(result.cards[workshop(n)], BackupState.synced);
-      expect(result.seeds, isEmpty);
     });
 
     // A cancelled copy leaves the folder there and nothing in it. The record
-    // must not answer for it either, or a seeded card could be emptied and go
+    // must not answer for it either, or a recorded card could be emptied and go
     // on reading as backed up.
     test('an empty backup folder beats even a recorded baseline', () {
-      final BackupDiffResult result = seeded(
+      final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.empty),
         records: const <String, BackupRecord>{
           'workshop/$n': BackupRecord(backedUpVersion: 'manifest-1'),
@@ -683,7 +678,6 @@ void main() {
       );
 
       expect(result.cards[workshop(n)], BackupState.emptyBackup);
-      expect(result.seeds, isEmpty);
     });
   });
 
@@ -706,13 +700,12 @@ void main() {
       records: records,
     );
 
-    test('a covering backup is synced and earns no baseline', () {
+    test('a covering backup is synced', () {
       final BackupDiffResult result = compared(
         standings: standing(n, CopyStanding.covers),
       );
 
       expect(result.cards[myProjects(n)], BackupState.synced);
-      expect(result.seeds, isEmpty);
     });
 
     test('a backup behind live is an update, with no record needed', () {
@@ -721,7 +714,6 @@ void main() {
       );
 
       expect(result.cards[myProjects(n)], BackupState.updateAvailable);
-      expect(result.seeds, isEmpty);
     });
 
     test('an empty backup folder is not synced', () {
@@ -774,8 +766,8 @@ void main() {
   });
 
   // A wallpaper waiting in reconcile must not go quiet: its live copy still has
-  // a state, and that state can still earn a baseline.
-  test('a reconcile entry seeds its live copy too', () {
+  // a state.
+  test('a reconcile entry keeps its live state', () {
     const String n = '793602574';
     final BackupDiffResult result = diff(
       liveWorkshop: const <String>{n},
@@ -790,7 +782,6 @@ void main() {
       result.reconcile.single.states[WallpaperLibrary.workshop],
       BackupState.synced,
     );
-    expect(result.seeds, <String, String>{'workshop/$n': 'manifest-1'});
   });
 
   group('a name live in both libraries', () {

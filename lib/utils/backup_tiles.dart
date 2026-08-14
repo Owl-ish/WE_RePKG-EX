@@ -20,7 +20,7 @@ String reconcileTileId(String name) => 'reconcile/${name.toLowerCase()}';
 /// button leave, in the chosen order.
 List<BackupTile> visibleBackupTiles({
   required List<BackupTile> tiles,
-  required Set<BackupState> states,
+  required BackupState state,
   required String needle,
   required WallpaperFilter filter,
   required BackupSortType sort,
@@ -28,7 +28,7 @@ List<BackupTile> visibleBackupTiles({
 }) {
   final List<BackupTile> shown = <BackupTile>[
     for (final BackupTile tile in tiles)
-      if (states.contains(tile.state) &&
+      if (tile.state == state &&
           _passes(
             face: tile.face,
             name: tile.card.name,
@@ -41,8 +41,6 @@ List<BackupTile> visibleBackupTiles({
     (BackupTile a, BackupTile b) => _compare(
       sort: sort,
       ascending: ascending,
-      severityA: backupSeverity[a.state]!,
-      severityB: backupSeverity[b.state]!,
       a: (name: a.card.name, library: a.card.library.key, face: a.face),
       b: (name: b.card.name, library: b.card.library.key, face: b.face),
     ),
@@ -73,20 +71,12 @@ List<ReconcileTile> visibleReconcileTiles({
     (ReconcileTile a, ReconcileTile b) => _compare(
       sort: sort,
       ascending: ascending,
-      severityA: _worst(a.entry),
-      severityB: _worst(b.entry),
       a: (name: a.entry.name, library: '', face: a.face),
       b: (name: b.entry.name, library: '', face: b.face),
     ),
   );
   return shown;
 }
-
-/// Worst state among a name's live copies, so state order can place a tile that
-/// stands for two of them.
-int _worst(ReconcileEntry entry) => entry.states.values
-    .map((BackupState state) => backupSeverity[state]!)
-    .fold(backupStateOrder.length, (int worst, int s) => s < worst ? s : worst);
 
 bool _passes({
   required CardFace? face,
@@ -108,21 +98,18 @@ bool _passes({
 
 typedef _Sortable = ({String name, String library, CardFace? face});
 
-/// Each order has a natural direction, worst state first, newest first, names
-/// from A, and the toggle reverses it. Ties always break on name then library,
+/// Each order has a natural direction: newest first or names from A, and the
+/// toggle reverses it. Ties always break on name then library,
 /// whichever way the list runs, so it holds still: shift-click and the marquee
 /// index into these positions.
 int _compare({
   required BackupSortType sort,
   required bool ascending,
-  required int severityA,
-  required int severityB,
   required _Sortable a,
   required _Sortable b,
 }) {
   final int byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
   final int first = switch (sort) {
-    BackupSortType.state => severityA - severityB,
     BackupSortType.name => byName,
     BackupSortType.date => _byDate(a.face?.modified, b.face?.modified),
   };

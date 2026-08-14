@@ -1,7 +1,5 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/models/enums.dart';
@@ -51,18 +49,6 @@ Future<BackupScan> backupScan(Ref ref) async {
     progress.value = null;
     rethrow;
   }
-  // A Workshop card whose backup already matches live earns its baseline here.
-  // Failing to write it must never cost the user the scan: a read-only backup
-  // drive would otherwise replace the vanished list with an error string, and
-  // nothing in this feature is allowed to weaken that tier. A lost baseline is
-  // earned again on the next scan.
-  try {
-    await seedBackupRecords(backupRoot, scan.seeds);
-  } catch (e) {
-    debugPrint('${tr(AppI10n.errorSeedBackupRecordsFailed)} $e');
-  }
-  // Cleared last, or the tab drops back to "reading" with a full bar behind it
-  // while the records are written.
   progress.value = null;
   return scan;
 }
@@ -133,8 +119,8 @@ class BackupSearch extends _$BackupSearch {
   void update(String text) => state = text;
 }
 
-/// Which state pills are lit, and whether the reconcile pill has taken over.
-typedef BackupShown = ({Set<BackupState> states, bool reconcile});
+/// Which state pill is active, and whether the reconcile pill has taken over.
+typedef BackupShown = ({BackupState state, bool reconcile});
 
 /// Session state rather than a setting: the pills are how the tab is being
 /// looked at now, and returning to a grid narrowed by a pill switched off days
@@ -146,28 +132,21 @@ typedef BackupShown = ({Set<BackupState> states, bool reconcile});
 @Riverpod(keepAlive: true)
 class BackupStateFilter extends _$BackupStateFilter {
   static const BackupShown _opening = (
-    states: <BackupState>{BackupState.notBackedUp},
+    state: BackupState.notBackedUp,
     reconcile: false,
   );
+  BackupShown _shown = _opening;
 
   @override
   BackupShown build() {
-    // The counts arrive after this is first read, and again on every rescan.
-    ref.listen(backupScanProvider, (
-      AsyncValue<BackupScan>? previous,
-      AsyncValue<BackupScan> next,
-    ) {
-      if (next case AsyncData<BackupScan>(:final BackupScan value)) {
-        state = _holding(state, value);
-      }
-    });
-    return switch (ref.read(backupScanProvider)) {
-      AsyncData<BackupScan>(:final BackupScan value) => _holding(
-        _opening,
-        value,
-      ),
-      _ => _opening,
+    // Returning the scan-adjusted selection lets Riverpod publish it after the
+    // dependency rebuild. A listener that assigned state here could fire while
+    // Flutter was building the Backup toolbar.
+    _shown = switch (ref.watch(backupScanProvider)) {
+      AsyncData<BackupScan>(:final BackupScan value) => _holding(_shown, value),
+      _ => _shown,
     };
+    return _shown;
   }
 
   /// [shown], or the worst state with anything in it when [shown] has nothing.
@@ -178,32 +157,42 @@ class BackupStateFilter extends _$BackupStateFilter {
   static BackupShown _holding(BackupShown shown, BackupScan scan) {
     if (shown.reconcile) return shown;
     final Map<BackupState, int> counts = countByState(scan.cards.values);
-    if (shown.states.any((BackupState state) => counts[state]! > 0)) {
+    if (counts[shown.state]! > 0) {
       return shown;
     }
-    return (states: <BackupState>{worstBackupState(counts)}, reconcile: false);
+    return (state: worstBackupState(counts), reconcile: false);
   }
 
   /// One at a time, the way tabs behave: the grid shows the state picked and
   /// nothing else, and is never left showing everything or nothing.
-  void show(BackupState state) =>
-      this.state = (states: <BackupState>{state}, reconcile: false);
+  void show(BackupState state) {
+    _shown = (state: state, reconcile: false);
+    this.state = _shown;
+  }
 
   /// Swaps the grid over. The state pills are left as they were because picking
   /// one is what takes the grid back.
-  void showReconcile() => state = (states: state.states, reconcile: true);
+  void showReconcile() {
+    _shown = (state: state.state, reconcile: true);
+    state = _shown;
+  }
 }
 
 @Riverpod(keepAlive: true)
 class BackupSortOrder extends _$BackupSortOrder {
   @override
-  BackupSortType build() =>
-      StorageUtil.getEnum(AppKeys.backupSortType, BackupSortType.values) ??
-      BackupSortType.values.first;
+  BackupSortType build() => StorageUtil.getInt(AppKeys.backupSortType) == 2
+      ? BackupSortType.date
+      : BackupSortType.name;
 
   void update(BackupSortType type) async {
     state = type;
-    await StorageUtil.setInt(AppKeys.backupSortType, type.index);
+    // Keep the old stored values: 1 was name and 2 was date. Old state (0)
+    // naturally migrates to name when read above.
+    await StorageUtil.setInt(
+      AppKeys.backupSortType,
+      type == BackupSortType.date ? 2 : 1,
+    );
   }
 }
 
@@ -224,7 +213,7 @@ class BackupSortAscending extends _$BackupSortAscending {
 Future<List<BackupTile>> backupVisibleTiles(Ref ref) async {
   return visibleBackupTiles(
     tiles: await ref.watch(backupTilesProvider.future),
-    states: ref.watch(backupStateFilterProvider).states,
+    state: ref.watch(backupStateFilterProvider).state,
     needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
     filter: ref.watch(filterStateProvider),
     sort: ref.watch(backupSortOrderProvider),
