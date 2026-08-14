@@ -60,6 +60,41 @@ void main() {
     expect(hit(const Rect.fromLTWH(119, 30, 2, 20)), <int>{0});
   });
 
+  group('hitsTile', () {
+    bool at(Offset point, {int count = 9}) => hitsTile(
+      point,
+      origin: origin,
+      columns: 3,
+      tile: tile,
+      spacing: spacing,
+      count: count,
+    );
+
+    test('a click on a tile is not empty space', () {
+      expect(at(const Offset(60, 60)), isTrue);
+    });
+
+    test('a click past the last row is empty space', () {
+      expect(at(const Offset(60, 900)), isFalse);
+      // Seven wallpapers, so the last row holds one and the rest of it is bare.
+      expect(at(const Offset(180, 300), count: 7), isFalse);
+    });
+
+    test('a click left of the first column is empty space', () {
+      expect(at(const Offset(2, 60)), isFalse);
+    });
+
+    // Treating the seam as empty space threw the whole selection away.
+    test('a click in the seam between two tiles counts as a tile', () {
+      expect(at(const Offset(125, 60)), isTrue);
+      expect(at(const Offset(60, 115)), isTrue);
+    });
+
+    test('an empty grid is empty space', () {
+      expect(at(const Offset(60, 60), count: 0), isFalse);
+    });
+  });
+
   group('cellOrigin', () {
     Offset at(int index) =>
         cellOrigin(index, columns: 4, tile: 100, spacing: 8);

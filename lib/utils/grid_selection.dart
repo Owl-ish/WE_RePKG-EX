@@ -48,6 +48,31 @@ Set<int> coveredTiles(
   return hit;
 }
 
+/// Whether [point] lands on a tile, or in the seam beside one, in grid
+/// coordinates.
+///
+/// The seams count, unlike in [coveredTiles]: a near miss between two tiles is
+/// not somewhere the user aimed.
+bool hitsTile(
+  Offset point, {
+  required Offset origin,
+  required int columns,
+  required double tile,
+  required double spacing,
+  required int count,
+}) {
+  // Half the gap, and a pixel over so the two edges meet rather than abut.
+  final double reach = (spacing / 2) + 1;
+  return coveredTiles(
+    Rect.fromLTWH(point.dx - reach, point.dy - reach, reach * 2, reach * 2),
+    origin: origin,
+    columns: columns,
+    tile: tile,
+    spacing: spacing,
+    count: count,
+  ).isNotEmpty;
+}
+
 /// The inclusive range of tiles a shift-click covers, for `sublist(begin, end + 1)`.
 ///
 /// [anchor] is where the range starts, taken from the last ctrl-click or the

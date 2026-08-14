@@ -7,15 +7,15 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/hover_hint.dart';
-import 'package:we_repkg/views/content/image.dart';
+import 'package:we_repkg/widgets/image_view.dart';
+import 'package:we_repkg/widgets/selection_tint.dart';
 import 'package:we_repkg/views/content/title.dart';
-
-import 'wallpaper_checkbox.dart';
 
 class ImageItem extends ConsumerStatefulWidget {
   const ImageItem({
@@ -35,10 +35,7 @@ class ImageItem extends ConsumerStatefulWidget {
 
 class _ImageItemState extends ConsumerState<ImageItem>
     with SingleTickerProviderStateMixin {
-  /// The last plain left click, so a double click can be told from two separate
-  /// clicks. See [_onPointerDown].
-  String? _lastClickId;
-  DateTime? _lastClickAt;
+  final DoubleClickGuard _clicks = DoubleClickGuard();
   AnimationController? _hoverController;
   Animation<double>? _hoverOpacity;
   Animation<double>? _hoverScale;
@@ -124,23 +121,9 @@ class _ImageItemState extends ConsumerState<ImageItem>
           .toSet();
       ref.read(checkedIdsProvider.notifier).setAll(ids, true);
     } else {
-      // Plain click: this one only. Ctrl adds, Shift extends.
-      //
-      // Both clicks of a double click arrive here, because Listener sits
-      // outside the gesture arena and never loses to the double tap
-      // recogniser. setExclusive clears the selection when the target is already
-      // the only one selected, so running it twice would select on the way down
-      // and deselect on the way back up, leaving the detail dialog open over a
-      // tile that just blanked its checkbox.
-      final DateTime now = DateTime.now();
-      final bool isSecondClick =
-          _lastClickId == wallpaper.id &&
-          _lastClickAt != null &&
-          now.difference(_lastClickAt!) < kDoubleTapTimeout;
-      _lastClickId = wallpaper.id;
-      _lastClickAt = now;
-
-      if (!isSecondClick) {
+      // Plain click: this one only. Ctrl adds, Shift extends. The guard is what
+      // keeps the second click of a double click from undoing the first.
+      if (!_clicks.isSecondClick(wallpaper.id)) {
         ref.read(checkedIdsProvider.notifier).setExclusive(wallpaper.id);
       }
       ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
@@ -191,23 +174,12 @@ class _ImageItemState extends ConsumerState<ImageItem>
                 children: [
                   ImageView(
                     size: widget.width,
-                    wallpaper: widget.wallpaper,
+                    previews: widget.wallpaper.previews,
                     scale: _hoverScale,
                   ),
                   if (_hoverHintBuilt) HoverHint(opacity: _hoverOpacity!),
                   ImageTitle(title: widget.wallpaper.title),
-                  if (_hoverHintBuilt || checked)
-                    IgnorePointer(
-                      // Opacity does not affect hit testing. Once the pointer
-                      // exits, the fading checkbox must not intercept a click.
-                      ignoring: !_isHovered && !checked,
-                      child: WallpaperCheckbox(
-                        wallpaper: widget.wallpaper,
-                        hoverOpacity:
-                            _hoverOpacity ??
-                            const AlwaysStoppedAnimation<double>(0),
-                      ),
-                    ),
+                  if (checked) const SelectionTint(),
                 ],
               ),
             ),

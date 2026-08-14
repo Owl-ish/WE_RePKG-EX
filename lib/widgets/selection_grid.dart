@@ -32,6 +32,10 @@ class SelectionGrid extends StatefulWidget {
     required this.itemBuilder,
     required this.currentSelection,
     required this.onSelectionChanged,
+    this.padding = const EdgeInsets.symmetric(
+      horizontal: LayoutNums.edgeInset,
+      vertical: LayoutNums.contentGap,
+    ),
   });
 
   /// Names this grid's stored scroll position, and labels its controller.
@@ -50,9 +54,15 @@ class SelectionGrid extends StatefulWidget {
   /// the selection and rebuild every tile on every write.
   final Set<String> Function() currentSelection;
 
-  /// Called after the frame, so the last write of a drag can arrive once this
-  /// grid has gone. Guard it on the caller's own lifetime, not the grid's.
+  /// A drag writes after the frame, so its last write can arrive once this grid
+  /// has gone; a click writes as it happens. Guard it on the caller's own
+  /// lifetime, not the grid's.
   final void Function(Set<String> ids) onSelectionChanged;
+
+  /// Inset around the tiles. The marquee measures from here, so a caller that
+  /// is already inside a padded area passes its own rather than being indented
+  /// twice.
+  final EdgeInsets padding;
 
   @override
   State<SelectionGrid> createState() => _SelectionGridState();
@@ -71,10 +81,15 @@ class _SelectionGridState extends State<SelectionGrid>
 
   Offset? _dragFrom;
 
+  /// Where the last press landed, in grid coordinates. See [_clearIfEmpty].
+  Offset? _tapAt;
+
   /// Viewport coordinates, so autoscroll can redraw without the mouse moving.
   Offset _dragPointer = Offset.zero;
 
-  Set<String> _dragIds = <String>{};
+  /// Null until the drag has worked a rectangle out, so a drag that covers
+  /// nothing still writes once and puts the selection down.
+  Set<String>? _dragIds;
 
   /// Selection the drag started from, kept when ctrl is held so a marquee adds
   /// rather than replaces. A click that twitches a pixel starts a drag, so
@@ -159,13 +174,13 @@ class _SelectionGridState extends State<SelectionGrid>
 
     final Set<String> ids = coveredTiles(
       box,
-      origin: const Offset(LayoutNums.edgeInset, LayoutNums.contentGap),
+      origin: widget.padding.topLeft,
       columns: _columns,
       tile: _tileExtent,
       spacing: _spacing,
       count: widget.itemCount,
     ).map(widget.idAt).toSet();
-    if (setEquals(ids, _dragIds)) return;
+    if (_dragIds != null && setEquals(ids, _dragIds)) return;
     _dragIds = ids;
     _dragWanted = _dragBaseline.isEmpty
         ? ids
@@ -181,6 +196,31 @@ class _SelectionGridState extends State<SelectionGrid>
       _dragWriteQueued = false;
       widget.onSelectionChanged(_dragWanted);
     });
+  }
+
+  /// Puts the selection down when a click lands past the tiles.
+  ///
+  /// Where the pointer went down decides, not which widget won the gesture: a
+  /// tile's recogniser can hand the tap back while the tree is coming apart
+  /// under it, and clearing on that would wipe the selection on a rebuild.
+  void _clearIfEmpty() {
+    final Offset? at = _tapAt;
+    _tapAt = null;
+    // A modifier is held to build a selection up, so a miss with one down is a
+    // miss, not an instruction to put everything down.
+    if (isCtrlPressed || isShiftPressed) return;
+    if (at == null ||
+        hitsTile(
+          at,
+          origin: widget.padding.topLeft,
+          columns: _columns,
+          tile: _tileExtent,
+          spacing: _spacing,
+          count: widget.itemCount,
+        )) {
+      return;
+    }
+    widget.onSelectionChanged(const <String>{});
   }
 
   /// Drag near an edge and the grid keeps scrolling, faster the closer you get,
@@ -227,7 +267,7 @@ class _SelectionGridState extends State<SelectionGrid>
     return LayoutBuilder(
       builder: (context, constraints) {
         final double gridWidth =
-            (constraints.maxWidth - (LayoutNums.edgeInset * 2)).clamp(
+            (constraints.maxWidth - widget.padding.horizontal).clamp(
               0,
               double.infinity,
             );
@@ -255,6 +295,9 @@ class _SelectionGridState extends State<SelectionGrid>
             // movement.
             GestureDetector(
               behavior: HitTestBehavior.translucent,
+              onTapDown: (d) => _tapAt = _toGrid(d.localPosition),
+              onTap: _clearIfEmpty,
+              onTapCancel: () => _tapAt = null,
               // Anchor the box where the button went down, not where the pan
               // won the arena, which on a fast drag is a tile or two away.
               dragStartBehavior: DragStartBehavior.down,
@@ -263,7 +306,7 @@ class _SelectionGridState extends State<SelectionGrid>
                 _dragFrom = _toGrid(d.localPosition);
                 // Cleared per drag, or repeating a rectangle matches the last
                 // drag's set and writes nothing.
-                _dragIds = <String>{};
+                _dragIds = null;
                 _dragBaseline = isCtrlPressed
                     ? widget.currentSelection()
                     : <String>{};
@@ -282,10 +325,7 @@ class _SelectionGridState extends State<SelectionGrid>
                 key: PageStorageKey<String>(widget.id),
                 controller: _scrollController,
                 itemCount: widget.itemCount,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: LayoutNums.edgeInset,
-                  vertical: LayoutNums.contentGap,
-                ),
+                padding: widget.padding,
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   crossAxisSpacing: _spacing,
                   mainAxisSpacing: _spacing,
