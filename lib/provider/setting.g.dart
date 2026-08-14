@@ -248,7 +248,7 @@ final class WallpaperSortTypeProvider
   }
 }
 
-String _$wallpaperSortTypeHash() => r'0158f9e868fae1a4f737672c495a3454013b653c';
+String _$wallpaperSortTypeHash() => r'a8f2c8319aaf8fdeb7b8a2f1b0d4e8d9dafe9eb6';
 
 abstract class _$WallpaperSortType extends $Notifier<SortType> {
   SortType build();

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 
 /// A labelled slider over a whole-number setting, with its current value shown
 /// beside the title and an explanatory line underneath.

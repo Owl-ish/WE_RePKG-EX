@@ -17,6 +17,13 @@ import 'package:we_repkg/widgets/smooth_wheel_scroll.dart';
 /// own against the same cells.
 typedef GridGeometry = ({int columns, double tile, double spacing});
 
+/// One diagonal of the entrance: when it runs, and where its tiles come from.
+typedef _Wave = ({
+  CurvedAnimation t,
+  Animation<double> scale,
+  Animation<Offset> position,
+});
+
 /// A scrolling grid of equal square tiles that can be selected by dragging a box
 /// over it.
 ///
@@ -36,6 +43,8 @@ class SelectionGrid extends StatefulWidget {
       horizontal: LayoutNums.edgeInset,
       vertical: LayoutNums.contentGap,
     ),
+    this.entranceToken = 0,
+    this.entranceOnMount = true,
   });
 
   /// Names this grid's stored scroll position, and labels its controller.
@@ -63,6 +72,14 @@ class SelectionGrid extends StatefulWidget {
   /// is already inside a padded area passes its own rather than being indented
   /// twice.
   final EdgeInsets padding;
+
+  /// Change this to play the entrance again on a grid that is already up.
+  final int entranceToken;
+
+  /// Whether appearing is itself worth an entrance. Off for a caller that
+  /// leaves and comes back to content that has not changed: the tiles arriving
+  /// again would say something happened when nothing did.
+  final bool entranceOnMount;
 
   @override
   State<SelectionGrid> createState() => _SelectionGridState();
@@ -119,22 +136,248 @@ class _SelectionGridState extends State<SelectionGrid>
   static const double _spacing = 8;
   static const double _maxExtent = 180;
 
+  /// Tiles arrive in diagonal waves rather than all at once.
+  late final AnimationController _entrance;
+  bool _entranceDone = false;
+  int _entranceRun = 0;
+
+  static const Duration _entranceDuration = Duration(milliseconds: 900);
+  static const int _waves = 12;
+
+  /// Where each tile sat before the list last changed, and the reflow that
+  /// carries it to where it sits now. Empty except while one is running.
+  late final AnimationController _reflow;
+  Map<String, int> _reflowFrom = const <String, int>{};
+  List<String> _shown = const <String>[];
+
+  /// The furthest any tile has to travel this reflow, in places rather than
+  /// rows: the columns are not known until the grid lays out.
+  int _reflowJump = 0;
+
+  static const Duration _reflowDuration = Duration(milliseconds: 340);
+
+  /// Past this many rows a slide reads as a tile flying across the window, so
+  /// the whole grid fades instead.
+  static const int _reflowMaxRows = 3;
+
+  /// One per diagonal, built once: the maths depends only on which wave a tile
+  /// is in, so building these per tile per rebuild made a few thousand
+  /// short-lived objects a frame.
+  late final List<_Wave> _entranceWaves = List<_Wave>.generate(_waves, (
+    int wave,
+  ) {
+    final double start = (wave * .06).clamp(0, .66);
+    final CurvedAnimation t = CurvedAnimation(
+      parent: _entrance,
+      curve: Interval(
+        start,
+        (start + .34).clamp(0, 1),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    // Past the resting size and position, then back to them.
+    return (
+      t: t,
+      scale: TweenSequence<double>(<TweenSequenceItem<double>>[
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: .88,
+            end: 1.04,
+          ).chain(CurveTween(curve: Curves.easeOutCubic)),
+          weight: 70,
+        ),
+        TweenSequenceItem<double>(
+          tween: Tween<double>(
+            begin: 1.04,
+            end: 1,
+          ).chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 30,
+        ),
+      ]).animate(t),
+      position: TweenSequence<Offset>(<TweenSequenceItem<Offset>>[
+        TweenSequenceItem<Offset>(
+          tween: Tween<Offset>(
+            begin: const Offset(0, .055),
+            end: const Offset(0, -.012),
+          ).chain(CurveTween(curve: Curves.easeOutCubic)),
+          weight: 70,
+        ),
+        TweenSequenceItem<Offset>(
+          tween: Tween<Offset>(
+            begin: const Offset(0, -.012),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 30,
+        ),
+      ]).animate(t),
+    );
+  });
+
   @override
   void initState() {
     super.initState();
     _scrollController = SmoothWheelScrollController(debugLabel: widget.id);
     _topScrollControlActive = ValueNotifier<bool>(false);
     _bottomScrollControlActive = ValueNotifier<bool>(false);
+    _entrance = AnimationController(vsync: this, duration: _entranceDuration)
+      ..addStatusListener((AnimationStatus status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _entranceDone = true);
+        }
+      });
+    _reflow = AnimationController(vsync: this, duration: _reflowDuration)
+      ..addStatusListener((AnimationStatus status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _reflowFrom = const <String, int>{});
+        }
+      });
+    _shown = _ids();
+    if (widget.entranceOnMount) {
+      _startEntrance();
+    } else {
+      // Or the tiles sit at the entrance's first frame, which is invisible.
+      _entranceDone = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(SelectionGrid old) {
+    super.didUpdateWidget(old);
+    if (widget.entranceToken != old.entranceToken) _startEntrance();
+    _reflowIfListMoved();
+  }
+
+  List<String> _ids() => <String>[
+    for (int i = 0; i < widget.itemCount; i++) widget.idAt(i),
+  ];
+
+  /// Slides what survived a search, a filter or a re-order from where it was to
+  /// where it is now.
+  ///
+  /// Worked out from the ids rather than told by the caller, so no caller has to
+  /// remember to say the list moved, and a rebuild that leaves it alone costs
+  /// one comparison.
+  void _reflowIfListMoved() {
+    final List<String> now = _ids();
+    if (listEquals(now, _shown)) return;
+    final List<String> was = _shown;
+    _shown = now;
+    // Nothing to come from, so the tiles simply appear. Any reflow still
+    // running belonged to the list that has just gone.
+    if (was.isEmpty) {
+      _reflowFrom = const <String, int>{};
+      return;
+    }
+    _reflowFrom = <String, int>{for (int i = 0; i < was.length; i++) was[i]: i};
+    _reflowJump = 0;
+    for (int i = 0; i < now.length; i++) {
+      final int? from = _reflowFrom[now[i]];
+      if (from != null) _reflowJump = max(_reflowJump, (from - i).abs());
+    }
+    _reflow.forward(from: 0);
+  }
+
+  void _startEntrance() {
+    final int run = ++_entranceRun;
+    _entrance
+      ..stop()
+      ..value = 0;
+    _entranceDone = false;
+    // Starting synchronously burns the opening frames before the grid exists.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && run == _entranceRun) _entrance.forward();
+    });
   }
 
   @override
   void dispose() {
+    for (final _Wave wave in _entranceWaves) {
+      wave.t.dispose();
+    }
+    _entrance.dispose();
+    _reflow.dispose();
     _autoScroll?.dispose();
     _marquee.dispose();
     _topScrollControlActive.dispose();
     _bottomScrollControlActive.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// A tile mid-reflow: either every tile that was already up slides from where
+  /// it sat, or none of them does and the grid grows into place. One decision
+  /// for the lot, or a search that moves half the tiles a row and half of them
+  /// a hundred reads as the animation misfiring. A tile that has just matched
+  /// has nowhere to slide from and always grows.
+  ///
+  /// Always the same widgets, whether or not a reflow is running. Wrapping and
+  /// unwrapping re-parents the image inside, and an image rebuilt into a new
+  /// position paints its white background for a frame before the picture
+  /// returns, which reads as the whole grid flashing.
+  Widget _reflowed(Widget tile, String id, int index, GridGeometry geometry) {
+    return AnimatedBuilder(
+      animation: _reflow,
+      builder: (BuildContext context, Widget? child) {
+        double opacity = 1;
+        double scale = 1;
+        Offset shift = Offset.zero;
+
+        if (_reflowFrom.isNotEmpty) {
+          final double t = Curves.easeOutCubic.transform(_reflow.value);
+          final int? from = _reflowFrom[id];
+          final bool slides =
+              from != null && _reflowJump <= _reflowMaxRows * geometry.columns;
+          if (slides) {
+            shift =
+                (_cellAt(from, geometry) - _cellAt(index, geometry)) * (1 - t);
+          } else {
+            opacity = t;
+            scale = .82 + .18 * t;
+          }
+        }
+
+        return Transform.translate(
+          offset: shift,
+          // alwaysIncludeSemantics: reaching zero would drop the tile from the
+          // accessibility tree, which is what upsets Windows' bridge.
+          child: Opacity(
+            opacity: opacity,
+            alwaysIncludeSemantics: true,
+            child: Transform.scale(scale: scale, child: child),
+          ),
+        );
+      },
+      child: tile,
+    );
+  }
+
+  Offset _cellAt(int index, GridGeometry geometry) => cellOrigin(
+    index,
+    columns: geometry.columns,
+    tile: geometry.tile,
+    spacing: geometry.spacing,
+  );
+
+  /// A tile arriving: past its resting place, then back to it.
+  Widget _arriving(int index, int columns, Widget tile) {
+    if (_entranceDone) return tile;
+    // Tiles on the same diagonal move together. Capped, or off-screen rows sit
+    // waiting their turn.
+    final wave =
+        _entranceWaves[(((index ~/ columns) + (index % columns))).clamp(
+          0,
+          _waves - 1,
+        )];
+    return FadeTransition(
+      opacity: wave.t,
+      // A fade to zero would drop tiles out of the accessibility tree, which
+      // upsets Windows' bridge.
+      alwaysIncludeSemantics: true,
+      child: ScaleTransition(
+        scale: wave.scale,
+        child: SlideTransition(position: wave.position, child: tile),
+      ),
+    );
   }
 
   Widget _scrollControlHoverZone({
@@ -334,8 +577,16 @@ class _SelectionGridState extends State<SelectionGrid>
                 scrollCacheExtent: const ScrollCacheExtent.pixels(500),
                 // No tile keeps itself alive, so the wrapper is pure overhead.
                 addAutomaticKeepAlives: false,
-                itemBuilder: (context, index) =>
+                itemBuilder: (context, index) => _arriving(
+                  index,
+                  columnCount,
+                  _reflowed(
                     widget.itemBuilder(context, index, geometry),
+                    widget.idAt(index),
+                    index,
+                    geometry,
+                  ),
+                ),
               ),
             ),
             // Watches the scroll position too, or a wheel scroll mid-drag

@@ -58,8 +58,8 @@ class CheckedIds extends _$CheckedIds {
   }
 
   /// What a plain left click does. Selects only [id], and clears it when it was
-  /// already the only one selected, so you can deselect without aiming at the
-  /// checkbox.
+  /// already the only one selected, so a tile can be put down by clicking it
+  /// again rather than by aiming at anything small.
   void setExclusive(String id) {
     final bool only = state.length == 1 && state.contains(id);
     state = only ? const <String>{} : <String>{id};

@@ -1,5 +1,79 @@
 import 'package:flutter/material.dart';
 
+class StatusPalette extends ThemeExtension<StatusPalette> {
+  const StatusPalette({
+    required this.bad,
+    required this.hollow,
+    required this.warn,
+    required this.note,
+    required this.muted,
+    required this.good,
+  });
+
+  final Color bad;
+  final Color hollow;
+  final Color warn;
+  final Color note;
+  final Color muted;
+  final Color good;
+
+  static const StatusPalette light = StatusPalette(
+    bad: Color(0xFFC62828),
+    hollow: Color(0xFFAD1457),
+    warn: Color(0xFFC24E00),
+    note: Color(0xFF1565C0),
+    muted: Color(0xFF546E7A),
+    good: Color(0xFF2E7D32),
+  );
+
+  static const StatusPalette dark = StatusPalette(
+    bad: Color(0xFFE57373),
+    hollow: Color(0xFFF06292),
+    warn: Color(0xFFFFB74D),
+    note: Color(0xFF64B5F6),
+    muted: Color(0xFF90A4AE),
+    good: Color(0xFF81C784),
+  );
+
+  @override
+  StatusPalette copyWith({
+    Color? bad,
+    Color? hollow,
+    Color? warn,
+    Color? note,
+    Color? muted,
+    Color? good,
+  }) => StatusPalette(
+    bad: bad ?? this.bad,
+    hollow: hollow ?? this.hollow,
+    warn: warn ?? this.warn,
+    note: note ?? this.note,
+    muted: muted ?? this.muted,
+    good: good ?? this.good,
+  );
+
+  @override
+  StatusPalette lerp(covariant StatusPalette? other, double t) {
+    if (other == null) return this;
+    return StatusPalette(
+      bad: Color.lerp(bad, other.bad, t)!,
+      hollow: Color.lerp(hollow, other.hollow, t)!,
+      warn: Color.lerp(warn, other.warn, t)!,
+      note: Color.lerp(note, other.note, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
+      good: Color.lerp(good, other.good, t)!,
+    );
+  }
+}
+
+extension StatusThemeData on ThemeData {
+  StatusPalette get status =>
+      extension<StatusPalette>() ??
+      (brightness == Brightness.dark
+          ? StatusPalette.dark
+          : StatusPalette.light);
+}
+
 class ActionButtonTheme extends ThemeExtension<ActionButtonTheme> {
   const ActionButtonTheme({
     required this.primaryBackground,
@@ -136,30 +210,6 @@ class SlidingSegmentedTheme extends ThemeExtension<SlidingSegmentedTheme> {
   }
 }
 
-class ToastTheme extends ThemeExtension<ToastTheme> {
-  final Color backgroundColor;
-
-  const ToastTheme({required this.backgroundColor});
-
-  @override
-  ThemeExtension<ToastTheme> copyWith({Color? backgroundColor}) {
-    return ToastTheme(backgroundColor: backgroundColor ?? this.backgroundColor);
-  }
-
-  @override
-  ThemeExtension<ToastTheme> lerp(
-    covariant ThemeExtension<ToastTheme>? other,
-    double t,
-  ) {
-    if (other is! ToastTheme) {
-      return this;
-    }
-    return ToastTheme(
-      backgroundColor: Color.lerp(backgroundColor, other.backgroundColor, t)!,
-    );
-  }
-}
-
 class MetaTheme extends ThemeExtension<MetaTheme> {
   final TextStyle largeStyle;
   final TextStyle mediumStyle;
@@ -173,7 +223,16 @@ class MetaTheme extends ThemeExtension<MetaTheme> {
     required this.captionStyle,
   });
 
-  static const TextStyle _caption = TextStyle(color: Colors.grey, fontSize: 13);
+  /// Grey enough to sit behind what it explains, dark enough to read: plain
+  /// `Colors.grey` on white is too faint for a paragraph.
+  static const TextStyle _lightCaption = TextStyle(
+    color: Color(0xFF5F6368),
+    fontSize: 13,
+  );
+  static const TextStyle _darkCaption = TextStyle(
+    color: Color(0xFFAFAFAF),
+    fontSize: 13,
+  );
 
   static const MetaTheme light = MetaTheme(
     largeStyle: TextStyle(
@@ -186,7 +245,7 @@ class MetaTheme extends ThemeExtension<MetaTheme> {
       fontSize: 14,
       fontFamily: 'Microsoft YaHei',
     ),
-    captionStyle: _caption,
+    captionStyle: _lightCaption,
   );
 
   static const MetaTheme dark = MetaTheme(
@@ -200,7 +259,7 @@ class MetaTheme extends ThemeExtension<MetaTheme> {
       fontSize: 14,
       fontFamily: 'Microsoft YaHei',
     ),
-    captionStyle: _caption,
+    captionStyle: _darkCaption,
   );
 
   @override

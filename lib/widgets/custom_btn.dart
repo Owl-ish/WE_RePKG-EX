@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 
 class CustomBtn extends StatelessWidget {
   const CustomBtn({super.key, required this.label, this.onPressed})

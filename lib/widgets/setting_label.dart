@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 
 class SettingLabel extends StatelessWidget {
   const SettingLabel(this.label, {super.key});

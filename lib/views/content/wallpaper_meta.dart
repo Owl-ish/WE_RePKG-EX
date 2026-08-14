@@ -1,6 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/content_rating.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/models/wallpaper.dart';

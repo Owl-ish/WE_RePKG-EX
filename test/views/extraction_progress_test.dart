@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
-import 'package:we_repkg/views/states/loading.dart';
+import 'package:we_repkg/views/states/extraction_progress.dart';
 
 WallpaperInfo make(String id, String previews) => WallpaperInfo(
   id: id,
@@ -54,7 +54,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: Scaffold(body: LoadingView([only]))),
+        child: MaterialApp(
+          home: Scaffold(body: ExtractionProgressPanel([only])),
+        ),
       ),
     );
     await tester.pump();
@@ -82,7 +84,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: Scaffold(body: LoadingView(list))),
+        child: MaterialApp(home: Scaffold(body: ExtractionProgressPanel(list))),
       ),
     );
     await tester.pump();
@@ -115,7 +117,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: Scaffold(body: LoadingView(list))),
+        child: MaterialApp(home: Scaffold(body: ExtractionProgressPanel(list))),
       ),
     );
     await tester.pump();

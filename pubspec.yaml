@@ -52,6 +52,8 @@ dependencies:
   flutter_context_menu: 0.4.1
   # One kernel32 call, to size extraction against the machine's RAM.
   ffi: ^2.1.4
+  # Atomic no-replace publishing and stable file identity for repair safety.
+  win32: ^5.15.0
   # The clock a double click is measured against, so a test can move it.
   clock: ^1.1.2
 

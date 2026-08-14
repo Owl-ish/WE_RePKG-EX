@@ -98,8 +98,6 @@ void main() {
       for (int i = 0; i < count; i++) make('$i'),
       for (final String id in videos) make(id, type: WallpaperType.video),
     ]);
-    // Complete before the first frame, so the entrance animation stays out of
-    // the way of the gestures below.
     container.read(currentStateProvider.notifier).update(RunState.complete);
 
     await tester.pumpWidget(
@@ -114,6 +112,8 @@ void main() {
     // the list already seeded and returns, but the timer has to be let run or
     // it outlives the test.
     await tester.pump(const Duration(milliseconds: 1));
+    // Past any entrance: a tile mid-flight is scaled and offset from its cell.
+    await tester.pump(const Duration(seconds: 1));
 
     // Pins the constants above against the real layout, so a change to the
     // insets or the tile width fails here rather than as four wrong selections.
@@ -122,6 +122,47 @@ void main() {
       const Rect.fromLTWH(_firstLeft, _firstTop, _tile, _tile),
     );
   }
+
+  // The wave means "here is your library". Playing it on the way back from the
+  // backup area would say a scan had run when none had.
+  group('the entrance', () {
+    /// Seeds eight wallpapers in [state] and stops a tenth of a second in,
+    /// which is inside the entrance rather than past it.
+    Future<Rect> firstTileEarly(WidgetTester tester, RunState state) async {
+      container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.read(wallpaperListProvider.notifier).addAll(<WallpaperInfo>[
+        for (int i = 0; i < 8; i++) make('$i'),
+      ]);
+      container.read(currentStateProvider.notifier).update(state);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: Column(children: <Widget>[ContentView()])),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+      if (!state.isComplete) {
+        container.read(currentStateProvider.notifier).update(RunState.complete);
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+      return tester.getRect(find.byType(ImageItem).first);
+    }
+
+    const Rect atRest = Rect.fromLTWH(_firstLeft, _firstTop, _tile, _tile);
+
+    testWidgets('does not play over a library already scanned', (tester) async {
+      expect(await firstTileEarly(tester, RunState.complete), atRest);
+    });
+
+    testWidgets('plays when a scan has just finished', (tester) async {
+      expect(await firstTileEarly(tester, RunState.initial), isNot(atRest));
+      // Let it finish, or its ticker outlives the test.
+      await tester.pump(const Duration(seconds: 1));
+    });
+  });
 
   Set<String> checkedIds() => container.read(checkedIdsProvider);
 

@@ -252,7 +252,7 @@ final class CurrentLibraryProvider
   }
 }
 
-String _$currentLibraryHash() => r'3f99ca99dc1dc34990d796b70549feef0a691aee';
+String _$currentLibraryHash() => r'9021ff607186d0a403d95e34a565d6b8d6f96180';
 
 /// Which library the grid is browsing. Remembered, like the sort and filter.
 
@@ -684,7 +684,7 @@ final class CurrentThemeProvider
   }
 }
 
-String _$currentThemeHash() => r'2a5c46b023500f83f3ac6ccfde43a9b0aaa82e90';
+String _$currentThemeHash() => r'9829f0895c36b7224f609a96e6bef7024fefcef8';
 
 abstract class _$CurrentTheme extends $Notifier<ThemeType> {
   ThemeType build();
@@ -788,7 +788,7 @@ final class CurrentExtractTypeProvider
 }
 
 String _$currentExtractTypeHash() =>
-    r'17a598ff54918c4e14cc705319001abf81917bd7';
+    r'2b44f618c9468cb61deb31d794389e78ebd0b97d';
 
 abstract class _$CurrentExtractType extends $Notifier<ExtractType> {
   ExtractType build();

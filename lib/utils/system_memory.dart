@@ -83,6 +83,3 @@ int? availableMemoryBytes() {
     calloc.free(status);
   }
 }
-
-@visibleForTesting
-void resetInstalledMemoryCache() => _installed = null;

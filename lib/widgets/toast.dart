@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/custom_theme.dart';
 import 'package:we_repkg/constants/nums.dart';
 
 class ToastView extends StatelessWidget {
@@ -24,7 +23,7 @@ class ToastView extends StatelessWidget {
         child: Material(
           elevation: 8,
           borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-          color: Theme.of(context).extension<ToastTheme>()?.backgroundColor,
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(

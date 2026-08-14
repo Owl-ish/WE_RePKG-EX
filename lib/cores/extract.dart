@@ -139,7 +139,7 @@ Future<bool> _runBatch(
       .read(loadingTextProvider.notifier)
       .update(tr(AppI10n.dialogProcessingWallpaper));
 
-  final cancel = showLoadingView(wallpapers);
+  final cancel = showExtractionProgress(wallpapers);
   index.reset();
   processing.update(null);
   // Published so the loading overlay's cancel button can reach it.

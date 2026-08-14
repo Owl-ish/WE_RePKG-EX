@@ -15,6 +15,14 @@ class LayoutNums {
   /// Gap between the grid and the bars above and below it.
   static const double contentGap = 14;
 
+  /// Repeated spacing steps used inside compact controls and panels.
+  static const double tinyGap = 4;
+  static const double compactGap = 6;
+  static const double smallGap = 8;
+  static const double mediumGap = 12;
+  static const double largeGap = 16;
+  static const double sectionGap = 18;
+
   /// Corners of anything that reads as a surface of its own.
   static const double surfaceRadius = 8;
 

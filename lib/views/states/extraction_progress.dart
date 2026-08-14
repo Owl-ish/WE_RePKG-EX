@@ -8,31 +8,40 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
+import 'package:we_repkg/widgets/progress_bar.dart';
 
-class LoadingView extends ConsumerStatefulWidget {
-  const LoadingView(this.list, {super.key});
+class ExtractionProgressPanel extends ConsumerStatefulWidget {
+  const ExtractionProgressPanel(this.list, {super.key});
 
   final List<WallpaperInfo> list;
 
   @override
-  ConsumerState<LoadingView> createState() => _LoadingViewState();
+  ConsumerState<ExtractionProgressPanel> createState() =>
+      _ExtractionProgressPanelState();
 }
 
-class _LoadingViewState extends ConsumerState<LoadingView>
+class _ExtractionProgressPanelState
+    extends ConsumerState<ExtractionProgressPanel>
     with TickerProviderStateMixin {
+  static const Duration _imageTransition = Duration(milliseconds: 500);
+  static const Duration _textTransition = Duration(milliseconds: 300);
+  static const double _panelWidth = 520;
+  static const double _panelMinHeight = 360;
+  static const double _previewSize = 160;
+  static const double _elevation = 2;
+  static const double _cancelIconSize = 18;
+
   late AnimationController _imageController;
   late Animation<double> _imageAnimation;
   late AnimationController _textController;
   late Animation<double> _textAnimation;
-  late AnimationController _progressController;
   String? _previousId;
-  double _progressTarget = 0;
 
   @override
   void initState() {
     super.initState();
     _imageController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: _imageTransition,
       vsync: this,
     );
     _imageAnimation = CurvedAnimation(
@@ -41,17 +50,12 @@ class _LoadingViewState extends ConsumerState<LoadingView>
     );
 
     _textController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: _textTransition,
       vsync: this,
     );
     _textAnimation = CurvedAnimation(
       parent: _textController,
       curve: Curves.easeInOut,
-    );
-
-    _progressController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
     );
   }
 
@@ -59,19 +63,18 @@ class _LoadingViewState extends ConsumerState<LoadingView>
   void dispose() {
     _imageController.dispose();
     _textController.dispose();
-    _progressController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ThemeData theme = Theme.of(context);
+    final ThemeData theme = Theme.of(context);
     if (widget.list.isEmpty) return const SizedBox.shrink();
-    int total = widget.list.length;
+    final int total = widget.list.length;
     // Completed count, not a cursor. Extraction runs several wallpapers at once
     // now, so this reaches total and indexing widget.list with it would throw.
-    int completed = ref.watch(currentIndexProvider);
-    double newProgress = total > 0 ? completed / total : 0;
+    final int completed = ref.watch(currentIndexProvider);
+    final double newProgress = total > 0 ? completed / total : 0;
     // Preview follows whichever wallpaper a worker picked up most recently, and
     // falls back to the first entry before the batch starts.
     final WallpaperInfo current =
@@ -79,35 +82,21 @@ class _LoadingViewState extends ConsumerState<LoadingView>
 
     // 进度和壁纸各自触发动画: 一次只提取一张壁纸时预览图不会变化,
     // 若共用同一个条件, 进度条将永远停在起点
-    //
-    // Compared against where the bar is heading, not where it currently is: a
-    // rebuild mid-tween would otherwise restart it from part way and the bar
-    // would trail the count.
-    if (_progressTarget != newProgress) {
-      _progressTarget = newProgress;
-      _progressController.animateTo(
-        newProgress,
-        duration: const Duration(milliseconds: 500),
-        // The easing belongs on the movement. Curving the value instead had the
-        // bar read 13% with a quarter of the batch done.
-        curve: Curves.easeInOut,
-      );
-    }
     if (_previousId != current.id) {
       _previousId = current.id;
       _imageController.forward(from: 0);
       _textController.forward(from: 0);
     }
     return Material(
-      elevation: 2,
+      elevation: _elevation,
       borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
       color: theme.scaffoldBackgroundColor,
       child: Container(
-        width: 520,
+        width: _panelWidth,
         // minHeight, not a fixed height: the cancel button pushed the column
         // past 360 and clipped it.
-        constraints: const BoxConstraints(minHeight: 360),
-        padding: const EdgeInsets.all(16),
+        constraints: const BoxConstraints(minHeight: _panelMinHeight),
+        padding: const EdgeInsets.all(LayoutNums.largeGap),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
         ),
@@ -117,7 +106,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
         // minHeight.
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          spacing: 16,
+          spacing: LayoutNums.largeGap,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -130,8 +119,8 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                   child: Image(
                     image: previewImage(current.previews),
                     key: ValueKey(current.id),
-                    width: 160,
-                    height: 160,
+                    width: _previewSize,
+                    height: _previewSize,
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -145,10 +134,8 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                 opacity: _textAnimation,
                 child: Text(
                   current.title,
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontSize: 14,
-                    fontFamily: 'Microsoft YaHei',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.primaryColor,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
@@ -157,20 +144,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
               ),
             ),
             // 添加带动画效果的进度条
-            ClipRRect(
-              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-              child: AnimatedBuilder(
-                animation: _progressController,
-                builder: (context, child) {
-                  return LinearProgressIndicator(
-                    value: _progressController.value,
-                    minHeight: 8,
-                    color: Colors.blue,
-                    backgroundColor: Colors.grey[200],
-                  );
-                },
-              ),
-            ),
+            ProgressBar(value: newProgress, colour: theme.primaryColor),
             ScaleTransition(
               scale: _textAnimation,
               child: FadeTransition(
@@ -195,7 +169,7 @@ class _LoadingViewState extends ConsumerState<LoadingView>
                           token.cancel();
                           setState(() {});
                         },
-                  icon: const Icon(Icons.close_rounded, size: 18),
+                  icon: const Icon(Icons.close_rounded, size: _cancelIconSize),
                   label: Text(
                     cancelled
                         ? tr(AppI10n.dialogCancelled)

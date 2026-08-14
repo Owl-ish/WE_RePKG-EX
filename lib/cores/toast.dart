@@ -8,7 +8,7 @@ import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/views/states/error.dart';
-import 'package:we_repkg/views/states/loading.dart';
+import 'package:we_repkg/views/states/extraction_progress.dart';
 import 'package:we_repkg/widgets/toast.dart';
 
 void _toast(IconData icon, Color color, String text, {int seconds = 3}) {
@@ -56,10 +56,10 @@ void showExtractSuccessToast() {
   LocalNotification(title: tr(AppI10n.dialogOperationCompleted)).show();
 }
 
-CancelFunc showLoadingView(List<WallpaperInfo> list) {
+CancelFunc showExtractionProgress(List<WallpaperInfo> list) {
   return BotToast.showCustomLoading(
     backgroundColor: Colors.black.withValues(alpha: .6),
-    toastBuilder: (void Function() cancelFunc) => LoadingView(list),
+    toastBuilder: (void Function() cancelFunc) => ExtractionProgressPanel(list),
   );
 }
 
