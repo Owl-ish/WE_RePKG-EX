@@ -60,3 +60,65 @@ final class IntegrityScanProvider
 }
 
 String _$integrityScanHash() => r'debb7fe4553f5054d38ba876201e0d9c9ea326d1';
+
+/// Which concern the list is showing, or null for the worst one the check
+/// found.
+
+@ProviderFor(IntegrityShown)
+final integrityShownProvider = IntegrityShownProvider._();
+
+/// Which concern the list is showing, or null for the worst one the check
+/// found.
+final class IntegrityShownProvider
+    extends $NotifierProvider<IntegrityShown, IntegrityVerdict?> {
+  /// Which concern the list is showing, or null for the worst one the check
+  /// found.
+  IntegrityShownProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'integrityShownProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$integrityShownHash();
+
+  @$internal
+  @override
+  IntegrityShown create() => IntegrityShown();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(IntegrityVerdict? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<IntegrityVerdict?>(value),
+    );
+  }
+}
+
+String _$integrityShownHash() => r'792a98fbc3cd40e07905493aa2c50f690624cd68';
+
+/// Which concern the list is showing, or null for the worst one the check
+/// found.
+
+abstract class _$IntegrityShown extends $Notifier<IntegrityVerdict?> {
+  IntegrityVerdict? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<IntegrityVerdict?, IntegrityVerdict?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<IntegrityVerdict?, IntegrityVerdict?>,
+              IntegrityVerdict?,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

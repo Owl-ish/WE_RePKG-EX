@@ -43,12 +43,45 @@
     }
   },
   "integrity": {
+    "title": "Integrity check",
+    "about": "Opens every wallpaper folder in your libraries and backups and checks it still holds what Wallpaper Engine needs to load it, so anything broken turns up here rather than the next time you want to use it. This tab only reads: nothing is changed or deleted, and you open a folder to sort it out yourself. Whether a wallpaper is backed up is the Backup tab's question, not this one.",
+    "checking": "Checking every folder",
     "clean": "Every folder Wallpaper Engine can see is loadable.",
-    "scanned": "{} folders checked",
+    "advice": {
+      "packedSceneNoProject": "These folders have no project.json file, so they are invisible to Wallpaper Engine. The wallpaper itself is still there and extracting it will still work. Copying project.json back from Steam's copy or from a backup brings the wallpaper back.",
+      "unpackedSceneNoProject": "These folders contain an unpacked wallpaper with no project.json file. Wallpaper Engine will not list them until one is there, and it has to name scene.json as the file to load.",
+      "mediaOnly": "These folders hold only pictures or video, with nothing Wallpaper Engine can read, and are usually folders something was copied into by hand. The files are fine to keep, but they will never show up as wallpapers.",
+      "payloadMissing": "Each of these folders has a project.json naming a file that is not in the folder, listed beside the wallpaper below. Usually a copy that stopped halfway. Wallpaper Engine cannot show them at all, so they are worth looking at first, and a backup of one probably still has the file.",
+      "projectUnreadable": "These folders have a project.json that nothing can read, usually after being edited by hand. Wallpaper Engine skips a wallpaper whose details it cannot read. Copying the file back from a backup fixes it.",
+      "shaderCacheOnly": "These folders are left over from Wallpaper Engine when you unsubscribe from a wallpaper. Steam did not clean them up, and they are safe to delete. The backup tab ignores them."
+    },
+    "found": "{checked} folders checked, {found} need a look",
+    "foundNothing": "{checked} folders checked, nothing needs a look",
     "missingRoots": "These libraries could not be read, so they were not checked:",
     "recheck": "Check again",
     "failed": "Could not finish the check:",
     "openFolder": "Open folder",
+    "missingFile": "no {}",
+    "fix": {
+      "resolve": "Resolve",
+      "title": "Resolve this folder?",
+      "titleMany": "Resolve these {} folders?",
+      "rescueOne": "{name} will be extracted into {into} as a project, with a project.json written for it so Wallpaper Engine lists it again. The folder it came from, {from}, then goes to the Recycle Bin. Nothing is removed unless the extraction works.",
+      "rescueMany": "{count} wallpapers will be extracted into {into} as projects, each with a project.json written for it so Wallpaper Engine lists them again. The folders they came from then go to the Recycle Bin. Nothing is removed unless its own extraction works.",
+      "writeOne": "A project.json will be written into {from}, naming scene.json as the wallpaper to load and {name} as the title. Nothing else in the folder is touched.",
+      "writeMany": "A project.json will be written into {count} folders, each naming scene.json as the wallpaper to load and the folder's own name as the title. Nothing else in them is touched.",
+      "all": "Resolve all {}",
+      "done": "{} sorted out",
+      "failed": "{name}: {error}",
+      "noLibrary": "Set your myprojects library in settings first: it is where the wallpaper would be extracted to.",
+      "noTool": "Set the RePKG path in settings first.",
+      "noScene": "There is no scene.json here to point a project.json at, so nothing was written and nothing was removed.",
+      "noPkg": "There is no scene.pkg in this folder any more.",
+      "alreadyThere": "This folder already has a project.json.",
+      "unreadable": "This folder could not be read.",
+      "unsafeDestination": "The myprojects library is inside the source folder. Choose a separate library so the rescued copy cannot be moved to the Recycle Bin with its source.",
+      "sourceChanged": "The packed wallpaper changed while it was being rescued. The new copy was kept, and the source was not moved to the Recycle Bin. Run the integrity check again."
+    },
     "root": {
       "liveWorkshop": "Workshop library",
       "liveMyProjects": "myprojects library",
@@ -57,13 +90,12 @@
     },
     "verdict": {
       "sound": "Loadable",
-      "packedSceneNoProject": "Packed scene with no project.json",
-      "unpackedSceneNoProject": "Unpacked scene with no project.json",
-      "mediaOnly": "Media only, nothing Wallpaper Engine reads",
-      "payloadMissing": "Missing the file project.json names",
-      "projectUnreadable": "project.json will not parse",
-      "empty": "Empty folder",
-      "shaderCacheOnly": "Leftover shader cache, the wallpaper itself is gone"
+      "packedSceneNoProject": "No description",
+      "unpackedSceneNoProject": "Unfinished project",
+      "mediaOnly": "Media only",
+      "payloadMissing": "Missing files",
+      "projectUnreadable": "Damaged description",
+      "shaderCacheOnly": "Leftover cache"
     }
   },
   "extract": {

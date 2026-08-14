@@ -43,12 +43,45 @@
     }
   },
   "integrity": {
+    "title": "完整性检查",
+    "about": "逐个打开壁纸库和备份中的每个壁纸文件夹，检查壁纸引擎加载它们所需的文件是否齐全，让有问题的壁纸在这里被发现，而不是等到你要用它的时候。此标签页只读：不会修改或删除任何文件，需要处理时自行打开文件夹。壁纸有没有备份是备份标签页的事，与这里无关。",
+    "checking": "正在检查所有文件夹",
     "clean": "所有壁纸引擎能识别的文件夹均可正常加载。",
-    "scanned": "已检查 {} 个文件夹",
+    "advice": {
+      "packedSceneNoProject": "这些文件夹里没有 project.json 文件，因此壁纸引擎看不到它们。壁纸本身还在，提取依然可用。从 Steam 的副本或备份中复制回 project.json 就能让壁纸回来。",
+      "unpackedSceneNoProject": "这些文件夹里是未打包的壁纸，没有 project.json 文件。在补上这个文件之前壁纸引擎不会列出它们，而且文件中要把 scene.json 指定为要加载的文件。",
+      "mediaOnly": "这些文件夹里只有图片或视频，没有壁纸引擎能读取的文件，通常是手动复制进来的。文件想留着完全可以，但它们永远不会作为壁纸出现。",
+      "payloadMissing": "这些文件夹的 project.json 指定了一个并不在文件夹里的文件，具体文件名列在下方壁纸旁边。通常是复制到一半中断了。壁纸引擎根本无法显示它们，所以最值得先看，缺失的文件多半还在备份里。",
+      "projectUnreadable": "这些文件夹里的 project.json 没有程序能读懂，通常是被手动编辑破坏了。壁纸引擎会跳过读不出信息的壁纸。用备份中的同名文件覆盖即可修复。",
+      "shaderCacheOnly": "这些文件夹是取消订阅壁纸后壁纸引擎留下的残留。Steam 没有把它们清理掉，可以安全删除。备份标签页也会忽略它们。"
+    },
+    "found": "已检查 {checked} 个文件夹，{found} 个需要查看",
+    "foundNothing": "已检查 {checked} 个文件夹，没有需要查看的",
     "missingRoots": "以下壁纸库无法读取，因此未做检查：",
     "recheck": "重新检查",
     "failed": "检查未能完成：",
     "openFolder": "打开文件夹",
+    "missingFile": "缺少 {}",
+    "fix": {
+      "resolve": "处理",
+      "title": "要处理这个文件夹吗？",
+      "titleMany": "要处理这 {} 个文件夹吗？",
+      "rescueOne": "{name} 将作为项目提取到 {into}，并为它写入 project.json，让壁纸引擎重新列出它。它原来所在的文件夹 {from} 随后会被移到回收站。提取不成功就不会删除任何东西。",
+      "rescueMany": "{count} 个壁纸将作为项目提取到 {into}，并各自写入 project.json，让壁纸引擎重新列出它们。它们原来所在的文件夹随后会被移到回收站。某一个提取不成功，它的文件夹就不会被删除。",
+      "writeOne": "将在 {from} 中写入一个 project.json，把 scene.json 指定为要加载的壁纸，并以 {name} 作为标题。文件夹里的其他内容不会改动。",
+      "writeMany": "将在 {count} 个文件夹中各写入一个 project.json，把 scene.json 指定为要加载的壁纸，并以各自的文件夹名作为标题。文件夹里的其他内容不会改动。",
+      "all": "全部处理（{}）",
+      "done": "已处理 {} 个",
+      "failed": "{name}：{error}",
+      "noLibrary": "请先在设置中指定 myprojects 库：壁纸会被提取到那里。",
+      "noTool": "请先在设置中指定 RePKG 路径。",
+      "noScene": "这里没有可供 project.json 指向的 scene.json，因此没有写入任何文件，也没有删除任何东西。",
+      "noPkg": "这个文件夹里已经没有 scene.pkg 了。",
+      "alreadyThere": "这个文件夹里已经有 project.json 了。",
+      "unreadable": "无法读取这个文件夹。",
+      "unsafeDestination": "myprojects 库位于源文件夹内。请选择独立的库，以免修复后的副本随源文件夹一起移到回收站。",
+      "sourceChanged": "修复期间打包壁纸发生了变化。新副本已保留，源文件夹未移到回收站。请重新运行完整性检查。"
+    },
     "root": {
       "liveWorkshop": "创意工坊库",
       "liveMyProjects": "myprojects 库",
@@ -57,13 +90,12 @@
     },
     "verdict": {
       "sound": "可加载",
-      "packedSceneNoProject": "已打包场景，缺少 project.json",
-      "unpackedSceneNoProject": "未打包场景，缺少 project.json",
-      "mediaOnly": "仅有媒体文件，壁纸引擎无法识别",
-      "payloadMissing": "缺少 project.json 指定的文件",
-      "projectUnreadable": "project.json 无法解析",
-      "empty": "空文件夹",
-      "shaderCacheOnly": "仅剩着色器缓存，壁纸本身已被删除"
+      "packedSceneNoProject": "缺少描述文件",
+      "unpackedSceneNoProject": "未完成的项目",
+      "mediaOnly": "仅有媒体文件",
+      "payloadMissing": "文件缺失",
+      "projectUnreadable": "描述文件损坏",
+      "shaderCacheOnly": "残留缓存"
     }
   },
   "extract": {

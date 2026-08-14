@@ -54,12 +54,47 @@ class AppI10n {
   static const String backupTabIntegrity = 'backup.tab.integrity';
 
   // 完整性检查相关
+  static const String integrityTitle = 'integrity.title';
+  static const String integrityAbout = 'integrity.about';
+  static const String integrityChecking = 'integrity.checking';
   static const String integrityClean = 'integrity.clean';
-  static const String integrityScanned = 'integrity.scanned';
+  static const String integrityAdvicePackedSceneNoProject =
+      'integrity.advice.packedSceneNoProject';
+  static const String integrityAdviceUnpackedSceneNoProject =
+      'integrity.advice.unpackedSceneNoProject';
+  static const String integrityAdviceMediaOnly = 'integrity.advice.mediaOnly';
+  static const String integrityAdvicePayloadMissing =
+      'integrity.advice.payloadMissing';
+  static const String integrityAdviceProjectUnreadable =
+      'integrity.advice.projectUnreadable';
+  static const String integrityAdviceShaderCacheOnly =
+      'integrity.advice.shaderCacheOnly';
+  static const String integrityFound = 'integrity.found';
+  static const String integrityFoundNothing = 'integrity.foundNothing';
   static const String integrityMissingRoots = 'integrity.missingRoots';
   static const String integrityRecheck = 'integrity.recheck';
   static const String integrityFailed = 'integrity.failed';
   static const String integrityOpenFolder = 'integrity.openFolder';
+  static const String integrityMissingFile = 'integrity.missingFile';
+  static const String integrityFixResolve = 'integrity.fix.resolve';
+  static const String integrityFixTitle = 'integrity.fix.title';
+  static const String integrityFixTitleMany = 'integrity.fix.titleMany';
+  static const String integrityFixRescueOne = 'integrity.fix.rescueOne';
+  static const String integrityFixRescueMany = 'integrity.fix.rescueMany';
+  static const String integrityFixWriteOne = 'integrity.fix.writeOne';
+  static const String integrityFixWriteMany = 'integrity.fix.writeMany';
+  static const String integrityFixAll = 'integrity.fix.all';
+  static const String integrityFixDone = 'integrity.fix.done';
+  static const String integrityFixFailed = 'integrity.fix.failed';
+  static const String integrityFixNoLibrary = 'integrity.fix.noLibrary';
+  static const String integrityFixNoTool = 'integrity.fix.noTool';
+  static const String integrityFixNoScene = 'integrity.fix.noScene';
+  static const String integrityFixNoPkg = 'integrity.fix.noPkg';
+  static const String integrityFixAlreadyThere = 'integrity.fix.alreadyThere';
+  static const String integrityFixUnreadable = 'integrity.fix.unreadable';
+  static const String integrityFixUnsafeDestination =
+      'integrity.fix.unsafeDestination';
+  static const String integrityFixSourceChanged = 'integrity.fix.sourceChanged';
   static const String integrityRootLiveWorkshop = 'integrity.root.liveWorkshop';
   static const String integrityRootLiveMyProjects =
       'integrity.root.liveMyProjects';
@@ -77,7 +112,6 @@ class AppI10n {
       'integrity.verdict.payloadMissing';
   static const String integrityVerdictProjectUnreadable =
       'integrity.verdict.projectUnreadable';
-  static const String integrityVerdictEmpty = 'integrity.verdict.empty';
   static const String integrityVerdictShaderCacheOnly =
       'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
