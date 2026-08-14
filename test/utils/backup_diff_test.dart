@@ -1090,4 +1090,78 @@ void main() {
       );
     });
   });
+
+  // The grid sorts by this and the counts above the grid are listed in it, so a
+  // state left out would both sort last and lose its row.
+  test('every state has a place in the display order', () {
+    expect(backupStateOrder.toSet(), BackupState.values.toSet());
+    expect(backupStateOrder, hasLength(BackupState.values.length));
+  });
+
+  group('sortedCards', () {
+    // Named against the ranking rather than with it: alphabetically these run
+    // backwards, so any two states sharing a rank fall into name order and
+    // swap. Naming them in rank order would hide every tie but the first.
+    test('puts the states that need attention first', () {
+      final List<BackupCard> order = sortedCards(<BackupCard, BackupState>{
+        const BackupCard(WallpaperLibrary.workshop, 'a'): BackupState.synced,
+        const BackupCard(WallpaperLibrary.workshop, 'b'):
+            BackupState.updateDismissed,
+        const BackupCard(WallpaperLibrary.workshop, 'c'):
+            BackupState.updateAvailable,
+        const BackupCard(WallpaperLibrary.workshop, 'd'):
+            BackupState.notBackedUp,
+        const BackupCard(WallpaperLibrary.workshop, 'e'):
+            BackupState.emptyBackup,
+        const BackupCard(WallpaperLibrary.workshop, 'f'): BackupState.vanished,
+      });
+
+      expect(order.map((BackupCard c) => c.name), <String>[
+        'f',
+        'e',
+        'd',
+        'c',
+        'b',
+        'a',
+      ]);
+    });
+
+    // The marquee and shift-click index into positions in this list, so two
+    // scans of an unchanged library have to agree on it. A directory listing
+    // does not.
+    // A capital sorts before every lowercase letter in code-point order, so
+    // `Beta` is what tells a case-insensitive comparison from a raw one.
+    // myprojects folder names are wallpaper titles, so mixed case is normal.
+    test('orders by name within a state, ignoring case', () {
+      final List<BackupCard> order = sortedCards(<BackupCard, BackupState>{
+        const BackupCard(WallpaperLibrary.workshop, 'gamma'):
+            BackupState.synced,
+        const BackupCard(WallpaperLibrary.workshop, 'Beta'): BackupState.synced,
+        const BackupCard(WallpaperLibrary.workshop, 'alpha'):
+            BackupState.synced,
+      });
+
+      expect(order.map((BackupCard c) => c.name), <String>[
+        'alpha',
+        'Beta',
+        'gamma',
+      ]);
+    });
+
+    // A wallpaper in both libraries is two cards under one name, so the tie has
+    // to break somewhere fixed or the pair swaps places between scans.
+    test('breaks a tied name on the library', () {
+      final List<BackupCard> order = sortedCards(<BackupCard, BackupState>{
+        const BackupCard(WallpaperLibrary.workshop, 'alpha'):
+            BackupState.synced,
+        const BackupCard(WallpaperLibrary.myProjects, 'alpha'):
+            BackupState.synced,
+      });
+
+      expect(order.map((BackupCard c) => c.library), <WallpaperLibrary>[
+        WallpaperLibrary.myProjects,
+        WallpaperLibrary.workshop,
+      ]);
+    });
+  });
 }

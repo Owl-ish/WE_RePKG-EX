@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -256,6 +257,252 @@ void main() {
 
       expect(standings, hasLength(60));
       expect(standings.values, everyElement(CopyStanding.covers));
+    });
+  });
+
+  group('readCardFaces', () {
+    void project(Directory folder, String body) =>
+        File(p.join(folder.path, 'project.json')).writeAsStringSync(body);
+
+    // Both libraries, because a rule that only ever runs on the Workshop arm is
+    // how the myprojects side has slipped through before. Each vanished card
+    // has to read from its own backup tree, not the other one.
+    test(
+      'reads live folders, and the backup copy for a vanished card',
+      () async {
+        final Directory liveW = library('live-workshop');
+        final Directory liveM = library('live-myprojects');
+        final Directory backupW = library(
+          p.join('backup', AppStrings.backupWorkshopDir),
+        );
+        final Directory backupM = library(
+          p.join('backup', AppStrings.backupProjectDir),
+        );
+        project(
+          wallpaper(liveW, '793602574'),
+          '{"title":"Alive","preview":"a.jpg"}',
+        );
+        project(
+          wallpaper(backupW, '833227004'),
+          '{"title":"Gone","preview":"g.jpg"}',
+        );
+        project(wallpaper(backupM, 'beta'), '{"title":"Gone Beta"}');
+        // Both names also sit somewhere they must not be read from: one in its
+        // own live library, one in the other library's backup tree.
+        project(
+          wallpaper(liveW, '833227004'),
+          '{"title":"Wrong","preview":"w.jpg"}',
+        );
+        project(wallpaper(backupW, 'beta'), '{"title":"Wrong Beta"}');
+
+        final Map<BackupCard, CardFace> faces = await readCardFaces(
+          backupRoot: p.join(tmp.path, 'backup'),
+          liveWorkshopPath: liveW.path,
+          liveMyProjectsPath: liveM.path,
+          cards: <BackupCard, BackupState>{
+            const BackupCard(WallpaperLibrary.workshop, '793602574'):
+                BackupState.synced,
+            const BackupCard(WallpaperLibrary.workshop, '833227004'):
+                BackupState.vanished,
+            const BackupCard(WallpaperLibrary.myProjects, 'beta'):
+                BackupState.vanished,
+          },
+        );
+
+        expect(
+          faces[const BackupCard(WallpaperLibrary.workshop, '793602574')]!
+              .title,
+          'Alive',
+        );
+        final CardFace gone =
+            faces[const BackupCard(WallpaperLibrary.workshop, '833227004')]!;
+        expect(gone.title, 'Gone');
+        expect(gone.preview, p.join(backupW.path, '833227004', 'g.jpg'));
+        expect(
+          faces[const BackupCard(WallpaperLibrary.myProjects, 'beta')]!.title,
+          'Gone Beta',
+        );
+      },
+    );
+
+    // Common on a self-made wallpaper, and then the folder name is all the grid
+    // has left to call it by.
+    test('a wallpaper with no title falls back to the folder name', () async {
+      final Directory liveM = library('live-myprojects');
+      project(wallpaper(liveM, 'alpha'), '{"preview":"a.jpg"}');
+
+      final Map<BackupCard, CardFace> faces = await readCardFaces(
+        backupRoot: null,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveM.path,
+        cards: <BackupCard, BackupState>{
+          const BackupCard(WallpaperLibrary.myProjects, 'alpha'):
+              BackupState.synced,
+        },
+      );
+
+      expect(
+        faces[const BackupCard(WallpaperLibrary.myProjects, 'alpha')]!.title,
+        'alpha',
+      );
+    });
+
+    // A folder the app cannot read still occupies the backup. Dropping it here
+    // would be the one place the tab lies about what is on disk.
+    test(
+      'a missing or broken project.json leaves the card without a face',
+      () async {
+        final Directory liveM = library('live-myprojects');
+        wallpaper(liveM, 'no-project');
+        project(wallpaper(liveM, 'broken'), '{ not json');
+        // A hand-made wallpaper with a number where the title belongs, which is
+        // the case that drops a folder out of the extract grid entirely.
+        project(wallpaper(liveM, 'numbered'), '{"title":7}');
+
+        final Map<BackupCard, CardFace> faces = await readCardFaces(
+          backupRoot: null,
+          liveWorkshopPath: null,
+          liveMyProjectsPath: liveM.path,
+          cards: <BackupCard, BackupState>{
+            for (final String name in <String>[
+              'no-project',
+              'broken',
+              'numbered',
+            ])
+              BackupCard(WallpaperLibrary.myProjects, name): BackupState.synced,
+          },
+        );
+
+        expect(faces, isEmpty);
+      },
+    );
+
+    test('a wallpaper with no preview still gets its title', () async {
+      final Directory liveM = library('live-myprojects');
+      project(wallpaper(liveM, 'alpha'), '{"title":"Alpha"}');
+
+      final Map<BackupCard, CardFace> faces = await readCardFaces(
+        backupRoot: null,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveM.path,
+        cards: <BackupCard, BackupState>{
+          const BackupCard(WallpaperLibrary.myProjects, 'alpha'):
+              BackupState.synced,
+        },
+      );
+
+      final CardFace face =
+          faces[const BackupCard(WallpaperLibrary.myProjects, 'alpha')]!;
+      expect(face.title, 'Alpha');
+      expect(face.preview, isEmpty);
+    });
+
+    // The filter button is shared with the extract tab, so a card has to carry
+    // the two fields it filters on, and the date its order goes by.
+    test('a face carries the type, the rating and a date', () async {
+      final Directory liveM = library('live-myprojects');
+      project(
+        wallpaper(liveM, 'alpha'),
+        '{"title":"Alpha","type":"Scene","contentrating":"Mature"}',
+      );
+
+      final Map<BackupCard, CardFace> faces = await readCardFaces(
+        backupRoot: null,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveM.path,
+        cards: <BackupCard, BackupState>{
+          const BackupCard(WallpaperLibrary.myProjects, 'alpha'):
+              BackupState.synced,
+        },
+      );
+
+      final CardFace face =
+          faces[const BackupCard(WallpaperLibrary.myProjects, 'alpha')]!;
+      // Lowercased on the way in, the way the extract scan does it, or the
+      // filter would have to know about both spellings.
+      expect(face.type, 'scene');
+      expect(face.rating, 'mature');
+      // The project.json's own timestamp, not the folder's and not the time of
+      // the scan: either of those would order the grid by nothing at all.
+      expect(
+        face.modified,
+        File(p.join(liveM.path, 'alpha', 'project.json')).statSync().changed,
+      );
+    });
+  });
+
+  group('reconcileFolders', () {
+    ({String? backup, String? live}) foldersFor({
+      required bool liveWorkshop,
+      required bool liveMyProjects,
+      required bool backupWorkshop,
+      required bool backupMyProjects,
+    }) => reconcileFolders(
+      entry: ReconcileEntry(
+        name: 'alpha',
+        states: <WallpaperLibrary, BackupState>{
+          if (liveWorkshop) WallpaperLibrary.workshop: BackupState.synced,
+          if (liveMyProjects)
+            WallpaperLibrary.myProjects: BackupState.notBackedUp,
+        },
+        backupWorkshop: backupWorkshop,
+        backupMyProjects: backupMyProjects,
+      ),
+      backupRoot: r'C:\backup',
+      liveWorkshopPath: r'C:\live\431960',
+      liveMyProjectsPath: r'C:\live\myprojects',
+    );
+
+    final String liveW = p.join(r'C:\live\431960', 'alpha');
+    final String liveM = p.join(r'C:\live\myprojects', 'alpha');
+    final String backupW = p.join(r'C:\backup', '431960', 'alpha');
+    final String backupM = p.join(
+      r'C:\backup',
+      'wallpaper_engine',
+      'projects',
+      'myprojects',
+      'alpha',
+    );
+
+    // The myprojects copy is the one the author edits, so where there is a
+    // choice it is the one the details and the folder actions land on.
+    test('prefers myprojects on both sides', () {
+      final ({String? backup, String? live}) folders = foldersFor(
+        liveWorkshop: true,
+        liveMyProjects: true,
+        backupWorkshop: true,
+        backupMyProjects: true,
+      );
+
+      expect(folders.live, liveM);
+      expect(folders.backup, backupM);
+    });
+
+    // The half a preference alone gets wrong: with no myprojects copy on a
+    // side, that side falls through to the Workshop one rather than offering a
+    // path that is not there.
+    test('falls through to workshop where myprojects has no copy', () {
+      final ({String? backup, String? live}) folders = foldersFor(
+        liveWorkshop: true,
+        liveMyProjects: false,
+        backupWorkshop: true,
+        backupMyProjects: false,
+      );
+
+      expect(folders.live, liveW);
+      expect(folders.backup, backupW);
+    });
+
+    test('a folder that is not there is not offered', () {
+      final ({String? backup, String? live}) folders = foldersFor(
+        liveWorkshop: false,
+        liveMyProjects: true,
+        backupWorkshop: false,
+        backupMyProjects: false,
+      );
+
+      expect(folders.live, liveM);
+      expect(folders.backup, isNull);
     });
   });
 
@@ -522,6 +769,13 @@ void main() {
       onProgress: onProgress,
     );
 
+    /// A wallpaper in a library, with a file in it so the folder is not empty.
+    Directory filled(Directory lib, String id, [String body = '{}']) {
+      final Directory folder = wallpaper(lib, id);
+      File(p.join(folder.path, 'project.json')).writeAsStringSync(body);
+      return folder;
+    }
+
     // AC 2.
     test('with no root every live wallpaper is not backed up', () async {
       wallpaper(liveWorkshop, '793602574');
@@ -537,13 +791,6 @@ void main() {
       });
       expect(result.reconcile, isEmpty);
     });
-
-    /// A wallpaper in a library, with a file in it so the folder is not empty.
-    Directory filled(Directory lib, String id, [String body = '{}']) {
-      final Directory folder = wallpaper(lib, id);
-      File(p.join(folder.path, 'project.json')).writeAsStringSync(body);
-      return folder;
-    }
 
     test('finds both backup libraries under the root', () async {
       filled(liveWorkshop, '793602574');

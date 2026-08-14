@@ -59,6 +59,54 @@ enum BackupState {
   emptyBackup,
 }
 
+/// What a card draws with, plus the three fields the tab filters and orders on.
+///
+/// [type] and [rating] are `project.json`'s own, lowercased, so one filter can
+/// serve both grids. [modified] is that file's timestamp.
+typedef CardFace = ({
+  String title,
+  String preview,
+  String type,
+  String rating,
+  DateTime? modified,
+});
+
+/// Grid order: the states that need attention first, then by folder name.
+///
+/// The list the marquee and shift-click index into has to hold still across a
+/// refresh, and both the differ's map and a directory listing come back in
+/// whatever order the filesystem felt like.
+List<BackupCard> sortedCards(Map<BackupCard, BackupState> cards) {
+  final List<BackupCard> order = cards.keys.toList();
+  order.sort((BackupCard a, BackupCard b) {
+    final int byState = backupSeverity[cards[a]!]! - backupSeverity[cards[b]!]!;
+    if (byState != 0) return byState;
+    final int byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    return byName != 0 ? byName : a.library.key.compareTo(b.library.key);
+  });
+  return order;
+}
+
+/// Worst first, and the one order the tab uses: the grid sorts by it and the
+/// counts above the grid are listed in it.
+///
+/// Vanished leads because the backup is the only copy left. An empty backup
+/// folder outranks never having backed one up: both are unprotected, but only
+/// one of them looks protected.
+const List<BackupState> backupStateOrder = <BackupState>[
+  BackupState.vanished,
+  BackupState.emptyBackup,
+  BackupState.notBackedUp,
+  BackupState.updateAvailable,
+  BackupState.updateDismissed,
+  BackupState.synced,
+];
+
+/// Position of each state in [backupStateOrder], for anything sorting by it.
+final Map<BackupState, int> backupSeverity = <BackupState, int>{
+  for (int i = 0; i < backupStateOrder.length; i++) backupStateOrder[i]: i,
+};
+
 /// How many cards sit in each state, zero-filled so a caller can list every
 /// state without checking for null.
 Map<BackupState, int> countByState(Iterable<BackupState> states) {

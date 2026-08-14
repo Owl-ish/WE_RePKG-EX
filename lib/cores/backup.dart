@@ -104,8 +104,10 @@ Future<BackupScan> scanBackup({
   };
 
   // One counter across both libraries, since they walk at the same time and the
-  // user is watching one line.
-  final int total = unseeded.length + sharedMyProjects.length;
+  // user is watching one line. Every shared folder is opened, whether or not it
+  // is compared: the ones with a baseline are still checked for being empty.
+  // Counting only the compared ones is what made this read "3314 of 1193".
+  final int total = sharedWorkshop.length + sharedMyProjects.length;
   int done = 0;
   void walked(int folders) {
     done += folders;
@@ -164,6 +166,198 @@ Future<BackupScan> scanBackup({
     acfRead: acf.acfRead,
     missing: missing,
     seeds: diff.seeds,
+  );
+}
+
+/// Reads the face of every card, from whichever folder still exists.
+///
+/// A vanished card has no live folder left, so its picture can only come from
+/// the backup copy. A folder whose `project.json` is missing or unreadable
+/// comes back absent rather than dropping the card: that folder is exactly what
+/// the integrity check exists to point at, and hiding it here would be the one
+/// place the tab lies. Measured on a real library at 0.5s warm for 3419
+/// folders, against a scan that already takes ten seconds.
+Future<Map<BackupCard, CardFace>> readCardFaces({
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+  required Map<BackupCard, BackupState> cards,
+}) async {
+  final List<String> liveW = <String>[];
+  final List<String> liveM = <String>[];
+  final List<String> goneW = <String>[];
+  final List<String> goneM = <String>[];
+  cards.forEach((BackupCard card, BackupState state) {
+    final bool gone = state == BackupState.vanished;
+    switch (card.library) {
+      case WallpaperLibrary.workshop:
+        (gone ? goneW : liveW).add(card.name);
+      case WallpaperLibrary.myProjects:
+        (gone ? goneM : liveM).add(card.name);
+    }
+  });
+
+  final (
+    Map<String, CardFace> facesLiveW,
+    Map<String, CardFace> facesLiveM,
+    Map<String, CardFace> facesGoneW,
+    Map<String, CardFace> facesGoneM,
+  ) = await (
+    _faces(liveWorkshopPath, liveW),
+    _faces(liveMyProjectsPath, liveM),
+    _faces(backupWorkshopPath(backupRoot), goneW),
+    _faces(backupMyProjectsPath(backupRoot), goneM),
+  ).wait;
+
+  return <BackupCard, CardFace>{
+    for (final MapEntry<String, CardFace> e in facesLiveW.entries)
+      BackupCard(WallpaperLibrary.workshop, e.key): e.value,
+    for (final MapEntry<String, CardFace> e in facesGoneW.entries)
+      BackupCard(WallpaperLibrary.workshop, e.key): e.value,
+    for (final MapEntry<String, CardFace> e in facesLiveM.entries)
+      BackupCard(WallpaperLibrary.myProjects, e.key): e.value,
+    for (final MapEntry<String, CardFace> e in facesGoneM.entries)
+      BackupCard(WallpaperLibrary.myProjects, e.key): e.value,
+  };
+}
+
+Future<Map<String, CardFace>> _faces(String? root, List<String> names) async {
+  if (root == null || names.isEmpty) return <String, CardFace>{};
+  return _perFolder<CardFace>(root, names, _face);
+}
+
+Future<CardFace?> _face(Directory folder) async {
+  final File file = File(path.join(folder.path, 'project.json'));
+  if (!await file.exists()) return null;
+  try {
+    final Map<String, dynamic> parsed =
+        json.decode(await file.readAsString()) as Map<String, dynamic>;
+    final String? preview = parsed['preview'] as String?;
+    // The same field the extract grid dates a wallpaper by, so both grids mean
+    // the same thing by their date order.
+    final FileStat stat = await file.stat();
+    // myprojects wallpapers often have no title. A hand-made one can also put a
+    // number where the string belongs, which the cast throws on and the catch
+    // below turns into no face at all, matching what the extract grid does with
+    // the same folder.
+    return (
+      title: parsed['title'] as String? ?? path.basename(folder.path),
+      preview: preview == null ? '' : path.join(folder.path, preview),
+      type: (parsed['type'] as String? ?? '').toLowerCase(),
+      rating: (parsed['contentrating'] as String? ?? '').toLowerCase(),
+      modified: stat.changed,
+    );
+  } catch (e) {
+    debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path} $e');
+    return null;
+  }
+}
+
+/// Faces for the names waiting to be reconciled, one per name.
+///
+/// A live folder before a backup copy, and myprojects before Workshop: the
+/// picture should be the one Wallpaper Engine is showing.
+Future<Map<String, CardFace>> readReconcileFaces({
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+  required List<ReconcileEntry> entries,
+}) async {
+  final (
+    Map<String, CardFace> liveM,
+    Map<String, CardFace> liveW,
+    Map<String, CardFace> backupM,
+    Map<String, CardFace> backupW,
+  ) = await (
+    _faces(liveMyProjectsPath, <String>[
+      for (final ReconcileEntry e in entries)
+        if (e.liveMyProjects) e.name,
+    ]),
+    _faces(liveWorkshopPath, <String>[
+      for (final ReconcileEntry e in entries)
+        if (e.liveWorkshop) e.name,
+    ]),
+    _faces(backupMyProjectsPath(backupRoot), <String>[
+      for (final ReconcileEntry e in entries)
+        if (e.backupMyProjects) e.name,
+    ]),
+    _faces(backupWorkshopPath(backupRoot), <String>[
+      for (final ReconcileEntry e in entries)
+        if (e.backupWorkshop) e.name,
+    ]),
+  ).wait;
+
+  return <String, CardFace>{
+    for (final ReconcileEntry entry in entries)
+      if (liveM[entry.name] ??
+              liveW[entry.name] ??
+              backupM[entry.name] ??
+              backupW[entry.name]
+          case final CardFace face)
+        entry.name: face,
+  };
+}
+
+/// The pair of folders a reconcile tile opens.
+///
+/// A name here has copies in more than one place, so it picks one of each: the
+/// myprojects copy, being the one the author edits, before the Workshop one.
+/// The rest is in the presence matrix on the tile, and the per-folder actions
+/// arrive with the reconcile operations.
+({String? live, String? backup}) reconcileFolders({
+  required ReconcileEntry entry,
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+}) {
+  final ({String? backup, String? live}) myProjects = cardFolders(
+    library: WallpaperLibrary.myProjects,
+    name: entry.name,
+    liveExists: entry.liveMyProjects,
+    backupExists: entry.backupMyProjects,
+    backupRoot: backupRoot,
+    liveWorkshopPath: liveWorkshopPath,
+    liveMyProjectsPath: liveMyProjectsPath,
+  );
+  final ({String? backup, String? live}) workshop = cardFolders(
+    library: WallpaperLibrary.workshop,
+    name: entry.name,
+    liveExists: entry.liveWorkshop,
+    backupExists: entry.backupWorkshop,
+    backupRoot: backupRoot,
+    liveWorkshopPath: liveWorkshopPath,
+    liveMyProjectsPath: liveMyProjectsPath,
+  );
+  return (
+    live: myProjects.live ?? workshop.live,
+    backup: myProjects.backup ?? workshop.backup,
+  );
+}
+
+/// The two folders a card stands for. Null where the folder is not there: a
+/// vanished card has no live copy left, and one never backed up has no backup.
+({String? live, String? backup}) cardFolders({
+  required WallpaperLibrary library,
+  required String name,
+  required bool liveExists,
+  required bool backupExists,
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+}) {
+  final String? livePath = switch (library) {
+    WallpaperLibrary.workshop => liveWorkshopPath,
+    WallpaperLibrary.myProjects => liveMyProjectsPath,
+  };
+  final String? backupPath = switch (library) {
+    WallpaperLibrary.workshop => backupWorkshopPath(backupRoot),
+    WallpaperLibrary.myProjects => backupMyProjectsPath(backupRoot),
+  };
+  return (
+    live: liveExists && livePath != null ? path.join(livePath, name) : null,
+    backup: backupExists && backupPath != null
+        ? path.join(backupPath, name)
+        : null,
   );
 }
 

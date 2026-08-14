@@ -124,6 +124,23 @@ Future<int> getSize(String filePath) async {
   return size;
 }
 
+/// Every byte under [folder]. What [getSize] cannot answer: it sizes the file a
+/// wallpaper points at, so a plain folder comes back as zero.
+Future<int> folderBytes(Directory folder) async {
+  int total = 0;
+  try {
+    await for (final FileSystemEntity entity in folder.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is File) total += await entity.length();
+    }
+  } on FileSystemException {
+    // A partial size still says roughly what is at stake.
+  }
+  return total;
+}
+
 bool isImage(String filePath) {
   List<String> imgs = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   String ext = filePath.split('.').last.toLowerCase();
