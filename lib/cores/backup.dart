@@ -6,11 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/folder_entries.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
-import 'package:we_repkg/utils/wallpaper_integrity.dart';
+import 'package:we_repkg/cores/integrity_rules.dart';
 
 String? backupWorkshopPath(String? backupRoot) => backupRoot == null
     ? null
@@ -32,11 +33,11 @@ enum BackupFolder { liveWorkshop, liveMyProjects, backupRoot }
 
 /// What the scan is doing, for the tab to say so instead of spinning silently.
 ///
-/// [comparing] is the long one and the only one that can count: it walks both
-/// backup trees, and on a real library that is ten of the scan's twelve
-/// seconds. [reading] has no total worth reporting, since it is seven listings
-/// running at once.
-enum BackupScanPhase { reading, comparing }
+/// [comparing] is the long one: it walks both backup trees, and on a real
+/// library that is ten of the scan's twelve seconds. [reading] has no total
+/// worth reporting, since it is seven listings running at once. [details] is
+/// the titles and previews, which the grid waits on after the counts are up.
+enum BackupScanPhase { reading, comparing, details }
 
 typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
 
@@ -200,6 +201,7 @@ Future<Map<BackupCard, CardFace>> readCardFaces({
   required String? liveWorkshopPath,
   required String? liveMyProjectsPath,
   required Map<BackupCard, BackupState> cards,
+  void Function(BackupScanProgress)? onProgress,
 }) async {
   final List<String> liveW = <String>[];
   final List<String> liveM = <String>[];
@@ -215,16 +217,29 @@ Future<Map<BackupCard, CardFace>> readCardFaces({
     }
   });
 
+  // One counter over all four, since they read at the same time and the user is
+  // watching one line.
+  int done = 0;
+  void read(int folders) {
+    done += folders;
+    onProgress?.call((
+      phase: BackupScanPhase.details,
+      done: done,
+      total: cards.length,
+    ));
+  }
+
+  if (cards.isNotEmpty) read(0);
   final (
     Map<String, CardFace> facesLiveW,
     Map<String, CardFace> facesLiveM,
     Map<String, CardFace> facesGoneW,
     Map<String, CardFace> facesGoneM,
   ) = await (
-    _faces(liveWorkshopPath, liveW),
-    _faces(liveMyProjectsPath, liveM),
-    _faces(backupWorkshopPath(backupRoot), goneW),
-    _faces(backupMyProjectsPath(backupRoot), goneM),
+    _faces(liveWorkshopPath, liveW, onBatch: read),
+    _faces(liveMyProjectsPath, liveM, onBatch: read),
+    _faces(backupWorkshopPath(backupRoot), goneW, onBatch: read),
+    _faces(backupMyProjectsPath(backupRoot), goneM, onBatch: read),
   ).wait;
 
   return <BackupCard, CardFace>{
@@ -239,18 +254,22 @@ Future<Map<BackupCard, CardFace>> readCardFaces({
   };
 }
 
-Future<Map<String, CardFace>> _faces(String? root, List<String> names) async {
+Future<Map<String, CardFace>> _faces(
+  String? root,
+  List<String> names, {
+  void Function(int folders)? onBatch,
+}) async {
   if (root == null || names.isEmpty) return <String, CardFace>{};
-  return _perFolder<CardFace>(root, names, _face);
+  return _perFolder<CardFace>(root, names, _face, onBatch: onBatch);
 }
 
 Future<CardFace?> _face(Directory folder) async {
-  final File file = File(path.join(folder.path, 'project.json'));
+  final File file = File(path.join(folder.path, WallpaperFiles.project));
   if (!await file.exists()) return null;
   try {
     final Map<String, dynamic> parsed =
         json.decode(await file.readAsString()) as Map<String, dynamic>;
-    final String? preview = parsed['preview'] as String?;
+    final String? preview = parsed[WallpaperProjectFields.preview] as String?;
     // The same field the extract grid dates a wallpaper by, so both grids mean
     // the same thing by their date order.
     final FileStat stat = await file.stat();
@@ -259,10 +278,14 @@ Future<CardFace?> _face(Directory folder) async {
     // below turns into no face at all, matching what the extract grid does with
     // the same folder.
     return (
-      title: parsed['title'] as String? ?? path.basename(folder.path),
+      title:
+          parsed[WallpaperProjectFields.title] as String? ??
+          path.basename(folder.path),
       preview: preview == null ? '' : path.join(folder.path, preview),
-      type: (parsed['type'] as String? ?? '').toLowerCase(),
-      rating: (parsed['contentrating'] as String? ?? '').toLowerCase(),
+      type: (parsed[WallpaperProjectFields.type] as String? ?? '')
+          .toLowerCase(),
+      rating: (parsed[WallpaperProjectFields.contentRating] as String? ?? '')
+          .toLowerCase(),
       modified: stat.changed,
     );
   } catch (e) {

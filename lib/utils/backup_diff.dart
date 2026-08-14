@@ -119,6 +119,16 @@ Map<BackupState, int> countByState(Iterable<BackupState> states) {
   return counts;
 }
 
+/// The worst state holding anything, which is where the tab opens.
+///
+/// Falls back to not backed up, since a library where every count is zero has
+/// nothing to open on and that is the one the user came here about.
+BackupState worstBackupState(Map<BackupState, int> counts) =>
+    backupStateOrder.firstWhere(
+      (BackupState state) => (counts[state] ?? 0) > 0,
+      orElse: () => BackupState.notBackedUp,
+    );
+
 /// A folder name whose backup layout does not mirror its live layout.
 ///
 /// The four flags are what the card's presence matrix draws. Binning the

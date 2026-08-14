@@ -15,6 +15,8 @@
     "refresh": "Rescan",
     "scanReading": "Reading your libraries",
     "scanComparing": "Comparing backups, {done} of {total}",
+    "readingDetails": "Reading wallpaper details",
+    "readingDetailsCount": "Reading wallpaper details, {done} of {total}",
     "scanFailed": "Could not read the libraries:",
     "tilesFailed": "The comparison finished, but the wallpaper details could not be read:",
     "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
@@ -23,6 +25,7 @@
       "integrity": "Integrity"
     },
     "reconcile": "Needs reconciling",
+    "reconcileAbout": "These names sit in more than one library or backup, so there is no single answer to whether they are backed up. Open a pair and decide which copy to keep.",
     "sort": {
       "state": "By state",
       "name": "By name",

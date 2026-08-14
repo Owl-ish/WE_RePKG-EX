@@ -242,22 +242,25 @@ void main() {
       titled(p.join('backup', '431960', '793602574'), 'Neon City');
       titled(p.join('live', '431960', '833227004'), 'Forest stream');
       titled(p.join('backup', '431960', '833227004'), 'Forest stream');
-      wallpaper(p.join('live', 'myprojects', 'alpha'));
-      wallpaper(
+      // A file each side, so alpha is synced like the other two and one pill
+      // shows all three. Not a project.json: these tests need it to have no
+      // title to match on.
+      for (final String side in <String>[
+        p.join('live', 'myprojects', 'alpha'),
         p.join('backup', 'wallpaper_engine', 'projects', 'myprojects', 'alpha'),
-      );
+      ]) {
+        File(p.join(dir(side), 'scene.pkg')).writeAsStringSync('x');
+      }
       final ProviderContainer container = await seeded(<String, Object>{
         AppKeys.wallpaperPath: p.join(tmp.path, 'live', '431960'),
         AppKeys.myProjectsLibrary: p.join(tmp.path, 'live', 'myprojects'),
         AppKeys.backupRoot: p.join(tmp.path, 'backup'),
       });
-      // Every pill lit, so what these tests see is the search box's doing and
-      // not the Synced pill's, which starts off.
-      for (final BackupState state in BackupState.values) {
-        if (!container.read(backupStateFilterProvider).states.contains(state)) {
-          container.read(backupStateFilterProvider.notifier).toggle(state);
-        }
-      }
+      // On the pill these three sit behind, so what the tests see is the search
+      // box's doing rather than the grid opening on Not backed up.
+      container
+          .read(backupStateFilterProvider.notifier)
+          .show(BackupState.synced);
       return container;
     }
 

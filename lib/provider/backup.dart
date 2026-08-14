@@ -38,14 +38,19 @@ Future<BackupScan> backupScan(Ref ref) async {
   final ValueNotifier<BackupScanProgress?> progress = ref.watch(
     backupScanProgressProvider,
   );
-  final BackupScan scan = await scanBackup(
-    backupRoot: backupRoot,
-    liveWorkshopPath: ref.watch(wallpaperPathProvider),
-    liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
-    acfPath: ref.watch(acfPathProvider),
-    onProgress: (BackupScanProgress value) => progress.value = value,
-  );
-  progress.value = null;
+  final BackupScan scan;
+  try {
+    scan = await scanBackup(
+      backupRoot: backupRoot,
+      liveWorkshopPath: ref.watch(wallpaperPathProvider),
+      liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
+      acfPath: ref.watch(acfPathProvider),
+      onProgress: (BackupScanProgress value) => progress.value = value,
+    );
+  } catch (_) {
+    progress.value = null;
+    rethrow;
+  }
   // A Workshop card whose backup already matches live earns its baseline here.
   // Failing to write it must never cost the user the scan: a read-only backup
   // drive would otherwise replace the vanished list with an error string, and
@@ -56,6 +61,9 @@ Future<BackupScan> backupScan(Ref ref) async {
   } catch (e) {
     debugPrint('${tr(AppI10n.errorSeedBackupRecordsFailed)} $e');
   }
+  // Cleared last, or the tab drops back to "reading" with a full bar behind it
+  // while the records are written.
+  progress.value = null;
   return scan;
 }
 
@@ -67,12 +75,26 @@ Future<BackupScan> backupScan(Ref ref) async {
 @Riverpod(keepAlive: true)
 Future<List<BackupTile>> backupTiles(Ref ref) async {
   final BackupScan scan = await ref.watch(backupScanProvider.future);
-  final Map<BackupCard, CardFace> faces = await readCardFaces(
-    backupRoot: ref.watch(backupRootProvider),
-    liveWorkshopPath: ref.watch(wallpaperPathProvider),
-    liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
-    cards: scan.cards,
+  // The same line the scan wrote to, picked up where it left off: reading the
+  // details is the rest of the wait, and a bar that empties and sweeps reads as
+  // the tab having started over.
+  final ValueNotifier<BackupScanProgress?> progress = ref.watch(
+    backupScanProgressProvider,
   );
+  final Map<BackupCard, CardFace> faces;
+  try {
+    faces = await readCardFaces(
+      backupRoot: ref.watch(backupRootProvider),
+      liveWorkshopPath: ref.watch(wallpaperPathProvider),
+      liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
+      cards: scan.cards,
+      onProgress: (BackupScanProgress value) => progress.value = value,
+    );
+  } finally {
+    // A read that threw must not leave its last count sitting on the line for
+    // the next thing that waits to inherit.
+    progress.value = null;
+  }
   return <BackupTile>[
     for (final BackupCard card in sortedCards(scan.cards))
       (card: card, state: scan.cards[card]!, face: faces[card]),
@@ -118,30 +140,58 @@ typedef BackupShown = ({Set<BackupState> states, bool reconcile});
 /// looked at now, and returning to a grid narrowed by a pill switched off days
 /// ago is how a wallpaper goes missing quietly.
 ///
-/// Opens on the one state with an obvious next step. Every other pill holding
+/// Opens on the worst state that holds something, which on a library with work
+/// waiting is the one with an obvious next step. Every other pill holding
 /// anything glows for itself, so nothing is hidden by starting narrow.
 @Riverpod(keepAlive: true)
 class BackupStateFilter extends _$BackupStateFilter {
-  @override
-  BackupShown build() =>
-      (states: <BackupState>{BackupState.notBackedUp}, reconcile: false);
+  static const BackupShown _opening = (
+    states: <BackupState>{BackupState.notBackedUp},
+    reconcile: false,
+  );
 
-  /// Lights or clears one state. Doing it while the reconcile pill holds the
-  /// grid shows that state alone, because the other pills read as off there.
-  void toggle(BackupState state) {
-    if (this.state.reconcile) {
-      this.state = (states: <BackupState>{state}, reconcile: false);
-      return;
-    }
-    final Set<BackupState> next = this.state.states.toSet();
-    next.contains(state) ? next.remove(state) : next.add(state);
-    this.state = (states: next, reconcile: false);
+  @override
+  BackupShown build() {
+    // The counts arrive after this is first read, and again on every rescan.
+    ref.listen(backupScanProvider, (
+      AsyncValue<BackupScan>? previous,
+      AsyncValue<BackupScan> next,
+    ) {
+      if (next case AsyncData<BackupScan>(:final BackupScan value)) {
+        state = _holding(state, value);
+      }
+    });
+    return switch (ref.read(backupScanProvider)) {
+      AsyncData<BackupScan>(:final BackupScan value) => _holding(
+        _opening,
+        value,
+      ),
+      _ => _opening,
+    };
   }
 
-  /// Swaps the grid over. The pills keep what they had, so coming back out
-  /// lands where it left.
-  void toggleReconcile() =>
-      state = (states: state.states, reconcile: !state.reconcile);
+  /// [shown], or the worst state with anything in it when [shown] has nothing.
+  ///
+  /// A looked-after library would otherwise open on a dead Not backed up pill
+  /// over an empty grid, and a rescan that clears whatever was being looked at
+  /// leaves the same thing behind.
+  static BackupShown _holding(BackupShown shown, BackupScan scan) {
+    if (shown.reconcile) return shown;
+    final Map<BackupState, int> counts = countByState(scan.cards.values);
+    if (shown.states.any((BackupState state) => counts[state]! > 0)) {
+      return shown;
+    }
+    return (states: <BackupState>{worstBackupState(counts)}, reconcile: false);
+  }
+
+  /// One at a time, the way tabs behave: the grid shows the state picked and
+  /// nothing else, and is never left showing everything or nothing.
+  void show(BackupState state) =>
+      this.state = (states: <BackupState>{state}, reconcile: false);
+
+  /// Swaps the grid over. The state pills are left as they were because picking
+  /// one is what takes the grid back.
+  void showReconcile() => state = (states: state.states, reconcile: true);
 }
 
 @Riverpod(keepAlive: true)

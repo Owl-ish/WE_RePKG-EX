@@ -15,6 +15,8 @@
     "refresh": "重新扫描",
     "scanReading": "正在读取壁纸库",
     "scanComparing": "正在比较备份，{done} / {total}",
+    "readingDetails": "正在读取壁纸详情",
+    "readingDetailsCount": "正在读取壁纸详情，{done} / {total}",
     "scanFailed": "无法读取壁纸库：",
     "tilesFailed": "比较已完成，但无法读取壁纸详情：",
     "acfUnreadable": "无法读取 Steam 的创意工坊文件，因此无法判断创意工坊壁纸是否有更新。",
@@ -23,6 +25,7 @@
       "integrity": "完整性"
     },
     "reconcile": "待处理",
+    "reconcileAbout": "这些名称同时存在于多个壁纸库或备份中，因此无法简单回答它们有没有备份。打开对应的文件夹，决定保留哪一份。",
     "sort": {
       "state": "按状态",
       "name": "按名称",

@@ -81,6 +81,7 @@ class AppI10n {
   static const String integrityVerdictShaderCacheOnly =
       'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
+  static const String backupReconcileAbout = 'backup.reconcileAbout';
   static const String backupStateSynced = 'backup.state.synced';
   static const String backupStateNotBackedUp = 'backup.state.notBackedUp';
   static const String backupStateVanished = 'backup.state.vanished';
@@ -91,6 +92,8 @@ class AppI10n {
   static const String backupStateEmptyBackup = 'backup.state.emptyBackup';
   static const String backupScanReading = 'backup.scanReading';
   static const String backupScanComparing = 'backup.scanComparing';
+  static const String backupReadingDetails = 'backup.readingDetails';
+  static const String backupReadingDetailsCount = 'backup.readingDetailsCount';
   static const String extractNothingWritten = 'extract.nothingWritten';
   static const String backupSortState = 'backup.sort.state';
   static const String backupSortName = 'backup.sort.name';

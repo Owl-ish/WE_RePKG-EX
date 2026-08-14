@@ -1091,6 +1091,32 @@ void main() {
     });
   });
 
+  group('worstBackupState', () {
+    test('takes the worst state with anything in it', () {
+      expect(
+        worstBackupState(const <BackupState, int>{
+          BackupState.vanished: 0,
+          BackupState.emptyBackup: 0,
+          BackupState.notBackedUp: 0,
+          BackupState.updateAvailable: 3,
+          BackupState.synced: 900,
+        }),
+        BackupState.updateAvailable,
+      );
+    });
+
+    // Nothing to open on, so the tab keeps the state the user came here about
+    // rather than landing on whatever sorts first.
+    test('falls back to not backed up when every count is zero', () {
+      expect(
+        worstBackupState(<BackupState, int>{
+          for (final BackupState state in BackupState.values) state: 0,
+        }),
+        BackupState.notBackedUp,
+      );
+    });
+  });
+
   // The grid sorts by this and the counts above the grid are listed in it, so a
   // state left out would both sort last and lose its row.
   test('every state has a place in the display order', () {

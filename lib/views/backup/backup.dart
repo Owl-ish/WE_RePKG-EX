@@ -1,9 +1,7 @@
-import 'dart:math';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:we_repkg/config/custom_theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
@@ -22,12 +20,14 @@ import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/views/top/filter_dropdown.dart';
 import 'package:we_repkg/views/top/sort_toggle.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
+import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 import 'package:we_repkg/widgets/pill_dropdown.dart';
 import 'package:we_repkg/widgets/search_field.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
 import 'package:we_repkg/widgets/sliding_switch.dart';
 import 'package:we_repkg/widgets/top_bar.dart';
+import 'package:we_repkg/widgets/scan_progress.dart';
 
 /// The backup area: the backup itself, and the integrity check beside it.
 class BackupView extends ConsumerWidget {
@@ -81,10 +81,12 @@ class _Bar extends ConsumerWidget {
     // The scan is watched last on purpose. It starts the moment anything reads
     // it, and reading it here would run the whole comparison behind the "choose
     // a folder" screen and again beside the integrity check.
-    final bool grid =
-        tab == BackupTab.backup &&
-        ref.watch(backupRootProvider) != null &&
-        _hasGrid(ref.watch(backupScanProvider));
+    final bool backupReady =
+        tab == BackupTab.backup && ref.watch(backupRootProvider) != null;
+    final AsyncValue<BackupScan>? scan = backupReady
+        ? ref.watch(backupScanProvider)
+        : null;
+    final bool grid = scan != null && _hasGrid(scan);
 
     return TopBar(
       leading: <Widget>[
@@ -113,7 +115,13 @@ class _Bar extends ConsumerWidget {
           // so this is the only way to ask for fresh numbers.
           AppIconButton(
             tooltip: tr(AppI10n.backupRefresh),
-            onPressed: () => ref.invalidate(backupScanProvider),
+            // Off while anything is still reading: a second run writes its
+            // progress into the same line as the first, which is still going
+            // because nothing here is cancelled.
+            onPressed:
+                scan.isLoading || ref.watch(backupTilesProvider).isLoading
+                ? null
+                : () => ref.invalidate(backupScanProvider),
             icon: Icons.refresh_rounded,
             width: TopBarNums.buttonSize,
             height: TopBarNums.buttonSize,
@@ -169,47 +177,51 @@ class _Backup extends ConsumerWidget {
       AsyncError<BackupScan>(:final Object error) => Center(
         child: Text('${tr(AppI10n.backupScanFailed)} $error'),
       ),
-      _ => const _Scanning(),
+      _ => const _Scanning(idle: AppI10n.backupScanReading),
     };
   }
 }
 
-/// The first scan takes about twelve seconds against a real library, most of it
-/// walking both backup trees, so the spinner says what it is doing rather than
-/// leaving the tab blank.
+/// The wait, with whatever the run has reported about itself. The first scan
+/// takes about twelve seconds against a real library, and a bare spinner over
+/// that is indistinguishable from a tab that has hung.
 class _Scanning extends ConsumerWidget {
-  const _Scanning();
+  const _Scanning({required this.idle});
+
+  /// Shown until the phase reports, and after it has finished writing counts.
+  final String idle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: 16,
-        children: <Widget>[
-          const CircularProgressIndicator(),
-          // Only this line listens, so a count that moves every few folders
-          // does not rebuild the tab behind it.
-          ValueListenableBuilder<BackupScanProgress?>(
-            valueListenable: ref.watch(backupScanProgressProvider),
-            builder: (BuildContext context, BackupScanProgress? progress, _) {
-              if (progress == null) return const SizedBox.shrink();
-              return Text(switch (progress.phase) {
-                BackupScanPhase.reading => tr(AppI10n.backupScanReading),
-                BackupScanPhase.comparing => tr(
-                  AppI10n.backupScanComparing,
-                  namedArgs: <String, String>{
-                    'done': '${progress.done}',
-                    'total': '${progress.total}',
-                  },
-                ),
-              }, style: Theme.of(context).meta.captionStyle);
-            },
-          ),
-        ],
-      ),
+    // Only this listens, so a count that moves every few folders does not
+    // rebuild the tab behind it.
+    return ValueListenableBuilder<BackupScanProgress?>(
+      valueListenable: ref.watch(backupScanProgressProvider),
+      builder: (BuildContext context, BackupScanProgress? progress, _) {
+        if (progress == null) return ScanProgress(label: tr(idle));
+        return ScanProgress(
+          label: switch (progress.phase) {
+            BackupScanPhase.reading => tr(AppI10n.backupScanReading),
+            BackupScanPhase.comparing => tr(
+              AppI10n.backupScanComparing,
+              namedArgs: _counts(progress),
+            ),
+            BackupScanPhase.details => tr(
+              AppI10n.backupReadingDetailsCount,
+              namedArgs: _counts(progress),
+            ),
+          },
+          // Reading has no total worth reporting, so the bar sweeps instead.
+          progress: progress.total > 0 ? progress.done / progress.total : null,
+        );
+      },
     );
   }
+
+  Map<String, String> _counts(BackupScanProgress progress) => <String, String>{
+    'done': '${progress.done}',
+    'total': '${progress.total}',
+  };
 }
 
 /// Names the folders the scan could not read, and what each is set to.
@@ -310,6 +322,11 @@ class _Loaded extends ConsumerWidget {
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
+    final Map<BackupState, ({Color colour, String label})> looks =
+        <BackupState, ({Color colour, String label})>{
+          for (final BackupState state in backupStateOrder)
+            state: backupStateLook(context, state),
+        };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -325,169 +342,46 @@ class _Loaded extends ConsumerWidget {
           ),
         Padding(
           padding: const EdgeInsets.only(top: LayoutNums.contentGap),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          child: PillRow(
             children: [
               for (final BackupState state in backupStateOrder)
-                _CountPill(
-                  colour: backupStateLook[state]!.colour,
-                  label: tr(backupStateLook[state]!.label),
+                CountPill(
+                  colour: looks[state]!.colour,
+                  label: tr(looks[state]!.label),
                   count: counts[state]!,
-                  // All off while the reconcile pill has the grid, which is what
-                  // makes clicking one mean "show me that state".
                   on: !shown.reconcile && shown.states.contains(state),
                   // Synced is the one state with nothing to come back to, and
                   // on a looked-after library it is most of the grid.
                   nags: state != BackupState.synced,
-                  onPressed: () => pills.toggle(state),
+                  onPressed: () => pills.show(state),
                 ),
-              _CountPill(
-                colour: _reconcileColour,
+              // Red, unlike the grey badge a reconcile tile wears: on the tile
+              // it names a question, here it is the one count the tab cannot
+              // answer for at all.
+              CountPill(
+                colour: Theme.of(context).status.bad,
                 label: tr(AppI10n.backupReconcile),
                 count: scan.reconcile.length,
                 on: shown.reconcile,
-                onPressed: pills.toggleReconcile,
+                onPressed: pills.showReconcile,
               ),
             ],
           ),
         ),
+        // The one pill whose name does not say what it wants from the user.
+        if (shown.reconcile)
+          Padding(
+            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            child: Text(
+              tr(AppI10n.backupReconcileAbout),
+              style: Theme.of(context).meta.captionStyle,
+            ),
+          ),
         const Expanded(child: _Grid()),
       ],
     );
   }
 }
-
-/// A count that switches its own tiles on and off.
-///
-/// Glows in its own colour while it holds wallpapers and is switched off: a
-/// state nobody is looking at is one to come back to. Dimmed and unclickable at
-/// zero, except while it holds the grid, or resolving the last one waiting
-/// would leave an empty grid with no way back.
-class _CountPill extends StatefulWidget {
-  const _CountPill({
-    required this.colour,
-    required this.label,
-    required this.count,
-    required this.on,
-    required this.onPressed,
-    this.nags = true,
-  });
-
-  final Color colour;
-  final String label;
-  final int count;
-  final bool on;
-  final VoidCallback onPressed;
-
-  /// Whether this pill is worth coming back to at all.
-  final bool nags;
-
-  @override
-  State<_CountPill> createState() => _CountPillState();
-}
-
-class _CountPillState extends State<_CountPill>
-    with SingleTickerProviderStateMixin {
-  /// Slow enough to read as breathing rather than blinking, and faint enough to
-  /// sit behind text without moving the eye off the grid.
-  static const Duration _period = Duration(milliseconds: 2600);
-  static const double _peak = .22;
-
-  late final AnimationController _glow = AnimationController(
-    vsync: this,
-    duration: _period,
-  );
-
-  bool get _wanted => widget.nags && widget.count > 0 && !widget.on;
-
-  @override
-  void initState() {
-    super.initState();
-    _sync();
-  }
-
-  @override
-  void didUpdateWidget(_CountPill old) {
-    super.didUpdateWidget(old);
-    _sync();
-  }
-
-  void _sync() {
-    if (_wanted) {
-      if (!_glow.isAnimating) _glow.repeat();
-    } else if (_glow.isAnimating) {
-      _glow.stop();
-      _glow.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _glow.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool live = widget.count > 0 || widget.on;
-    final Color tint = live ? widget.colour : Theme.of(context).disabledColor;
-    return AnimatedBuilder(
-      animation: _glow,
-      builder: (BuildContext context, Widget? child) => Material(
-        // Cosine, so it swells and fades rather than snapping at either end.
-        color: widget.colour.withValues(
-          alpha: _peak * (1 - cos(_glow.value * 2 * pi)) / 2,
-        ),
-        borderRadius: LayoutNums.pill,
-        child: child,
-      ),
-      child: InkWell(
-        borderRadius: LayoutNums.pill,
-        mouseCursor: live ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onTap: live ? widget.onPressed : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: LayoutNums.pill,
-            border: Border.all(
-              color: widget.on && live ? tint : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 6,
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: widget.on ? tint : Colors.transparent,
-                  border: Border.all(color: tint, width: 1.5),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              // Flexible, or a long label in a narrow window overflows its own
-              // row rather than being cut short.
-              Flexible(
-                child: Text(
-                  '${widget.label} ${widget.count}',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: live && widget.on ? null : tint),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Red, unlike the grey badge a reconcile tile wears: on the tile it names a
-/// question, here it is the one count the tab cannot answer for at all.
-const Color _reconcileColour = Color(0xFFC62828);
 
 /// Reading a few thousand titles and previews takes about half a second on top
 /// of the scan, so the pills above are already up while this resolves.
@@ -537,6 +431,7 @@ class _Grid extends ConsumerWidget {
     required String id,
     required String Function(T tile) idOf,
     required Widget Function(T tile, double width, VoidCallback onTap) build,
+    required Widget waiting,
   }) {
     return switch (tiles) {
       AsyncData<List<T>>(value: final List<T> value) when value.isEmpty =>
@@ -573,7 +468,7 @@ class _Grid extends ConsumerWidget {
       AsyncError<List<T>>(:final Object error) => Center(
         child: Text('${tr(AppI10n.backupTilesFailed)} $error'),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => waiting,
     };
   }
 
@@ -588,6 +483,9 @@ class _Grid extends ConsumerWidget {
         ref,
         ref.watch(backupVisibleReconcileTilesProvider),
         id: 'backup-reconcile-grid',
+        // No count: the only run reporting one is the card read, and its total
+        // is the whole library rather than this much shorter list.
+        waiting: ScanProgress(label: tr(AppI10n.backupReadingDetails)),
         idOf: (ReconcileTile tile) => reconcileTileId(tile.entry.name),
         build: (ReconcileTile tile, double width, VoidCallback onTap) =>
             ReconcileTileView(
@@ -609,6 +507,7 @@ class _Grid extends ConsumerWidget {
       ref,
       ref.watch(backupVisibleTilesProvider),
       id: 'backup-grid',
+      waiting: const _Scanning(idle: AppI10n.backupReadingDetails),
       idOf: (BackupTile tile) => tile.card.id,
       build: (BackupTile tile, double width, VoidCallback onTap) =>
           BackupTileView(

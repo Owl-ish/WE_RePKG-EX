@@ -131,7 +131,7 @@ final class BackupScanProvider
   }
 }
 
-String _$backupScanHash() => r'c9a83caea59bdfe53e3da3f5d2da83f54f282fcf';
+String _$backupScanHash() => r'6e355d8d2b6c09db393058cb18bacad3a63a4801';
 
 /// The scan's cards in grid order, each with the title and preview to draw.
 ///
@@ -191,18 +191,16 @@ String _$backupTilesHash() => r'f5df592929c1158fe4db3afac08467e7d66a3724';
 
 /// The names waiting to be reconciled, each with the title and preview to draw.
 ///
-/// Its own provider rather than part of [backupTiles]: these are read from a
-/// few hundred folders against several thousand, and they only ever show behind
-/// their own pill.
+/// Apart from [backupTiles]: a few hundred folders against several thousand,
+/// and they only ever show behind their own pill.
 
 @ProviderFor(backupReconcileTiles)
 final backupReconcileTilesProvider = BackupReconcileTilesProvider._();
 
 /// The names waiting to be reconciled, each with the title and preview to draw.
 ///
-/// Its own provider rather than part of [backupTiles]: these are read from a
-/// few hundred folders against several thousand, and they only ever show behind
-/// their own pill.
+/// Apart from [backupTiles]: a few hundred folders against several thousand,
+/// and they only ever show behind their own pill.
 
 final class BackupReconcileTilesProvider
     extends
@@ -216,9 +214,8 @@ final class BackupReconcileTilesProvider
         $FutureProvider<List<ReconcileTile>> {
   /// The names waiting to be reconciled, each with the title and preview to draw.
   ///
-  /// Its own provider rather than part of [backupTiles]: these are read from a
-  /// few hundred folders against several thousand, and they only ever show behind
-  /// their own pill.
+  /// Apart from [backupTiles]: a few hundred folders against several thousand,
+  /// and they only ever show behind their own pill.
   BackupReconcileTilesProvider._()
     : super(
         from: null,
@@ -322,21 +319,30 @@ abstract class _$BackupSearch extends $Notifier<String> {
   }
 }
 
-/// Session state on purpose. The pills are how the tab is being looked at right
-/// now, and coming back to a grid still narrowed by a pill switched off days ago
-/// is how a wallpaper goes missing quietly.
+/// Session state rather than a setting: the pills are how the tab is being
+/// looked at now, and returning to a grid narrowed by a pill switched off days
+/// ago is how a wallpaper goes missing quietly.
+///
+/// Opens on the one state with an obvious next step. Every other pill holding
+/// anything glows for itself, so nothing is hidden by starting narrow.
 
 @ProviderFor(BackupStateFilter)
 final backupStateFilterProvider = BackupStateFilterProvider._();
 
-/// Session state on purpose. The pills are how the tab is being looked at right
-/// now, and coming back to a grid still narrowed by a pill switched off days ago
-/// is how a wallpaper goes missing quietly.
+/// Session state rather than a setting: the pills are how the tab is being
+/// looked at now, and returning to a grid narrowed by a pill switched off days
+/// ago is how a wallpaper goes missing quietly.
+///
+/// Opens on the one state with an obvious next step. Every other pill holding
+/// anything glows for itself, so nothing is hidden by starting narrow.
 final class BackupStateFilterProvider
     extends $NotifierProvider<BackupStateFilter, BackupShown> {
-  /// Session state on purpose. The pills are how the tab is being looked at right
-  /// now, and coming back to a grid still narrowed by a pill switched off days ago
-  /// is how a wallpaper goes missing quietly.
+  /// Session state rather than a setting: the pills are how the tab is being
+  /// looked at now, and returning to a grid narrowed by a pill switched off days
+  /// ago is how a wallpaper goes missing quietly.
+  ///
+  /// Opens on the one state with an obvious next step. Every other pill holding
+  /// anything glows for itself, so nothing is hidden by starting narrow.
   BackupStateFilterProvider._()
     : super(
         from: null,
@@ -364,11 +370,14 @@ final class BackupStateFilterProvider
   }
 }
 
-String _$backupStateFilterHash() => r'c44323497914e9a8b74a9ba84e8948301a8398e5';
+String _$backupStateFilterHash() => r'30134908244dd0e49f9b42ed4fe07c5781552bc9';
 
-/// Session state on purpose. The pills are how the tab is being looked at right
-/// now, and coming back to a grid still narrowed by a pill switched off days ago
-/// is how a wallpaper goes missing quietly.
+/// Session state rather than a setting: the pills are how the tab is being
+/// looked at now, and returning to a grid narrowed by a pill switched off days
+/// ago is how a wallpaper goes missing quietly.
+///
+/// Opens on the one state with an obvious next step. Every other pill holding
+/// anything glows for itself, so nothing is hidden by starting narrow.
 
 abstract class _$BackupStateFilter extends $Notifier<BackupShown> {
   BackupShown build();
@@ -420,7 +429,7 @@ final class BackupSortOrderProvider
   }
 }
 
-String _$backupSortOrderHash() => r'8ad1b336f04e05397eb493306d94b969204b29cd';
+String _$backupSortOrderHash() => r'983107ce4592037a5bb0bc174ff6c74322671246';
 
 abstract class _$BackupSortOrder extends $Notifier<BackupSortType> {
   BackupSortType build();
@@ -493,20 +502,14 @@ abstract class _$BackupSortAscending extends $Notifier<bool> {
   }
 }
 
-/// The cards the grid actually draws: what the pills, the search box and the
-/// filter button leave, in the chosen order.
-///
-/// Apart from [backupTiles] so that typing re-filters a list in memory rather
-/// than re-reading a few thousand folders.
+/// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
+/// a list in memory rather than re-reading a few thousand folders.
 
 @ProviderFor(backupVisibleTiles)
 final backupVisibleTilesProvider = BackupVisibleTilesProvider._();
 
-/// The cards the grid actually draws: what the pills, the search box and the
-/// filter button leave, in the chosen order.
-///
-/// Apart from [backupTiles] so that typing re-filters a list in memory rather
-/// than re-reading a few thousand folders.
+/// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
+/// a list in memory rather than re-reading a few thousand folders.
 
 final class BackupVisibleTilesProvider
     extends
@@ -516,11 +519,8 @@ final class BackupVisibleTilesProvider
           FutureOr<List<BackupTile>>
         >
     with $FutureModifier<List<BackupTile>>, $FutureProvider<List<BackupTile>> {
-  /// The cards the grid actually draws: what the pills, the search box and the
-  /// filter button leave, in the chosen order.
-  ///
-  /// Apart from [backupTiles] so that typing re-filters a list in memory rather
-  /// than re-reading a few thousand folders.
+  /// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
+  /// a list in memory rather than re-reading a few thousand folders.
   BackupVisibleTilesProvider._()
     : super(
         from: null,
@@ -693,7 +693,7 @@ final class BackupSelectionProvider
   }
 }
 
-String _$backupSelectionHash() => r'3ff14ad8a70f42d46b57056a6577f79d99d235be';
+String _$backupSelectionHash() => r'451df40fdc6d3854a5d478ad2ca31f35ef228440';
 
 /// Which backup cards are selected, by [BackupCard.id].
 ///

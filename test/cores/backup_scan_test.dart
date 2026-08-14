@@ -429,6 +429,39 @@ void main() {
         File(p.join(liveM.path, 'alpha', 'project.json')).statSync().changed,
       );
     });
+
+    // Reading the details is the rest of the wait after the counts are up, and
+    // it was the half of it with nothing to watch.
+    test('reading the details counts its way to the end', () async {
+      final Directory liveM = library('live-myprojects');
+      final List<String> names = <String>[for (int i = 0; i < 30; i++) 'w$i'];
+      for (final String name in names) {
+        project(wallpaper(liveM, name), '{"title":"$name"}');
+      }
+      final List<BackupScanProgress> seen = <BackupScanProgress>[];
+
+      await readCardFaces(
+        backupRoot: null,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveM.path,
+        cards: <BackupCard, BackupState>{
+          for (final String name in names)
+            BackupCard(WallpaperLibrary.myProjects, name): BackupState.synced,
+        },
+        onProgress: seen.add,
+      );
+
+      expect(
+        seen.map((BackupScanProgress p) => p.phase),
+        everyElement(BackupScanPhase.details),
+      );
+      expect(seen.first.done, 0, reason: 'the line starts before the reading');
+      expect(
+        seen.last,
+        (phase: BackupScanPhase.details, done: 30, total: 30),
+        reason: 'a bar that stops short reads as the app having given up',
+      );
+    });
   });
 
   group('reconcileFolders', () {

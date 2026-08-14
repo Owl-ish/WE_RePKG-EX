@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
@@ -251,36 +252,39 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   }
 }
 
-/// Colours per state, worst in red. Fixed rather than themed: these say how
-/// safe a wallpaper is, and a palette that shifts with the theme would let
-/// "vanished" read as decoration.
-const Map<BackupState, ({Color colour, String label})> backupStateLook =
-    <BackupState, ({Color colour, String label})>{
-      BackupState.vanished: (
-        colour: Color(0xFFC62828),
-        label: AppI10n.backupStateVanished,
-      ),
-      BackupState.emptyBackup: (
-        colour: Color(0xFFAD1457),
-        label: AppI10n.backupStateEmptyBackup,
-      ),
-      BackupState.notBackedUp: (
-        colour: Color(0xFFEF6C00),
-        label: AppI10n.backupStateNotBackedUp,
-      ),
-      BackupState.updateAvailable: (
-        colour: Color(0xFF1565C0),
-        label: AppI10n.backupStateUpdateAvailable,
-      ),
-      BackupState.updateDismissed: (
-        colour: Color(0xFF546E7A),
-        label: AppI10n.backupStateUpdateDismissed,
-      ),
-      BackupState.synced: (
-        colour: Color(0xFF2E7D32),
-        label: AppI10n.backupStateSynced,
-      ),
-    };
+/// Presentation for one backup state, using the active semantic palette.
+({Color colour, String label}) backupStateLook(
+  BuildContext context,
+  BackupState state,
+) {
+  final StatusPalette colours = Theme.of(context).status;
+  return switch (state) {
+    BackupState.vanished => (
+      colour: colours.bad,
+      label: AppI10n.backupStateVanished,
+    ),
+    BackupState.emptyBackup => (
+      colour: colours.hollow,
+      label: AppI10n.backupStateEmptyBackup,
+    ),
+    BackupState.notBackedUp => (
+      colour: colours.warn,
+      label: AppI10n.backupStateNotBackedUp,
+    ),
+    BackupState.updateAvailable => (
+      colour: colours.note,
+      label: AppI10n.backupStateUpdateAvailable,
+    ),
+    BackupState.updateDismissed => (
+      colour: colours.muted,
+      label: AppI10n.backupStateUpdateDismissed,
+    ),
+    BackupState.synced => (
+      colour: colours.good,
+      label: AppI10n.backupStateSynced,
+    ),
+  };
+}
 
 class _StateBadge extends StatelessWidget {
   const _StateBadge({required this.state});
@@ -289,7 +293,7 @@ class _StateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ({Color colour, String label}) look = backupStateLook[state]!;
+    final ({Color colour, String label}) look = backupStateLook(context, state);
     return _Pill(colour: look.colour, text: tr(look.label));
   }
 }
