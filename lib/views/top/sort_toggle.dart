@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/nums.dart';
-import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 
-class SortToggle extends ConsumerWidget {
-  const SortToggle({super.key});
+/// Runs the grid's order the other way. Which order that is belongs to the tab.
+class SortToggle extends StatelessWidget {
+  const SortToggle({
+    super.key,
+    required this.ascending,
+    required this.onPressed,
+  });
+
+  final bool ascending;
+  final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return AppIconButton(
-      onPressed: ref.read(sortAscendingProvider.notifier).update,
-      icon: ref.watch(sortAscendingProvider)
+      onPressed: onPressed,
+      icon: ascending
           ? Icons.arrow_upward_rounded
           : Icons.arrow_downward_rounded,
       width: TopBarNums.buttonSize,

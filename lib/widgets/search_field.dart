@@ -2,33 +2,44 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/widgets/custom_input.dart';
 
-class Search extends ConsumerStatefulWidget {
-  const Search({super.key});
+/// The search box both grids use. Where the text goes is the caller's business.
+class SearchField extends StatefulWidget {
+  const SearchField({
+    super.key,
+    required this.onChanged,
+    this.initialText = '',
+  });
+
+  final void Function(String) onChanged;
+
+  /// The term already narrowing the grid. The field lives with the widget while
+  /// the term lives in a provider, so anything that takes the row away, a
+  /// rescan or a trip to the other tab, would otherwise leave a narrowed grid
+  /// above an empty box.
+  final String initialText;
 
   @override
-  ConsumerState<Search> createState() => _SearchState();
+  State<SearchField> createState() => _SearchFieldState();
 }
 
-class _SearchState extends ConsumerState<Search> {
+class _SearchFieldState extends State<SearchField> {
   late TextEditingController controller;
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    controller = TextEditingController()
+    controller = TextEditingController(text: widget.initialText)
       ..addListener(() {
         setState(() {}); // update the clear button / text display immediately
         // Debounce: only trigger filtering 250ms after typing stops, so each
         // keystroke doesn't re-filter the whole list.
         _debounce?.cancel();
         _debounce = Timer(const Duration(milliseconds: 250), () {
-          ref.read(searchContentProvider.notifier).update(controller.text);
+          widget.onChanged(controller.text);
         });
       });
   }
@@ -42,8 +53,7 @@ class _SearchState extends ConsumerState<Search> {
 
   @override
   Widget build(BuildContext context) {
-    // No width of its own: TopView stretches the field into the gap between the
-    // wallpaper count and the view controls, up to a cap.
+    // No width of its own: the row it sits in decides.
     return CustomInput(
       controller: controller,
       hintText: tr(AppI10n.homeSearchTip),

@@ -283,6 +283,33 @@ void main() {
       expect(ids, ['1']);
     });
 
+    // A Workshop link or a folder on disk gives you the id, never the title.
+    test('search matches the folder id as well as the title', () async {
+      await boot();
+      container.read(wallpaperListProvider.notifier).addAll([
+        makeWallpaper('793602574', title: 'Neon City'),
+        makeWallpaper('833227004', title: 'Forest stream'),
+      ]);
+      container.read(searchContentProvider.notifier).update('8332');
+
+      final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
+      expect(ids, ['833227004']);
+    });
+
+    // A myprojects folder is named after the wallpaper, so its id carries the
+    // case the user typed when they made it.
+    test('an id match ignores case', () async {
+      await boot();
+      container.read(wallpaperListProvider.notifier).addAll([
+        makeWallpaper('Neon Alley', title: 'untitled'),
+        makeWallpaper('833227004', title: 'Forest stream'),
+      ]);
+      container.read(searchContentProvider.notifier).update('NEON');
+
+      final ids = container.read(filterWallpaperListProvider).map((e) => e.id);
+      expect(ids, ['Neon Alley']);
+    });
+
     test(
       'wallpapers with no extractable file are never filtered out',
       () async {

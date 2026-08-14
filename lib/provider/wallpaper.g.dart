@@ -281,7 +281,7 @@ final class FilterWallpaperListProvider
 }
 
 String _$filterWallpaperListHash() =>
-    r'1b632826f82345f6d0bd53ef171570d185a65669';
+    r'3c5e513a0e373400dc83dcf5b06f9e482224e2a9';
 
 /// How many wallpapers in the batch have finished, 0..total. A count, not a
 /// cursor: with several in flight, completions arrive out of order.
