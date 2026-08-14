@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/models/enums.dart';
@@ -201,6 +202,37 @@ scanWallpapers(String? folderPath) async {
     }
   }
   return (wallpapers: wallpapers, earliestDate: earliestDate);
+}
+
+/// One folder read as a wallpaper, for the details of a backup card, which is a
+/// folder name rather than a row of a scanned library.
+///
+/// Falls back to the folder and its size when project.json will not read: that
+/// folder is exactly the one whose details are worth opening, and the backup
+/// grid keeps it rather than dropping it the way the extract scan does.
+Future<WallpaperInfo> readWallpaperFolder(String folderPath) async {
+  final Directory folder = Directory(folderPath);
+  final Map<String, AcfInfo> acfInfoMap = <String, AcfInfo>{
+    for (final AcfInfo info in await getAcfInfo()) info.id: info,
+  };
+  final WallpaperInfo? parsed = await _parseWallpaperFolder(folder, acfInfoMap);
+  if (parsed != null) return parsed;
+  final String name = path.basename(folderPath);
+  return WallpaperInfo(
+    id: name,
+    title: name,
+    contentRating: '',
+    tags: const <String>[],
+    previews: '',
+    type: WallpaperType.unknown,
+    updateTime: null,
+    createTime: (await folder.stat()).changed,
+    target: '',
+    folder: folderPath,
+    // The whole folder, not getSize: there is no project.json to name a file to
+    // measure, and the folder is the thing the user is asking about.
+    size: await folderBytes(folder),
+  );
 }
 
 /// Parses one folder's project.json. Null if it is missing or unreadable, which

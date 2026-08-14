@@ -16,12 +16,20 @@
     "scanReading": "Reading your libraries",
     "scanComparing": "Comparing backups, {done} of {total}",
     "scanFailed": "Could not read the libraries:",
+    "tilesFailed": "The comparison finished, but the wallpaper details could not be read:",
     "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
     "tab": {
       "backup": "Backup",
       "integrity": "Integrity"
     },
     "reconcile": "Needs reconciling",
+    "sort": {
+      "state": "By state",
+      "name": "By name",
+      "date": "By date"
+    },
+    "openLiveFolder": "Open live folder",
+    "openBackupFolder": "Open backup folder",
     "state": {
       "synced": "Synced",
       "notBackedUp": "Not backed up",
@@ -56,7 +64,7 @@
   },
   "home": {
     "topTitle": "{count} Wallpapers Found",
-    "searchTip": "Search a wallpaper..",
+    "searchTip": "Search by name or ID..",
     "sortDate": "Sort by date",
     "sortSize": "Sort by size",
     "sortUpdate": "Sort by update",

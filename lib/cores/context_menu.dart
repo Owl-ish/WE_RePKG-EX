@@ -69,6 +69,46 @@ Future<void> showRightMenu(
       ),
   ];
 
+  await showMenuAt(context, details, entries);
+}
+
+/// What a backup tile offers on a right click. Only the folders for now:
+/// backing up, restoring and deleting land with the operations. A folder that
+/// is not there is left out rather than shown pointing at nothing.
+Future<void> showBackupMenu(
+  BuildContext context,
+  TapDownDetails details, {
+  required VoidCallback onDetails,
+  required String? liveFolder,
+  required String? backupFolder,
+}) async {
+  await showMenuAt(context, details, <ContextMenuEntry>[
+    // Double click opens the same dialog, but nothing on a tile advertises
+    // that. This is the discoverable way in.
+    RightMenuItem(
+      label: tr(AppI10n.homeDetails),
+      onSelected: (_) => onDetails(),
+    ),
+    if (liveFolder != null)
+      RightMenuItem(
+        label: tr(AppI10n.backupOpenLiveFolder),
+        onSelected: (_) => browserFolder(liveFolder),
+      ),
+    if (backupFolder != null)
+      RightMenuItem(
+        label: tr(AppI10n.backupOpenBackupFolder),
+        onSelected: (_) => browserFolder(backupFolder),
+      ),
+  ]);
+}
+
+/// The app's context menu: the caller's rows on the app's surface, at the
+/// pointer.
+Future<void> showMenuAt(
+  BuildContext context,
+  TapDownDetails details,
+  List<ContextMenuEntry> entries,
+) async {
   final ContextMenu<dynamic> menu = ContextMenu(
     entries: entries,
     boxDecoration: BoxDecoration(

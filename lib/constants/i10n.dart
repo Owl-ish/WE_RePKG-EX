@@ -48,6 +48,7 @@ class AppI10n {
   static const String backupFolderBackupRoot = 'backup.folder.backupRoot';
   static const String backupRefresh = 'backup.refresh';
   static const String backupScanFailed = 'backup.scanFailed';
+  static const String backupTilesFailed = 'backup.tilesFailed';
   static const String backupAcfUnreadable = 'backup.acfUnreadable';
   static const String backupTabBackup = 'backup.tab.backup';
   static const String backupTabIntegrity = 'backup.tab.integrity';
@@ -88,6 +89,11 @@ class AppI10n {
   static const String backupStateEmptyBackup = 'backup.state.emptyBackup';
   static const String backupScanReading = 'backup.scanReading';
   static const String backupScanComparing = 'backup.scanComparing';
+  static const String backupSortState = 'backup.sort.state';
+  static const String backupSortName = 'backup.sort.name';
+  static const String backupSortDate = 'backup.sort.date';
+  static const String backupOpenLiveFolder = 'backup.openLiveFolder';
+  static const String backupOpenBackupFolder = 'backup.openBackupFolder';
 
   static const String homeDetails = 'home.details';
   static const String homeDoubleClickDetails = 'home.doubleClickDetails';

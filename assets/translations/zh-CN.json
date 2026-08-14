@@ -16,12 +16,20 @@
     "scanReading": "正在读取壁纸库",
     "scanComparing": "正在比较备份，{done} / {total}",
     "scanFailed": "无法读取壁纸库：",
+    "tilesFailed": "比较已完成，但无法读取壁纸详情：",
     "acfUnreadable": "无法读取 Steam 的创意工坊文件，因此无法判断创意工坊壁纸是否有更新。",
     "tab": {
       "backup": "备份",
       "integrity": "完整性"
     },
     "reconcile": "待处理",
+    "sort": {
+      "state": "按状态",
+      "name": "按名称",
+      "date": "按日期"
+    },
+    "openLiveFolder": "打开当前文件夹",
+    "openBackupFolder": "打开备份文件夹",
     "state": {
       "synced": "已同步",
       "notBackedUp": "未备份",
@@ -56,7 +64,7 @@
   },
   "home": {
     "topTitle": "共检索到 {count} 个壁纸",
-    "searchTip": "请输入关键词",
+    "searchTip": "搜索名称或 ID",
     "sortDate": "按日期排序",
     "sortSize": "按大小排序",
     "sortUpdate": "按更新排序",
