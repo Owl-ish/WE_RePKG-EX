@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
-import 'package:we_repkg/utils/wallpaper_integrity.dart';
+import 'package:we_repkg/cores/integrity_rules.dart';
 
 /// What is directly inside [folder], or null if it could not be read.
 ///

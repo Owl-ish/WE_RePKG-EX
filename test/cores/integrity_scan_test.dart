@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:we_repkg/cores/integrity.dart';
-import 'package:we_repkg/utils/wallpaper_integrity.dart';
+import 'package:we_repkg/cores/integrity_rules.dart';
+import 'package:we_repkg/cores/integrity_scan.dart';
 
 void main() {
   late Directory tmp;
@@ -92,8 +92,7 @@ void main() {
       'media': IntegrityVerdict.mediaOnly,
       'no_payload': IntegrityVerdict.payloadMissing,
       'broken_json': IntegrityVerdict.projectUnreadable,
-      'nothing': IntegrityVerdict.empty,
-    });
+    }, reason: 'an empty folder is the backup tab\'s to answer for');
   });
 
   // The user's 3675770605: sound in the live library, payload never copied to
@@ -114,6 +113,27 @@ void main() {
     expect(report.findings, hasLength(1));
     expect(report.findings.single.root, IntegrityRoot.backupWorkshop);
     expect(report.findings.single.verdict, IntegrityVerdict.payloadMissing);
+    // Named, or the row says a file is missing and leaves the user to open the
+    // folder and work out which.
+    expect(report.findings.single.missing, 'clip.mp4');
+  });
+
+  // Nothing is named, so there is nothing to report as absent.
+  test('a wallpaper naming no file at all reports no missing name', () async {
+    wallpaper('live_workshop', 'names_nothing', <String, String>{
+      'project.json': '{"file":""}',
+      'preview.jpg': 'x',
+    });
+    // A second folder that loads, or the root is not taken for a library.
+    wallpaper('live_workshop', 'fine', <String, String>{
+      'project.json': '{"file":"clip.mp4"}',
+      'clip.mp4': 'the payload',
+    });
+
+    final IntegrityFinding finding = (await scan()).findings.single;
+
+    expect(finding.verdict, IntegrityVerdict.payloadMissing);
+    expect(finding.missing, isNull);
   });
 
   // project.json can point into a subfolder, which the app resolves by joining

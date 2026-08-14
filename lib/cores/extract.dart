@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/models/extract_settings.dart';
@@ -460,7 +461,7 @@ Future<String?> extractBranch(
       token,
       detailedProgress: detailedProgress,
     );
-  } else if (targetLower.endsWith('customdirectory')) {
+  } else if (targetLower.endsWith(WallpaperDirectories.custom)) {
     // A wallpaper whose folder holds nothing to copy is the same silence a
     // scene that extracted nothing leaves.
     if (await isEmptyOfFiles(Directory(target))) onNothingWritten?.call();

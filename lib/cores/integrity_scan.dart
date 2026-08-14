@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/utils/folder_entries.dart';
 import 'package:we_repkg/utils/info.dart';
-import 'package:we_repkg/utils/wallpaper_integrity.dart';
+import 'package:we_repkg/cores/integrity_rules.dart';
 
 /// The four folders the check walks. Live and backup are reported apart, so a
 /// folder broken in the backup and sound live reads as one problem rather than
@@ -23,6 +24,11 @@ typedef IntegrityFinding = ({
   IntegrityVerdict verdict,
   int bytes,
   String folder,
+
+  /// What `project.json` asked for and the folder does not have, so the row can
+  /// name it. Null unless the verdict is [IntegrityVerdict.payloadMissing], and
+  /// null there too when the file names nothing at all.
+  String? missing,
 });
 
 typedef IntegrityReport = ({
@@ -69,9 +75,12 @@ Future<IntegrityReport> scanIntegrity({
         return;
       }
       scanned[entry.key] = found.length;
+      // Only what the tab has a pill for. A sound folder is nothing to report,
+      // and empty ones are left out on the user's instruction: the backup tab
+      // has a pill of its own for the ones that matter, the empty backups.
       findings.addAll(
         found.where(
-          (IntegrityFinding f) => f.verdict != IntegrityVerdict.sound,
+          (IntegrityFinding f) => integrityVerdictOrder.contains(f.verdict),
         ),
       );
     }),
@@ -138,6 +147,7 @@ Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
               verdict: f.verdict,
               bytes: await folderBytes(Directory(f.folder)),
               folder: f.folder,
+              missing: f.missing,
             ),
     );
   }
@@ -157,7 +167,11 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
       project.readable &&
       project.file == null &&
       await Directory(
-        path.join(folder.path, 'directories', 'customdirectory'),
+        path.join(
+          folder.path,
+          WallpaperDirectories.container,
+          WallpaperDirectories.custom,
+        ),
       ).exists();
 
   IntegrityVerdict verdict = classifyFolder(
@@ -165,10 +179,11 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
     project: project,
     hasCustomDirectory: hasCustomDirectory,
   );
-  final String? named = project.file;
+  // An empty `file` names nothing, so there is nothing to look for and nothing
+  // to tell the user is absent.
+  final String? named = project.file?.isEmpty ?? true ? null : project.file;
   if (verdict == IntegrityVerdict.payloadMissing &&
       named != null &&
-      named.isNotEmpty &&
       await _resolves(folder, named)) {
     verdict = IntegrityVerdict.sound;
   }
@@ -180,6 +195,7 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
     verdict: verdict,
     bytes: 0,
     folder: folder.path,
+    missing: verdict == IntegrityVerdict.payloadMissing ? named : null,
   );
 }
 
@@ -199,17 +215,18 @@ Future<ProjectRead> _readProject(
   List<FolderEntry> entries,
 ) async {
   final bool present = entries.any(
-    (FolderEntry e) => !e.isDirectory && e.name.toLowerCase() == 'project.json',
+    (FolderEntry e) =>
+        !e.isDirectory && sameName(e.name, WallpaperFiles.project),
   );
   if (!present) return (present: false, readable: false, file: null);
   try {
     final Object? decoded = json.decode(
-      await File(path.join(folder.path, 'project.json')).readAsString(),
+      await File(path.join(folder.path, WallpaperFiles.project)).readAsString(),
     );
     if (decoded is! Map<String, dynamic> || !_typesUsable(decoded)) {
       return (present: true, readable: false, file: null);
     }
-    final Object? file = decoded['file'];
+    final Object? file = decoded[WallpaperProjectFields.file];
     return (present: true, readable: true, file: file is String ? file : null);
   } catch (_) {
     return (present: true, readable: false, file: null);
@@ -225,10 +242,11 @@ Future<ProjectRead> _readProject(
 bool _typesUsable(Map<String, dynamic> project) {
   bool stringOrAbsent(String key) =>
       project[key] == null || project[key] is String;
-  return stringOrAbsent('title') &&
-      stringOrAbsent('contentrating') &&
-      stringOrAbsent('type') &&
-      stringOrAbsent('preview') &&
-      stringOrAbsent('file') &&
-      (project['tags'] == null || project['tags'] is List);
+  return stringOrAbsent(WallpaperProjectFields.title) &&
+      stringOrAbsent(WallpaperProjectFields.contentRating) &&
+      stringOrAbsent(WallpaperProjectFields.type) &&
+      stringOrAbsent(WallpaperProjectFields.preview) &&
+      stringOrAbsent(WallpaperProjectFields.file) &&
+      (project[WallpaperProjectFields.tags] == null ||
+          project[WallpaperProjectFields.tags] is List);
 }

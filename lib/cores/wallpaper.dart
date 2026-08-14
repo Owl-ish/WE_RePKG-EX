@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/models/acf.dart';
@@ -242,22 +243,24 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
   Map<String, AcfInfo> acfInfoMap,
 ) async {
   String id = path.basename(folder.path);
-  File file = File(path.join(folder.path, 'project.json'));
+  File file = File(path.join(folder.path, WallpaperFiles.project));
   if (!await file.exists()) return null;
   try {
     String jsonString = await file.readAsString();
     final jsonMap = json.decode(jsonString);
     // myprojects wallpapers often have no title; fall back to the folder id.
-    String title = jsonMap['title'] ?? id;
-    String? contentRating = jsonMap['contentrating'];
+    String title = jsonMap[WallpaperProjectFields.title] ?? id;
+    String? contentRating = jsonMap[WallpaperProjectFields.contentRating];
     if (contentRating == null) {
       if (kDebugMode) {
         debugPrint('${tr(AppI10n.logNoContentRating)} ${folder.path}');
       }
       contentRating = '';
     }
-    List<String> tags = List<String>.from(jsonMap['tags'] ?? []);
-    String? type = jsonMap['type'];
+    List<String> tags = List<String>.from(
+      jsonMap[WallpaperProjectFields.tags] ?? <String>[],
+    );
+    String? type = jsonMap[WallpaperProjectFields.type];
     if (type == null) {
       if (kDebugMode) {
         debugPrint('${tr(AppI10n.logNoType)} ${folder.path}');
@@ -265,20 +268,26 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
       type = '';
     }
     // May be missing on a self-made wallpaper; the UI shows a placeholder.
-    String? imgName = jsonMap['preview'];
+    String? imgName = jsonMap[WallpaperProjectFields.preview];
     String previews = imgName == null ? '' : path.join(folder.path, imgName);
-    String? target = jsonMap['file'];
+    String? target = jsonMap[WallpaperProjectFields.file];
     if (target == null) {
-      String temp = path.join(folder.path, 'directories', 'customdirectory');
+      String temp = path.join(
+        folder.path,
+        WallpaperDirectories.container,
+        WallpaperDirectories.custom,
+      );
       target = await Directory(temp).exists() ? temp : '';
     } else if (target.toLowerCase().endsWith('json')) {
       // project.json says scene.json whether the scene is packed or not, so
       // assuming scene.pkg pointed RePKG at a file that wasn't there. With no
       // pkg present, target the folder and copy the unpacked files.
       final bool packed = await File(
-        path.join(folder.path, 'scene.pkg'),
+        path.join(folder.path, WallpaperFiles.packedScene),
       ).exists();
-      target = packed ? path.join(folder.path, 'scene.pkg') : folder.path;
+      target = packed
+          ? path.join(folder.path, WallpaperFiles.packedScene)
+          : folder.path;
     } else {
       if (target == '') {
         if (kDebugMode) {

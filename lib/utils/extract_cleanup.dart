@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/extract_settings.dart';
 import 'package:we_repkg/src/rust/api/simple.dart';
 import 'package:we_repkg/utils/info.dart';
@@ -98,7 +99,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
     'materials',
     'models',
     'particles',
-    'shaders',
+    WallpaperDirectories.shaders,
     'sounds',
     'scripts',
   ];
@@ -117,7 +118,7 @@ Future<String?> deleteOtherAndTexture(String outPath) async {
   }
   // Guarded like the folders above: wallpaper mode extracts tex entries only,
   // so scene.json is usually never written in the first place.
-  final File sceneJson = File(path.join(outPath, 'scene.json'));
+  final File sceneJson = File(path.join(outPath, WallpaperFiles.unpackedScene));
   if (await sceneJson.exists()) {
     folderDeletionFutures.add(
       sceneJson.delete().catchError((e) {

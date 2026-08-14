@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/utils/storage.dart';
 
 String? getToolPath() {
@@ -110,7 +111,7 @@ String? getAcfPath([String? filePath]) {
 
 Future<int> getSize(String filePath) async {
   int size = 0;
-  if (filePath.endsWith('customdirectory')) {
+  if (filePath.endsWith(WallpaperDirectories.custom)) {
     Directory dir = Directory(filePath);
     final entities = await dir.list().toList();
     for (final entity in entities) {

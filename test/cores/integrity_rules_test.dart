@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:we_repkg/utils/wallpaper_integrity.dart';
+import 'package:we_repkg/cores/integrity_rules.dart';
 
 // Each case is one of the shapes found in the user's real library on
 // 2026-08-06, so a regression here is a regression against something that
@@ -144,6 +144,73 @@ void main() {
 
   test('an empty folder is empty rather than media only', () {
     expect(verdict(const <String>[], project: false), IntegrityVerdict.empty);
+  });
+
+  group('the order the concerns are shown in', () {
+    // A verdict left out of the order gets no pill and no list. Two are out on
+    // purpose: a sound folder is nothing to report, and an empty one is the
+    // backup tab's to answer for.
+    test('covers every verdict but the two the tab does not list', () {
+      expect(<IntegrityVerdict>{
+        ...integrityVerdictOrder,
+        IntegrityVerdict.sound,
+        IntegrityVerdict.empty,
+      }, IntegrityVerdict.values.toSet());
+    });
+
+    test('counts every concern, including the ones with nothing in them', () {
+      final Map<IntegrityVerdict, int> counts =
+          verdictCounts(<IntegrityVerdict>[
+            IntegrityVerdict.mediaOnly,
+            IntegrityVerdict.mediaOnly,
+            IntegrityVerdict.shaderCacheOnly,
+          ]);
+
+      expect(counts[IntegrityVerdict.mediaOnly], 2);
+      expect(counts[IntegrityVerdict.payloadMissing], 0);
+      expect(counts.keys, hasLength(integrityVerdictOrder.length));
+    });
+
+    // A recheck can empty the concern being read, and an empty list under a
+    // lit pill reads as the check having lost the folders.
+    test('a pick that still holds something is kept, and one that does not is '
+        'swapped for the worst left', () {
+      final Map<IntegrityVerdict, int> counts = verdictCounts(
+        <IntegrityVerdict>[
+          IntegrityVerdict.mediaOnly,
+          IntegrityVerdict.payloadMissing,
+        ],
+      );
+
+      expect(
+        shownVerdict(IntegrityVerdict.mediaOnly, counts),
+        IntegrityVerdict.mediaOnly,
+      );
+      expect(
+        shownVerdict(IntegrityVerdict.projectUnreadable, counts),
+        IntegrityVerdict.payloadMissing,
+      );
+      expect(shownVerdict(null, counts), IntegrityVerdict.payloadMissing);
+    });
+
+    test('the worst one found is where the tab opens', () {
+      expect(
+        worstFound(
+          verdictCounts(<IntegrityVerdict>[
+            IntegrityVerdict.empty,
+            IntegrityVerdict.projectUnreadable,
+          ]),
+        ),
+        IntegrityVerdict.projectUnreadable,
+      );
+    });
+
+    test('nothing found falls back rather than throwing', () {
+      expect(
+        worstFound(verdictCounts(const <IntegrityVerdict>[])),
+        integrityVerdictOrder.first,
+      );
+    });
   });
 
   test('a project file that will not parse is called out on its own', () {
