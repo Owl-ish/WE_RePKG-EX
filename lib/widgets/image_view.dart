@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/utils/preview_image.dart';
 
 /// Decode heights are rounded up to this, so resizing the window reuses cache
@@ -14,12 +13,16 @@ class ImageView extends StatelessWidget {
   const ImageView({
     super.key,
     required this.size,
-    required this.wallpaper,
+    required this.previews,
     this.scale,
   });
 
   final double size;
-  final WallpaperInfo wallpaper;
+
+  /// Path to the preview image. Empty for a wallpaper that has none, which
+  /// reaches the error builder below.
+  final String previews;
+
   final Animation<double>? scale;
 
   @override
@@ -33,7 +36,7 @@ class ImageView extends StatelessWidget {
       // size gives every drag of the window edge a new cache slot, which
       // re-decodes the visible grid dozens of times and evicts everything warm.
       image: previewImage(
-        wallpaper.previews,
+        previews,
         cacheHeight: _decodeStep(size * MediaQuery.devicePixelRatioOf(context)),
       ),
       width: size,

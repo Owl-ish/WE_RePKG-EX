@@ -44,9 +44,15 @@ class CustomBtn extends StatelessWidget {
         shape: const StadiumBorder(),
         enabledMouseCursor: SystemMouseCursors.click,
       ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 14, fontFamily: 'Microsoft YaHei'),
+      // One line, shrinking if it has to: a wrapped label is clipped by the
+      // fixed heights these sit at.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          maxLines: 1,
+          style: TextStyle(fontSize: 14, fontFamily: 'Microsoft YaHei'),
+        ),
       ),
     );
   }

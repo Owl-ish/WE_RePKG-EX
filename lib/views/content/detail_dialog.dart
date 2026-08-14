@@ -97,18 +97,30 @@ Future<PreviewStats?> _previewStats(String previews) {
   }).timeout(const Duration(seconds: 2), onTimeout: () => null);
 }
 
+/// One button down the right of the dialog.
+typedef DetailAction = ({String label, VoidCallback onPressed});
+
 /// Opens the details for [wallpaper], growing from [origin] when a grid tile
 /// supplies its on-screen rectangle. Other callers open from the window centre.
+///
+/// [actions] replaces the extract buttons, for a caller whose wallpaper is not
+/// in the extract grid's library.
 Future<void> showWallpaperDetail(
   BuildContext context,
   WallpaperInfo wallpaper, {
   Rect? origin,
+  List<DetailAction>? actions,
 }) async {
   // Measuring and cache warming happen before the route is pushed, so a second
   // double click in that window would open two overlapping dialogs.
   if (!_openingWallpaperDetails.add(wallpaper.id)) return;
   try {
-    await _showWallpaperDetail(context, wallpaper, origin: origin);
+    await _showWallpaperDetail(
+      context,
+      wallpaper,
+      origin: origin,
+      actions: actions,
+    );
   } finally {
     _openingWallpaperDetails.remove(wallpaper.id);
   }
@@ -118,6 +130,7 @@ Future<void> _showWallpaperDetail(
   BuildContext context,
   WallpaperInfo wallpaper, {
   Rect? origin,
+  List<DetailAction>? actions,
 }) async {
   // Measured before opening: doing it inside would resize the dialog
   // mid-animation.
@@ -152,8 +165,11 @@ Future<void> _showWallpaperDetail(
     // Transparent, so the window behind is not repainted just to dim it.
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 240),
-    pageBuilder: (_, _, _) =>
-        WallpaperDetailDialog(wallpaper: wallpaper, stats: stats),
+    pageBuilder: (_, _, _) => WallpaperDetailDialog(
+      wallpaper: wallpaper,
+      stats: stats,
+      actions: actions,
+    ),
     transitionBuilder: (context, animation, _, child) {
       final Animation<double> dialogAnimation = CurvedAnimation(
         parent: animation,
@@ -174,12 +190,20 @@ Future<void> _showWallpaperDetail(
 }
 
 class WallpaperDetailDialog extends ConsumerStatefulWidget {
-  const WallpaperDetailDialog({super.key, required this.wallpaper, this.stats});
+  const WallpaperDetailDialog({
+    super.key,
+    required this.wallpaper,
+    this.stats,
+    this.actions,
+  });
 
   final WallpaperInfo wallpaper;
 
   /// Shape and brightness of the preview, or null when it couldn't be read.
   final PreviewStats? stats;
+
+  /// Buttons in place of the extract ones. Null for the extract grid's own.
+  final List<DetailAction>? actions;
 
   @override
   ConsumerState<WallpaperDetailDialog> createState() =>
@@ -200,10 +224,14 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
   @override
   Widget build(BuildContext context) {
     // Deleting from the buttons below would otherwise leave the dialog showing
-    // a wallpaper whose folder is now in the Recycle Bin.
-    ref.listen(filterWallpaperListProvider, (_, List<WallpaperInfo> next) {
-      if (!next.contains(widget.wallpaper)) _close();
-    });
+    // a wallpaper whose folder is now in the Recycle Bin. Only for the extract
+    // grid's own buttons: another caller's wallpaper need not be in that list,
+    // and watching it would close the dialog the moment it opened.
+    if (widget.actions == null) {
+      ref.listen(filterWallpaperListProvider, (_, List<WallpaperInfo> next) {
+        if (!next.contains(widget.wallpaper)) _close();
+      });
+    }
 
     final Size screen = MediaQuery.of(context).size;
 
@@ -274,7 +302,10 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _Actions(wallpaper: widget.wallpaper),
+                      if (widget.actions case final List<DetailAction> actions)
+                        _GivenActions(actions: actions)
+                      else
+                        _Actions(wallpaper: widget.wallpaper),
                     ],
                   ),
                 ),
@@ -445,8 +476,35 @@ class _Actions extends ConsumerWidget {
   }
 }
 
+/// The caller's own buttons, laid out like the extract ones above.
+class _GivenActions extends StatelessWidget {
+  const _GivenActions({required this.actions});
+
+  final List<DetailAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const ValueKey<String>('wallpaper-detail-actions'),
+      padding: const EdgeInsets.only(bottom: _DetailActionLayout.bottomInset),
+      child: Column(
+        spacing: _DetailActionLayout.spacing,
+        children: <Widget>[
+          for (final DetailAction action in actions)
+            _DetailActionButton(
+              label: action.label,
+              onPressed: action.onPressed,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 abstract final class _DetailActionLayout {
-  static const double width = 170;
+  /// Wide enough for the longest label either tab puts here, in either
+  /// language, at the full font size.
+  static const double width = 210;
   static const double height = 34;
   static const double spacing = 10;
   static const double bottomInset = 14;
