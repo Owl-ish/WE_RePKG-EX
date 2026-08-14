@@ -172,10 +172,47 @@ class AppI10n {
   static const String backupStateUpdateDismissed =
       'backup.state.updateDismissed';
   static const String backupStateEmptyBackup = 'backup.state.emptyBackup';
+  static const String backupEmptyJunkAbout = 'backup.emptyJunkAbout';
+  static const String backupActionBackUp = 'backup.action.backUp';
+  static const String backupActionUpdate = 'backup.action.update';
+  static const String backupActionRestore = 'backup.action.restore';
+  static const String backupActionRecycle = 'backup.action.recycle';
+  static const String backupActionShowAgain = 'backup.action.showAgain';
+  static const String backupActionBackUpTitle = 'backup.action.backUpTitle';
+  static const String backupActionUpdateTitle = 'backup.action.updateTitle';
+  static const String backupActionRestoreTitle = 'backup.action.restoreTitle';
+  static const String backupActionRecycleTitle = 'backup.action.recycleTitle';
+  static const String backupActionShowAgainTitle =
+      'backup.action.showAgainTitle';
+  static const String backupActionBackUpOne = 'backup.action.backUpOne';
+  static const String backupActionBackUpMany = 'backup.action.backUpMany';
+  static const String backupActionUpdateOne = 'backup.action.updateOne';
+  static const String backupActionUpdateMany = 'backup.action.updateMany';
+  static const String backupActionRestoreOne = 'backup.action.restoreOne';
+  static const String backupActionRestoreMany = 'backup.action.restoreMany';
+  static const String backupActionRecycleOne = 'backup.action.recycleOne';
+  static const String backupActionRecycleMany = 'backup.action.recycleMany';
+  static const String backupActionShowAgainOne = 'backup.action.showAgainOne';
+  static const String backupActionShowAgainMany = 'backup.action.showAgainMany';
+  static const String backupActionWallpaper = 'backup.action.wallpaper';
+  static const String backupActionAll = 'backup.action.all';
+  static const String backupActionDone = 'backup.action.done';
+  static const String backupActionFolderUnavailable =
+      'backup.action.folderUnavailable';
+  static const String backupActionSourceMissing = 'backup.action.sourceMissing';
+  static const String backupActionStateChanged = 'backup.action.stateChanged';
+  static const String backupActionTrashUnconfirmed =
+      'backup.action.trashUnconfirmed';
+  static const String backupActionTargetExists = 'backup.action.targetExists';
+  static const String backupActionUnsafeDestination =
+      'backup.action.unsafeDestination';
+  static const String backupActionSourceChanged = 'backup.action.sourceChanged';
+  static const String backupActionLinkFound = 'backup.action.linkFound';
   static const String backupScanReading = 'backup.scanReading';
   static const String backupScanComparing = 'backup.scanComparing';
   static const String backupReadingDetails = 'backup.readingDetails';
   static const String backupReadingDetailsCount = 'backup.readingDetailsCount';
+  static const String backupPreparingGrid = 'backup.preparingGrid';
   static const String extractNothingWritten = 'extract.nothingWritten';
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';

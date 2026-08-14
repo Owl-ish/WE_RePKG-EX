@@ -209,8 +209,13 @@ void main() {
           'ccc',
           IntegrityVerdict.payloadMissing,
         ),
+        finding(
+          IntegrityRoot.liveWorkshop,
+          'cache',
+          IntegrityVerdict.shaderCacheOnly,
+        ),
       ],
-      scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 2},
+      scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 3},
       missing: const <IntegrityRoot>{},
     );
 
@@ -285,74 +290,6 @@ void main() {
       await only(tester, IntegrityVerdict.unpackedSceneNoProject);
 
       expect(find.byIcon(Icons.build_outlined), findsNWidgets(2));
-    });
-
-    testWidgets('a leftover shader cache can be recycled', (tester) async {
-      await only(tester, IntegrityVerdict.shaderCacheOnly);
-
-      expect(find.byIcon(Icons.build_outlined), findsNWidgets(2));
-      expect(find.text(AppI10n.integrityFixAll), findsOneWidget);
-    });
-
-    testWidgets('shader cleanup explains OK and Cancel before changing disk', (
-      tester,
-    ) async {
-      await only(tester, IntegrityVerdict.shaderCacheOnly);
-
-      await tester.tap(find.byIcon(Icons.build_outlined).last);
-      await tester.pumpAndSettle();
-
-      expect(find.text(AppI10n.integrityFixCacheOne), findsOneWidget);
-      expect(find.text(AppI10n.integrityFixFolderLabel), findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (Widget widget) =>
-              widget is Text &&
-              widget.style?.fontFamily == 'Consolas' &&
-              widget.data?.replaceAll('\u200B', '') ==
-                  '${AppI10n.homeLibraryWorkshop}\\aaa',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text(AppI10n.ok), findsOneWidget);
-      expect(find.text(AppI10n.cancel), findsOneWidget);
-      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
-
-      await tester.tap(find.text(AppI10n.cancel));
-      await tester.pumpAndSettle();
-      expect(find.text(AppI10n.integrityFixCacheOne), findsNothing);
-    });
-
-    testWidgets('group shader cleanup explains its exact Recycle Bin scope', (
-      tester,
-    ) async {
-      await show(tester, (
-        findings: <IntegrityFinding>[
-          finding(
-            IntegrityRoot.liveWorkshop,
-            'live-a',
-            IntegrityVerdict.shaderCacheOnly,
-          ),
-          finding(
-            IntegrityRoot.liveWorkshop,
-            'live-b',
-            IntegrityVerdict.shaderCacheOnly,
-          ),
-        ],
-        scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 2},
-        missing: const <IntegrityRoot>{},
-      ));
-
-      await tester.tap(find.text(AppI10n.integrityFixAll));
-      await tester.pumpAndSettle();
-
-      expect(find.text(AppI10n.integrityFixCacheMany), findsOneWidget);
-      expect(find.text(AppI10n.ok), findsOneWidget);
-      expect(find.text(AppI10n.cancel), findsOneWidget);
-
-      await tester.tap(find.text(AppI10n.cancel));
-      await tester.pumpAndSettle();
-      expect(find.text(AppI10n.integrityFixCacheMany), findsNothing);
     });
 
     testWidgets('a media-only folder offers repair choices', (tester) async {

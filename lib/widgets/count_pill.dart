@@ -51,13 +51,16 @@ class CountPill extends StatefulWidget {
 
 class _CountPillState extends State<CountPill>
     with SingleTickerProviderStateMixin {
-  /// Slow enough to read as breathing rather than blinking, and faint enough to
-  /// sit behind text without moving the eye off the grid.
-  static const Duration _period = Duration(milliseconds: 2600);
+  /// A visible but unhurried pulse: inactive work should attract attention
+  /// without making the label harder to read.
+  static const Duration _period = Duration(milliseconds: 2200);
   static const double _idleFill = .07;
   static const double _selectedFill = .14;
   static const double _disabledFill = .05;
   static const double _pulse = .08;
+  static const double _glowAlpha = .14;
+  static const double _glowBlur = 8;
+  static const double _glowSpread = .5;
   static const double _selectedBorder = .55;
   static const double _idleBorder = .2;
 
@@ -107,14 +110,29 @@ class _CountPillState extends State<CountPill>
         : _idleFill;
     return AnimatedBuilder(
       animation: _glow,
-      builder: (BuildContext context, Widget? child) => Material(
+      builder: (BuildContext context, Widget? child) {
         // Cosine, so it swells and fades rather than snapping at either end.
-        color: tint.withValues(
-          alpha: baseFill + _pulse * (1 - cos(_glow.value * 2 * pi)) / 2,
-        ),
-        borderRadius: LayoutNums.pill,
-        child: child,
-      ),
+        final double pulse = (1 - cos(_glow.value * 2 * pi)) / 2;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: LayoutNums.pill,
+            boxShadow: _wanted
+                ? <BoxShadow>[
+                    BoxShadow(
+                      color: tint.withValues(alpha: _glowAlpha * pulse),
+                      blurRadius: _glowBlur * pulse,
+                      spreadRadius: _glowSpread * pulse,
+                    ),
+                  ]
+                : const <BoxShadow>[],
+          ),
+          child: Material(
+            color: tint.withValues(alpha: baseFill + _pulse * pulse),
+            borderRadius: LayoutNums.pill,
+            child: child,
+          ),
+        );
+      },
       child: InkWell(
         borderRadius: LayoutNums.pill,
         mouseCursor: live ? SystemMouseCursors.click : SystemMouseCursors.basic,

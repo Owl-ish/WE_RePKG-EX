@@ -8,6 +8,7 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
+import 'package:we_repkg/cores/backup_action.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/backup.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
@@ -18,6 +19,8 @@ import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/selection_tint.dart';
+import 'package:we_repkg/widgets/app_icon_button.dart';
+import 'package:we_repkg/views/backup/backup_action.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
 /// details open on whichever exists; the menu offers each one it has.
@@ -31,6 +34,7 @@ class BackupTileView extends StatelessWidget {
     required this.tile,
     required this.folders,
     required this.onTap,
+    this.onAction,
   });
 
   final double width;
@@ -40,6 +44,7 @@ class BackupTileView extends StatelessWidget {
   /// Clicking is handled by the grid, which is where the ordered list a shift
   /// range needs actually lives.
   final VoidCallback onTap;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +55,8 @@ class BackupTileView extends StatelessWidget {
       name: tile.card.name,
       folders: folders,
       onTap: onTap,
+      action: actionForBackupState(tile.state),
+      onAction: onAction,
       badges: <Widget>[
         Positioned(left: 4, top: 4, child: _StateBadge(state: tile.state)),
         Positioned(
@@ -123,6 +130,8 @@ class _TileFrame extends ConsumerStatefulWidget {
     required this.folders,
     required this.badges,
     required this.onTap,
+    this.action,
+    this.onAction,
   });
 
   final double width;
@@ -136,6 +145,8 @@ class _TileFrame extends ConsumerStatefulWidget {
   final TileFolders folders;
   final List<Widget> badges;
   final VoidCallback onTap;
+  final BackupAction? action;
+  final VoidCallback? onAction;
 
   @override
   ConsumerState<_TileFrame> createState() => _TileFrameState();
@@ -164,6 +175,9 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   }
 
   List<DetailAction> _actions() => <DetailAction>[
+    if (widget.action case final BackupAction action)
+      if (widget.onAction case final VoidCallback onAction)
+        (label: backupActionLabel(action), onPressed: onAction),
     if (widget.folders.live case final String live)
       (
         label: tr(AppI10n.backupOpenLiveFolder),
@@ -211,6 +225,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           onDetails: _openDetails,
           liveFolder: widget.folders.live,
           backupFolder: widget.folders.backup,
+          actionLabel: widget.action == null
+              ? null
+              : backupActionLabel(widget.action!),
+          onAction: widget.onAction,
         ),
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
@@ -241,6 +259,29 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                   // which is the case the integrity tab exists to point at.
                   ImageTitle(title: widget.face?.title ?? widget.name),
                   ...widget.badges,
+                  if (widget.action case final BackupAction action)
+                    if (widget.onAction case final VoidCallback onAction)
+                      Positioned(
+                        right: LayoutNums.smallGap,
+                        bottom: 28,
+                        child: Material(
+                          color: Theme.of(
+                            context,
+                          ).actionButtons.primaryBackground,
+                          shape: const CircleBorder(),
+                          child: AppIconButton(
+                            icon: backupActionIcon(action),
+                            tooltip: backupActionLabel(action),
+                            onPressed: onAction,
+                            width: 34,
+                            height: 34,
+                            iconSize: 18,
+                            color: Theme.of(
+                              context,
+                            ).actionButtons.primaryForeground,
+                          ),
+                        ),
+                      ),
                   if (checked) const SelectionTint(),
                 ],
               ),

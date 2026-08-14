@@ -5,6 +5,7 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/backup_action.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
@@ -15,12 +16,14 @@ import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
+import 'package:we_repkg/views/backup/backup_action.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/views/top/filter_dropdown.dart';
 import 'package:we_repkg/views/top/sort_toggle.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
+import 'package:we_repkg/widgets/issue_note.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 import 'package:we_repkg/widgets/pill_dropdown.dart';
 import 'package:we_repkg/widgets/search_field.dart';
@@ -210,9 +213,13 @@ class _Scanning extends ConsumerWidget {
               AppI10n.backupReadingDetailsCount,
               namedArgs: _counts(progress),
             ),
+            BackupScanPhase.preparing => tr(AppI10n.backupPreparingGrid),
           },
           // Reading has no total worth reporting, so the bar sweeps instead.
-          progress: progress.total > 0 ? progress.done / progress.total : null,
+          progress:
+              progress.phase != BackupScanPhase.preparing && progress.total > 0
+              ? progress.done / progress.total
+              : null,
         );
       },
     );
@@ -322,6 +329,9 @@ class _Loaded extends ConsumerWidget {
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
+    final BackupAction? action = shown.reconcile
+        ? null
+        : actionForBackupState(shown.state);
     final Map<BackupState, ({Color colour, String label})> looks =
         <BackupState, ({Color colour, String label})>{
           for (final BackupState state in backupStateOrder)
@@ -368,6 +378,46 @@ class _Loaded extends ConsumerWidget {
             ],
           ),
         ),
+        if (!shown.reconcile &&
+            shown.state == BackupState.emptyBackup &&
+            counts[BackupState.emptyBackup]! > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            child: IssueNote(
+              colour: Theme.of(context).status.note,
+              child: Text(
+                tr(AppI10n.backupEmptyJunkAbout),
+                style: Theme.of(
+                  context,
+                ).meta.mediumStyle.copyWith(height: 1.35),
+              ),
+            ),
+          ),
+        if (action != null)
+          Padding(
+            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _GlowingActionButton(
+                label: tr(
+                  AppI10n.backupActionAll,
+                  namedArgs: <String, String>{
+                    'action': backupActionLabel(action),
+                    'count': '${counts[shown.state]}',
+                  },
+                ),
+                icon: backupActionIcon(action),
+                colour: looks[shown.state]!.colour,
+                onPressed: counts[shown.state] == 0
+                    ? null
+                    : () => applyBackupAction(context, action, <BackupCard>[
+                        for (final MapEntry<BackupCard, BackupState> entry
+                            in scan.cards.entries)
+                          if (entry.value == shown.state) entry.key,
+                      ]),
+              ),
+            ),
+          ),
         // The one pill whose name does not say what it wants from the user.
         if (shown.reconcile)
           Padding(
@@ -379,6 +429,120 @@ class _Loaded extends ConsumerWidget {
           ),
         const Expanded(child: _Grid()),
       ],
+    );
+  }
+}
+
+/// The current state's primary operation, held above the wallpaper grid.
+///
+/// Unlike the filters' faint attention pulse, this keeps a visible halo at
+/// every point in the animation and only varies its reach and intensity.
+class _GlowingActionButton extends StatefulWidget {
+  const _GlowingActionButton({
+    required this.label,
+    required this.icon,
+    required this.colour,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color colour;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_GlowingActionButton> createState() => _GlowingActionButtonState();
+}
+
+class _GlowingActionButtonState extends State<_GlowingActionButton>
+    with SingleTickerProviderStateMixin {
+  static const Duration _period = Duration(milliseconds: 1400);
+
+  late final AnimationController _glow = AnimationController(
+    vsync: this,
+    duration: _period,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.onPressed != null) _glow.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_GlowingActionButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onPressed != null && !_glow.isAnimating) {
+      _glow.repeat(reverse: true);
+    } else if (widget.onPressed == null && _glow.isAnimating) {
+      _glow.stop();
+      _glow.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = widget.onPressed != null;
+    final Color colour = enabled
+        ? widget.colour
+        : Theme.of(context).disabledColor;
+    return Tooltip(
+      message: widget.label,
+      child: AnimatedBuilder(
+        animation: _glow,
+        builder: (BuildContext context, Widget? child) {
+          final double strength = Curves.easeInOut.transform(_glow.value);
+          return DecoratedBox(
+            key: const ValueKey<String>('backup-all-action-glow'),
+            decoration: BoxDecoration(
+              borderRadius: LayoutNums.pill,
+              boxShadow: enabled
+                  ? <BoxShadow>[
+                      BoxShadow(
+                        color: colour.withValues(alpha: .18),
+                        blurRadius: 10,
+                        spreadRadius: .5,
+                      ),
+                      BoxShadow(
+                        color: colour.withValues(alpha: .12 + .26 * strength),
+                        blurRadius: 14 + 10 * strength,
+                        spreadRadius: .5 + 2 * strength,
+                      ),
+                    ]
+                  : const <BoxShadow>[],
+            ),
+            child: child,
+          );
+        },
+        child: Material(
+          color: colour.withValues(alpha: enabled ? .1 : .06),
+          shape: RoundedRectangleBorder(
+            borderRadius: LayoutNums.pill,
+            side: BorderSide(color: colour.withValues(alpha: .48)),
+          ),
+          child: InkWell(
+            borderRadius: LayoutNums.pill,
+            onTap: widget.onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: LayoutNums.compactGap,
+                children: <Widget>[
+                  Icon(widget.icon, size: 17, color: colour),
+                  Text(widget.label, style: TextStyle(color: colour)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -477,6 +641,10 @@ class _Grid extends ConsumerWidget {
     final String? backupRoot = ref.watch(backupRootProvider);
     final String? workshop = ref.watch(wallpaperPathProvider);
     final String? myProjects = ref.watch(myProjectsLibraryProvider);
+    final Map<String, ({bool live, bool backup})> presence = ref
+        .watch(backupScanProvider)
+        .requireValue
+        .presence;
 
     if (ref.watch(backupStateFilterProvider).reconcile) {
       return _grid<ReconcileTile>(
@@ -517,13 +685,20 @@ class _Grid extends ConsumerWidget {
             folders: cardFolders(
               library: tile.card.library,
               name: tile.card.name,
-              liveExists: tile.state != BackupState.vanished,
-              backupExists: tile.state != BackupState.notBackedUp,
+              liveExists: presence[tile.card.id]?.live ?? false,
+              backupExists: presence[tile.card.id]?.backup ?? false,
               backupRoot: backupRoot,
               liveWorkshopPath: workshop,
               liveMyProjectsPath: myProjects,
             ),
             onTap: onTap,
+            onAction: actionForBackupState(tile.state) == null
+                ? null
+                : () => applyBackupAction(
+                    context,
+                    actionForBackupState(tile.state)!,
+                    <BackupCard>[tile.card],
+                  ),
           ),
     );
   }

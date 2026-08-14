@@ -28,6 +28,7 @@ import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
+import 'package:we_repkg/widgets/issue_note.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
 import 'package:we_repkg/widgets/selection_tint.dart';
 
@@ -49,7 +50,19 @@ BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
-}) => (cards: cards, reconcile: reconcile, acfRead: true, missing: missing);
+}) => (
+  cards: cards,
+  presence: <String, ({bool live, bool backup})>{
+    for (final MapEntry<BackupCard, BackupState> entry in cards.entries)
+      entry.key.id: (
+        live: entry.value != BackupState.vanished,
+        backup: entry.value != BackupState.notBackedUp,
+      ),
+  },
+  reconcile: reconcile,
+  acfRead: true,
+  missing: missing,
+);
 
 void main() {
   setUp(() async {
@@ -184,7 +197,7 @@ void main() {
             AsyncValue<BackupScan>.data(scanOf()),
           ),
           backupVisibleTilesProvider.overrideWith(
-            (Ref ref) => Completer<List<BackupTile>>().future,
+            (Ref ref) => const AsyncValue<List<BackupTile>>.loading(),
           ),
         ],
       );
@@ -201,6 +214,17 @@ void main() {
 
       expect(find.text(AppI10n.backupReadingDetailsCount), findsOneWidget);
       expect(barValue(tester), 0.25);
+
+      container.read(backupScanProgressProvider).value = (
+        phase: BackupScanPhase.preparing,
+        done: 40,
+        total: 40,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text(AppI10n.backupPreparingGrid), findsOneWidget);
+      expect(find.text(AppI10n.backupReadingDetailsCount), findsNothing);
+      expect(barValue(tester), isNull);
     });
   });
 
@@ -466,7 +490,9 @@ void main() {
               AsyncValue<BackupScan>.data(scanOf()),
             ),
             backupTilesProvider.overrideWith((Ref ref) => tiles),
-            backupVisibleTilesProvider.overrideWith((Ref ref) => tiles),
+            backupVisibleTilesProvider.overrideWith(
+              (Ref ref) => AsyncValue<List<BackupTile>>.data(tiles),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -853,6 +879,19 @@ void main() {
         expect(find.text('fresh'), findsOneWidget);
       });
 
+      testWidgets('picking a pill filters cached details without loading', (
+        tester,
+      ) async {
+        await pumpPills(tester, tiles: three());
+
+        await tester.tap(find.text('${AppI10n.backupStateVanished} 1'));
+        await tester.pump();
+
+        expect(find.text(AppI10n.backupReadingDetails), findsNothing);
+        expect(find.text('gone'), findsOneWidget);
+        expect(find.text('fresh'), findsNothing);
+      });
+
       testWidgets('the selected status border stays subtle', (tester) async {
         await pumpPills(tester, tiles: three());
 
@@ -873,6 +912,74 @@ void main() {
         final Border border =
             (surface.decoration! as BoxDecoration).border! as Border;
         expect(border.top.color.a, closeTo(.55, .001));
+      });
+
+      testWidgets('an inactive pill has a clearly visible slow pulse', (
+        tester,
+      ) async {
+        await pumpPills(tester, tiles: three());
+        final Finder pill = find.ancestor(
+          of: find.text('${AppI10n.backupStateVanished} 1'),
+          matching: find.byType(CountPill),
+        );
+        double fill() => tester
+            .widgetList<Material>(
+              find.descendant(of: pill, matching: find.byType(Material)),
+            )
+            .first
+            .color!
+            .a;
+        double glow() {
+          final DecoratedBox surface = tester.widget<DecoratedBox>(
+            find.descendant(
+              of: pill,
+              matching: find.byWidgetPredicate((Widget widget) {
+                if (widget is! DecoratedBox ||
+                    widget.decoration is! BoxDecoration) {
+                  return false;
+                }
+                return (widget.decoration as BoxDecoration)
+                        .boxShadow
+                        ?.isNotEmpty ??
+                    false;
+              }),
+            ),
+          );
+          return (surface.decoration as BoxDecoration)
+              .boxShadow!
+              .single
+              .color
+              .a;
+        }
+
+        final double rising = fill();
+        final double risingGlow = glow();
+        await tester.pump(const Duration(milliseconds: 450));
+
+        expect(fill(), greaterThan(rising + .03));
+        expect(glow(), greaterThan(risingGlow + .03));
+      });
+
+      testWidgets('Empty/Junk explains the issue once below the pills', (
+        tester,
+      ) async {
+        final List<BackupTile> tiles = <BackupTile>[
+          (
+            card: const BackupCard(WallpaperLibrary.workshop, 'junk-a'),
+            state: BackupState.emptyBackup,
+            face: null,
+          ),
+          (
+            card: const BackupCard(WallpaperLibrary.myProjects, 'junk-b'),
+            state: BackupState.emptyBackup,
+            face: null,
+          ),
+        ];
+        await pumpPills(tester, tiles: tiles);
+
+        expect(find.byType(IssueNote), findsOneWidget);
+        expect(find.text(AppI10n.backupEmptyJunkAbout), findsOneWidget);
+        expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
       });
 
       // On a library with nothing to back up that pill is dead, and opening on

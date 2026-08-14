@@ -12,6 +12,7 @@ import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
+import 'package:we_repkg/widgets/issue_note.dart';
 import 'package:we_repkg/widgets/scan_progress.dart';
 
 /// Every repair on the tab wears this and says "resolve". What it will do is
@@ -253,7 +254,7 @@ class _Report extends ConsumerWidget {
               ),
             ),
           if (hasPills)
-            _Note(
+            IssueNote(
               colour: shownLook.colour,
               icon: Icons.info_outline_rounded,
               child: Text(
@@ -422,7 +423,7 @@ class _MissingRoots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color error = Theme.of(context).colorScheme.error;
-    return _Note(
+    return IssueNote(
       colour: error,
       icon: Icons.folder_off_outlined,
       child: Column(
@@ -433,40 +434,6 @@ class _MissingRoots extends StatelessWidget {
           for (final IntegrityRoot root in IntegrityRoot.values)
             if (missing.contains(root))
               Text(tr(_rootLabels[root]!), style: TextStyle(color: error)),
-        ],
-      ),
-    );
-  }
-}
-
-/// A tinted line in the colour of whatever it is about. Kept low: it sits under
-/// a pill, and a deep panel out-shouted the thing it was explaining.
-class _Note extends StatelessWidget {
-  const _Note({required this.colour, required this.icon, required this.child});
-
-  final Color colour;
-  final IconData icon;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: LayoutNums.mediumGap,
-        vertical: LayoutNums.smallGap,
-      ),
-      decoration: BoxDecoration(
-        color: colour.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-        border: Border.all(color: colour.withValues(alpha: .3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: LayoutNums.smallGap,
-        children: <Widget>[
-          Icon(icon, size: 18, color: colour),
-          Expanded(child: child),
         ],
       ),
     );

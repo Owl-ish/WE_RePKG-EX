@@ -17,6 +17,7 @@
     "scanComparing": "Comparing backups, {done} of {total}",
     "readingDetails": "Loading wallpaper details",
     "readingDetailsCount": "Loading wallpaper details, {done} of {total}",
+    "preparingGrid": "Preparing wallpaper grid",
     "scanFailed": "Could not read the libraries:",
     "tilesFailed": "The comparison finished, but the wallpaper details could not be read:",
     "acfUnreadable": "Steam's workshop file could not be read, so no Workshop wallpaper can be reported as out of date.",
@@ -26,6 +27,7 @@
     },
     "reconcile": "Needs reconciling",
     "reconcileAbout": "These names sit in more than one library or backup, so there is no single answer to whether they are backed up. Open a pair and decide which copy to keep.",
+    "emptyJunkAbout": "These folders are empty or contain only disposable shader data. They are checked again before moving to the Recycle Bin.",
     "sort": {
       "name": "By name",
       "date": "By date"
@@ -38,8 +40,41 @@
       "vanished": "Vanished",
       "updateAvailable": "Update available",
       "updateDismissed": "Update dismissed",
-      "emptyBackup": "Empty folder"
-    }
+        "emptyBackup": "Empty/Junk"
+      },
+      "action": {
+        "backUp": "Back up",
+        "update": "Update backup",
+        "restore": "Restore",
+        "recycle": "Move to Recycle Bin",
+        "showAgain": "Show update again",
+        "backUpTitle": "Back up wallpaper?",
+        "updateTitle": "Update backup?",
+        "restoreTitle": "Restore wallpaper?",
+        "recycleTitle": "Remove empty or junk folders?",
+        "showAgainTitle": "Show update again?",
+        "backUpOne": "Copy this live wallpaper to its matching backup folder? Existing backup files are updated; nothing is deleted.",
+        "backUpMany": "Back up these {count} live wallpapers? Existing backup files are updated; nothing is deleted.",
+        "updateOne": "Update this wallpaper's backup with changed live files? Nothing is deleted.",
+        "updateMany": "Update these {count} wallpaper backups with changed live files? Nothing is deleted.",
+        "restoreOne": "Restore this vanished wallpaper to MyProjects? The backup copy stays unchanged.",
+        "restoreMany": "Restore these {count} vanished wallpapers to MyProjects? The backup copies stay unchanged.",
+        "recycleOne": "Move this wallpaper's empty or junk folders to the Recycle Bin? Live shader-cache folders, empty folders, and backup cache are checked again first.",
+        "recycleMany": "Move empty or junk folders for these {count} wallpapers to the Recycle Bin? Each target will be checked again first.",
+        "showAgainOne": "Show this dismissed update as available again? No wallpaper files will change.",
+        "showAgainMany": "Show these {count} dismissed updates as available again? No wallpaper files will change.",
+        "wallpaper": "Wallpaper",
+        "all": "{action} all {count}",
+        "done": "Completed {count}",
+        "folderUnavailable": "A required folder is not configured.",
+        "sourceMissing": "The source folder is no longer available. Rescan first.",
+        "stateChanged": "This folder changed after the scan. No action was taken. Rescan first.",
+        "trashUnconfirmed": "Windows did not confirm the Recycle Bin move.",
+        "targetExists": "A live folder with this name already exists.",
+        "unsafeDestination": "The destination is inside the source folder. Choose separate library and backup folders.",
+        "sourceChanged": "The live folder changed during the backup. Run the backup again.",
+        "linkFound": "This folder contains a link and was not copied."
+      }
   },
   "integrity": {
     "title": "Integrity check",
