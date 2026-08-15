@@ -118,7 +118,8 @@ void main() {
       'media': IntegrityVerdict.mediaOnly,
       'no_payload': IntegrityVerdict.payloadMissing,
       'broken_json': IntegrityVerdict.projectUnreadable,
-    }, reason: 'empty and cache-only folders belong to the backup tab');
+      'cache': IntegrityVerdict.shaderCacheOnly,
+    }, reason: 'empty folders belong to the backup tab');
   });
 
   // The user's 3675770605: sound in the live library, payload never copied to

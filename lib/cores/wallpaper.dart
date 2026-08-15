@@ -17,6 +17,7 @@ import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
+import 'package:we_repkg/src/rust/api/simple.dart' as rust;
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
@@ -168,40 +169,56 @@ Future<({List<WallpaperInfo> wallpapers, DateTime? earliestDate})>
 scanWallpapers(String? folderPath) async {
   final List<WallpaperInfo> wallpapers = [];
   if (folderPath == null) return (wallpapers: wallpapers, earliestDate: null);
-  Directory dir = Directory(folderPath);
+  final Directory dir = Directory(folderPath);
   if (!(await dir.exists())) {
     return (wallpapers: wallpapers, earliestDate: null);
   }
-  final (
-    dirList,
-    acfInfoList,
-  ) = await (Future.wait([dir.list().toList(), getAcfInfo()])).then(
-    (results) =>
-        (results[0] as List<FileSystemEntity>, results[1] as List<AcfInfo>),
-  );
-  DateTime? earliestDate;
-  // 创建一个Map以便快速查找AcfInfo
-  Map<String, AcfInfo> acfInfoMap = {};
-  for (var acfInfo in acfInfoList) {
-    acfInfoMap[acfInfo.id] = acfInfo;
-  }
-  // Directories only, in original order.
-  final folders = dirList
+
+  final (dirList, acfInfoList) = await (dir.list().toList(), getAcfInfo()).wait;
+  final Map<String, AcfInfo> acfInfoMap = <String, AcfInfo>{
+    for (final AcfInfo info in acfInfoList) info.id: info,
+  };
+  final List<Directory> folders = dirList
       .whereType<Directory>()
       .where(
         (Directory folder) =>
             !WallpaperFiles.isLibraryRepairStage(path.basename(folder.path)),
       )
       .toList();
-  // Batched, or a large library opens too many file handles at once.
+
+  Map<String, rust.WallpaperProjectRead>? nativeProjects;
+  try {
+    nativeProjects = await rust.readWallpaperProjectsRust(
+      root: folderPath,
+      folderNames: <String>[
+        for (final Directory folder in folders) path.basename(folder.path),
+      ],
+      workers: 24,
+    );
+  } catch (_) {
+    // A native bridge failure should cost performance, not library visibility.
+    nativeProjects = null;
+  }
+
+  DateTime? earliestDate;
   const int batchSize = 24;
   for (int i = 0; i < folders.length; i += batchSize) {
     final batch = folders.skip(i).take(batchSize);
     final parsed = await Future.wait(
-      batch.map((folder) => _parseWallpaperFolder(folder, acfInfoMap)),
+      batch.map((Directory folder) {
+        final String id = path.basename(folder.path);
+        final rust.WallpaperProjectRead? project = nativeProjects?[id];
+        return _parseWallpaperFolder(
+          folder,
+          acfInfoMap,
+          projectJson: project?.json,
+          projectChangedMicros: project?.changedMicros,
+          projectJsonWasBatched: nativeProjects != null,
+        );
+      }),
     );
-    for (final wallpaper in parsed) {
-      if (wallpaper == null) continue; // skip missing/corrupt entries
+    for (final WallpaperInfo? wallpaper in parsed) {
+      if (wallpaper == null) continue;
       wallpapers.add(wallpaper);
       if (earliestDate == null || wallpaper.createTime.isBefore(earliestDate)) {
         earliestDate = wallpaper.createTime;
@@ -246,13 +263,17 @@ Future<WallpaperInfo> readWallpaperFolder(String folderPath) async {
 /// skips the wallpaper rather than aborting the scan.
 Future<WallpaperInfo?> _parseWallpaperFolder(
   Directory folder,
-  Map<String, AcfInfo> acfInfoMap,
-) async {
-  String id = path.basename(folder.path);
-  File file = File(path.join(folder.path, WallpaperFiles.project));
-  if (!await file.exists()) return null;
+  Map<String, AcfInfo> acfInfoMap, {
+  String? projectJson,
+  double? projectChangedMicros,
+  bool projectJsonWasBatched = false,
+}) async {
+  final String id = path.basename(folder.path);
+  final File file = File(path.join(folder.path, WallpaperFiles.project));
+  if (projectJsonWasBatched && projectJson == null) return null;
+  if (!projectJsonWasBatched && !await file.exists()) return null;
   try {
-    String jsonString = await file.readAsString();
+    final String jsonString = projectJson ?? await file.readAsString();
     final jsonMap = json.decode(jsonString);
     // myprojects wallpapers often have no title; fall back to the folder id.
     String title = jsonMap[WallpaperProjectFields.title] ?? id;
@@ -304,8 +325,9 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     }
     int size = 0;
     int? updateTime;
-    final fileStat = await file.stat();
-    DateTime createTime = fileStat.changed;
+    final DateTime createTime = projectChangedMicros == null
+        ? (await file.stat()).changed
+        : DateTime.fromMicrosecondsSinceEpoch(projectChangedMicros.round());
     if (acfInfoMap.containsKey(id)) {
       size = acfInfoMap[id]!.size;
       updateTime = acfInfoMap[id]!.time;

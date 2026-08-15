@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
@@ -46,5 +47,19 @@ void main() {
   testWidgets('the empty state offers the myprojects library', (tester) async {
     await show(tester, WallpaperLibrary.myProjects);
     expect(fieldText(tester), _myProjects);
+  });
+  testWidgets('the initial loading label stays still beside the spinner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(body: EmptyView(runState: RunState.initial)),
+        ),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text(AppI10n.loading), findsOneWidget);
   });
 }

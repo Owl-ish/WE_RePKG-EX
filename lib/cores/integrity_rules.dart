@@ -37,6 +37,7 @@ const List<IntegrityVerdict> integrityVerdictOrder = <IntegrityVerdict>[
   IntegrityVerdict.packedSceneNoProject,
   IntegrityVerdict.unpackedSceneNoProject,
   IntegrityVerdict.mediaOnly,
+  IntegrityVerdict.shaderCacheOnly,
 ];
 
 /// How many folders sit under each concern, zero-filled so a caller can draw

@@ -60,9 +60,9 @@ Future<BackupScan> backupScan(Ref ref) async {
 @Riverpod(keepAlive: true)
 Future<List<BackupTile>> backupTiles(Ref ref) async {
   final BackupScan scan = await ref.watch(backupScanProvider.future);
-  // The same line the scan wrote to, picked up where it left off: reading the
-  // details is the rest of the wait, and a bar that empties and sweeps reads as
-  // the tab having started over.
+  // Keep the scan's final preparing state while the short title/preview read
+  // finishes, so the tab has one continuous loading phase instead of a second
+  // progress bar.
   final ValueNotifier<BackupScanProgress?> progress = ref.watch(
     backupScanProgressProvider,
   );
@@ -74,7 +74,6 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
       liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
       cards: scan.cards,
       presence: scan.presence,
-      onProgress: (BackupScanProgress value) => progress.value = value,
     );
   } catch (_) {
     // A read that threw must not leave its last count sitting on the line for
@@ -84,10 +83,11 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
   }
   // Keep the final preparing state until the completed tiles replace the
   // progress view. Clearing it here can win the frame and hide that state.
-  return <BackupTile>[
+  final List<BackupTile> tiles = <BackupTile>[
     for (final BackupCard card in sortedCards(scan.cards))
       (card: card, state: scan.cards[card]!, face: faces[card]),
   ];
+  return tiles;
 }
 
 /// The names waiting to be reconciled, each with the title and preview to draw.

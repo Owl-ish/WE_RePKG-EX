@@ -98,6 +98,7 @@ void main() {
       presence: <String, ({bool live, bool backup})>{
         card.id: (live: true, backup: false),
       },
+      junk: <String, ({bool live, bool backup})>{},
       reconcile: <ReconcileEntry>[],
       acfRead: true,
       missing: <BackupFolder>{},

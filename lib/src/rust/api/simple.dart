@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `all_invisible`, `alpha_hint_from_header`, `is_png_fully_transparent_blocking`, `read_prefix`
+// These functions are ignored because they are not marked as `pub`: `all_invisible`, `alpha_hint_from_header`, `backup_covers_live`, `compare_backup_folders_blocking`, `file_changed_micros`, `find_junk_folders_blocking`, `folder_version_token`, `is_png_fully_transparent_blocking`, `is_rebuilt_shader_path_rust`, `my_projects_inventory_blocking`, `normalise_relative`, `read_integrity_folders_blocking`, `read_prefix`, `read_wallpaper_projects_blocking`, `walk_wallpaper_files`, `wallpaper_folder_is_junk`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AlphaHint`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `eq`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String?> deleteToTrash({required String filePath}) =>
     RustLib.instance.api.crateApiSimpleDeleteToTrash(filePath: filePath);
@@ -26,3 +26,141 @@ Future<List<String>> deleteTransparentPngsRust({
 }) => RustLib.instance.api.crateApiSimpleDeleteTransparentPngsRust(
   filePaths: filePaths,
 );
+
+/// Compares the named recursive wallpaper folders in parallel.
+///
+/// The map contains only readable pairs: true means the backup covers the live
+/// tree, false means at least one live file is missing or has a different size.
+/// Unreadable pairs are omitted so Dart keeps the same no-verdict behaviour.
+Future<Map<String, bool>> compareBackupFoldersRust({
+  required String liveRoot,
+  required String backupRoot,
+  required List<String> folderNames,
+  required int workers,
+}) => RustLib.instance.api.crateApiSimpleCompareBackupFoldersRust(
+  liveRoot: liveRoot,
+  backupRoot: backupRoot,
+  folderNames: folderNames,
+  workers: workers,
+);
+
+/// Finds empty/cache-only wallpaper folders in parallel.
+///
+/// Missing or unreadable folders are omitted, matching the Dart maintenance
+/// pass where those cases are simply not classified as junk.
+Future<List<String>> findJunkFoldersRust({
+  required String root,
+  required List<String> folderNames,
+  required bool backup,
+  required int workers,
+}) => RustLib.instance.api.crateApiSimpleFindJunkFoldersRust(
+  root: root,
+  folderNames: folderNames,
+  backup: backup,
+  workers: workers,
+);
+
+/// Reads each wallpaper folder's top-level entries and project.json in one
+/// native batch. Unreadable or vanished folders are omitted so Dart keeps the
+/// integrity scan's existing skip behavior.
+Future<Map<String, IntegrityFolderRead>> readIntegrityFoldersRust({
+  required String root,
+  required List<String> folderNames,
+  required int workers,
+}) => RustLib.instance.api.crateApiSimpleReadIntegrityFoldersRust(
+  root: root,
+  folderNames: folderNames,
+  workers: workers,
+);
+
+/// Reads project.json plus the timestamp the Dart grids already use, in one
+/// native batch. Missing or unreadable files are omitted. JSON stays raw so
+/// Dart keeps the app's existing field coercion and parse-error behavior.
+Future<Map<String, WallpaperProjectRead>> readWallpaperProjectsRust({
+  required String root,
+  required List<String> folderNames,
+  required int workers,
+}) => RustLib.instance.api.crateApiSimpleReadWallpaperProjectsRust(
+  root: root,
+  folderNames: folderNames,
+  workers: workers,
+);
+
+/// Lists MyProjects folders and computes their top-level-file version tokens in
+/// one native pass. Every visible folder is returned; a null value means the
+/// folder had no top-level files or became unreadable after enumeration.
+Future<Map<String, String?>> myProjectsInventoryRust({
+  required String root,
+  required List<String> ignoredPrefixes,
+  required int workers,
+}) => RustLib.instance.api.crateApiSimpleMyProjectsInventoryRust(
+  root: root,
+  ignoredPrefixes: ignoredPrefixes,
+  workers: workers,
+);
+
+class IntegrityFolderEntryRead {
+  final String name;
+  final bool isDirectory;
+
+  const IntegrityFolderEntryRead({
+    required this.name,
+    required this.isDirectory,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ isDirectory.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IntegrityFolderEntryRead &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          isDirectory == other.isDirectory;
+}
+
+class IntegrityFolderRead {
+  final List<IntegrityFolderEntryRead> entries;
+  final bool projectPresent;
+  final String? projectJson;
+
+  const IntegrityFolderRead({
+    required this.entries,
+    required this.projectPresent,
+    this.projectJson,
+  });
+
+  @override
+  int get hashCode =>
+      entries.hashCode ^ projectPresent.hashCode ^ projectJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is IntegrityFolderRead &&
+          runtimeType == other.runtimeType &&
+          entries == other.entries &&
+          projectPresent == other.projectPresent &&
+          projectJson == other.projectJson;
+}
+
+class WallpaperProjectRead {
+  final String json;
+
+  /// Matches Dart FileStat.changed on Windows: project.json creation time.
+  final double changedMicros;
+
+  const WallpaperProjectRead({required this.json, required this.changedMicros});
+
+  @override
+  int get hashCode => json.hashCode ^ changedMicros.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WallpaperProjectRead &&
+          runtimeType == other.runtimeType &&
+          json == other.json &&
+          changedMicros == other.changedMicros;
+}

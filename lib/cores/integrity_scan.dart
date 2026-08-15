@@ -7,6 +7,7 @@ import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/utils/folder_entries.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
+import 'package:we_repkg/src/rust/api/simple.dart';
 
 /// The four folders the check walks. Live and backup are reported apart, so a
 /// folder broken in the backup and sound live reads as one problem rather than
@@ -43,6 +44,7 @@ typedef IntegrityReport = ({
 /// Batched, or a large library opens too many file handles at once. Per root,
 /// and the four run together, so four times this many listings are in flight.
 const int _batchSize = 24;
+const int _nativeBatchWorkers = 12;
 
 /// Sorts every wallpaper folder in all four roots by whether it is loadable.
 ///
@@ -85,7 +87,6 @@ Future<IntegrityReport> scanIntegrity({
       );
     }),
   );
-
   // Worst first within a root, then by name, so the list reads the same on
   // every run rather than in whatever order the filesystem gave them up.
   findings.sort((IntegrityFinding a, IntegrityFinding b) {
@@ -115,14 +116,11 @@ Future<List<IntegrityFinding>?> _scanRoot(
     }
   }
 
-  final List<IntegrityFinding> found = <IntegrityFinding>[];
-  for (int i = 0; i < folders.length; i += _batchSize) {
-    final List<IntegrityFinding?> batch = await Future.wait(
-      folders.skip(i).take(_batchSize).map((Directory f) => _inspect(root, f)),
-    );
-    for (final IntegrityFinding? finding in batch) {
-      if (finding != null) found.add(finding);
-    }
+  late final List<IntegrityFinding> found;
+  try {
+    found = await _inspectNativeFolders(root, rootPath, folders);
+  } catch (_) {
+    found = await _inspectDartFolders(root, folders);
   }
 
   // A library always holds wallpapers. A root where not one folder is loadable
@@ -134,6 +132,62 @@ Future<List<IntegrityFinding>?> _scanRoot(
   );
   if (!isLibrary) return found;
   return _withSizes(found);
+}
+
+Future<List<IntegrityFinding>> _inspectNativeFolders(
+  IntegrityRoot root,
+  String rootPath,
+  List<Directory> folders,
+) async {
+  final Map<String, IntegrityFolderRead> reads = await readIntegrityFoldersRust(
+    root: rootPath,
+    folderNames: folders
+        .map((Directory folder) => path.basename(folder.path))
+        .toList(growable: false),
+    workers: _nativeBatchWorkers,
+  );
+  final List<IntegrityFinding> found = <IntegrityFinding>[];
+  for (final Directory folder in folders) {
+    final IntegrityFolderRead? read = reads[path.basename(folder.path)];
+    if (read == null) continue;
+    final List<FolderEntry> entries = read.entries
+        .map(
+          (IntegrityFolderEntryRead entry) =>
+              (name: entry.name, isDirectory: entry.isDirectory),
+        )
+        .toList(growable: false);
+    final ProjectRead project = _decodeProject(
+      present: read.projectPresent,
+      source: read.projectJson,
+    );
+    final IntegrityFinding finding = await _classifyInspection(
+      root,
+      folder,
+      entries,
+      project,
+    );
+    found.add(finding);
+  }
+  return found;
+}
+
+Future<List<IntegrityFinding>> _inspectDartFolders(
+  IntegrityRoot root,
+  List<Directory> folders,
+) async {
+  final List<IntegrityFinding> found = <IntegrityFinding>[];
+  for (int i = 0; i < folders.length; i += _batchSize) {
+    final List<IntegrityFinding?> batch = await Future.wait(
+      folders
+          .skip(i)
+          .take(_batchSize)
+          .map((Directory folder) => _inspect(root, folder)),
+    );
+    for (final IntegrityFinding? finding in batch) {
+      if (finding != null) found.add(finding);
+    }
+  }
+  return found;
 }
 
 /// Totals each broken folder, leaving the sound ones at zero so a healthy
@@ -148,11 +202,12 @@ Future<List<IntegrityFinding>> _withSizes(List<IntegrityFinding> found) async {
               !integrityVerdictOrder.contains(f.verdict)) {
             return f;
           }
+          final int bytes = await folderBytes(Directory(f.folder));
           return (
             root: f.root,
             name: f.name,
             verdict: f.verdict,
-            bytes: await folderBytes(Directory(f.folder)),
+            bytes: bytes,
             folder: f.folder,
             missing: f.missing,
           );
@@ -170,18 +225,27 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
   if (entries == null) return null;
 
   final ProjectRead project = await _readProject(folder, entries);
+  return _classifyInspection(root, folder, entries, project);
+}
+
+Future<IntegrityFinding> _classifyInspection(
+  IntegrityRoot root,
+  Directory folder,
+  List<FolderEntry> entries,
+  ProjectRead project,
+) async {
   // Only looked up when `file` is absent, which is the only case the app falls
   // back to it, so the common wallpaper costs no extra stat.
-  final bool hasCustomDirectory =
-      project.readable &&
-      project.file == null &&
-      await Directory(
-        path.join(
-          folder.path,
-          WallpaperDirectories.container,
-          WallpaperDirectories.custom,
-        ),
-      ).exists();
+  bool hasCustomDirectory = false;
+  if (project.readable && project.file == null) {
+    hasCustomDirectory = await Directory(
+      path.join(
+        folder.path,
+        WallpaperDirectories.container,
+        WallpaperDirectories.custom,
+      ),
+    ).exists();
+  }
 
   IntegrityVerdict verdict = classifyFolder(
     entries: entries,
@@ -196,8 +260,6 @@ Future<IntegrityFinding?> _inspect(IntegrityRoot root, Directory folder) async {
       await _resolves(folder, named)) {
     verdict = IntegrityVerdict.sound;
   }
-  // Unsized: whether the walk is worth doing depends on the whole root, which
-  // this cannot see.
   return (
     root: root,
     name: path.basename(folder.path),
@@ -225,22 +287,16 @@ Future<bool> isMediaOnlyWallpaperFolder(String folder) async =>
 /// it. The PowerShell version of this check skipped it and cried wolf twice.
 Future<bool> _resolves(Directory folder, String file) async {
   final String target = path.join(folder.path, file);
-  return await File(target).exists() || await Directory(target).exists();
+  final bool resolves =
+      await File(target).exists() || await Directory(target).exists();
+  return resolves;
 }
 
-Future<ProjectRead> _readProject(
-  Directory folder,
-  List<FolderEntry> entries,
-) async {
-  final bool present = entries.any(
-    (FolderEntry e) =>
-        !e.isDirectory && sameName(e.name, WallpaperFiles.project),
-  );
+ProjectRead _decodeProject({required bool present, required String? source}) {
   if (!present) return (present: false, readable: false, file: null);
+  if (source == null) return (present: true, readable: false, file: null);
   try {
-    final Object? decoded = json.decode(
-      await File(path.join(folder.path, WallpaperFiles.project)).readAsString(),
-    );
+    final Object? decoded = json.decode(source);
     if (decoded is! Map<String, dynamic> || !projectFieldsUsable(decoded)) {
       return (present: true, readable: false, file: null);
     }
@@ -248,5 +304,24 @@ Future<ProjectRead> _readProject(
     return (present: true, readable: true, file: file is String ? file : null);
   } catch (_) {
     return (present: true, readable: false, file: null);
+  }
+}
+
+Future<ProjectRead> _readProject(
+  Directory folder,
+  List<FolderEntry> entries,
+) async {
+  final bool present = entries.any(
+    (FolderEntry entry) =>
+        !entry.isDirectory && sameName(entry.name, WallpaperFiles.project),
+  );
+  if (!present) return _decodeProject(present: false, source: null);
+  try {
+    final String source = await File(
+      path.join(folder.path, WallpaperFiles.project),
+    ).readAsString();
+    return _decodeProject(present: true, source: source);
+  } catch (_) {
+    return _decodeProject(present: true, source: null);
   }
 }

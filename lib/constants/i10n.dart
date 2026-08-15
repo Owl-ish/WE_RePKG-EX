@@ -210,6 +210,7 @@ class AppI10n {
   static const String backupActionLinkFound = 'backup.action.linkFound';
   static const String backupScanReading = 'backup.scanReading';
   static const String backupScanComparing = 'backup.scanComparing';
+  static const String backupScanFinishing = 'backup.scanFinishing';
   static const String backupReadingDetails = 'backup.readingDetails';
   static const String backupReadingDetailsCount = 'backup.readingDetailsCount';
   static const String backupPreparingGrid = 'backup.preparingGrid';

@@ -205,21 +205,19 @@ class _Scanning extends ConsumerWidget {
         return ScanProgress(
           label: switch (progress.phase) {
             BackupScanPhase.reading => tr(AppI10n.backupScanReading),
-            BackupScanPhase.comparing => tr(
-              AppI10n.backupScanComparing,
-              namedArgs: _counts(progress),
-            ),
+            BackupScanPhase.comparing => tr(AppI10n.backupScanComparing),
+            BackupScanPhase.finishing => tr(AppI10n.backupScanFinishing),
             BackupScanPhase.details => tr(
               AppI10n.backupReadingDetailsCount,
               namedArgs: _counts(progress),
             ),
             BackupScanPhase.preparing => tr(AppI10n.backupPreparingGrid),
           },
-          // Reading has no total worth reporting, so the bar sweeps instead.
-          progress:
-              progress.phase != BackupScanPhase.preparing && progress.total > 0
-              ? progress.done / progress.total
-              : null,
+          progress: switch (progress.phase) {
+            BackupScanPhase.details when progress.total > 0 =>
+              progress.done / progress.total,
+            _ => null,
+          },
         );
       },
     );
@@ -641,10 +639,8 @@ class _Grid extends ConsumerWidget {
     final String? backupRoot = ref.watch(backupRootProvider);
     final String? workshop = ref.watch(wallpaperPathProvider);
     final String? myProjects = ref.watch(myProjectsLibraryProvider);
-    final Map<String, ({bool live, bool backup})> presence = ref
-        .watch(backupScanProvider)
-        .requireValue
-        .presence;
+    final BackupScan scan = ref.watch(backupScanProvider).requireValue;
+    final Map<String, ({bool live, bool backup})> presence = scan.presence;
 
     if (ref.watch(backupStateFilterProvider).reconcile) {
       return _grid<ReconcileTile>(
@@ -675,7 +671,7 @@ class _Grid extends ConsumerWidget {
       ref,
       ref.watch(backupVisibleTilesProvider),
       id: 'backup-grid',
-      waiting: const _Scanning(idle: AppI10n.backupReadingDetails),
+      waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
       idOf: (BackupTile tile) => tile.card.id,
       build: (BackupTile tile, double width, VoidCallback onTap) =>
           BackupTileView(
@@ -685,8 +681,12 @@ class _Grid extends ConsumerWidget {
             folders: cardFolders(
               library: tile.card.library,
               name: tile.card.name,
-              liveExists: presence[tile.card.id]?.live ?? false,
-              backupExists: presence[tile.card.id]?.backup ?? false,
+              liveExists: tile.state == BackupState.emptyBackup
+                  ? scan.junk[tile.card.id]?.live ?? false
+                  : presence[tile.card.id]?.live ?? false,
+              backupExists: tile.state == BackupState.emptyBackup
+                  ? scan.junk[tile.card.id]?.backup ?? false
+                  : presence[tile.card.id]?.backup ?? false,
               backupRoot: backupRoot,
               liveWorkshopPath: workshop,
               liveMyProjectsPath: myProjects,

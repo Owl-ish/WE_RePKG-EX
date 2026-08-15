@@ -202,7 +202,7 @@ void main() {
     // The whole reason emptiness is judged separately from the comparison: a
     // Workshop card with a baseline is never compared, and an emptied backup
     // folder still has to stop reading as backed up.
-    test('an empty folder is caught even when it is not compared', () async {
+    test('an uncompared empty folder is left to the junk scan', () async {
       pair('alpha');
 
       final Map<String, CopyStanding> standings = await run(
@@ -210,10 +210,10 @@ void main() {
         compare: const <String>{},
       );
 
-      expect(standings['alpha'], CopyStanding.empty);
+      expect(standings, isEmpty);
     });
 
-    test('an uncompared shader-only folder is still empty', () async {
+    test('an uncompared shader-only folder is left to the junk scan', () async {
       final Directory backupFolder = pair('alpha');
       File(p.join(backupFolder.path, 'shaders', 'blobsSM40', 'cache.bin'))
         ..parent.createSync(recursive: true)
@@ -224,7 +224,7 @@ void main() {
         compare: const <String>{},
       );
 
-      expect(standings['alpha'], CopyStanding.empty);
+      expect(standings, isEmpty);
     });
 
     // Outside compare, a folder with content is left unjudged rather than
@@ -830,6 +830,7 @@ void main() {
           )],
           BackupState.emptyBackup,
         );
+        expect(result.junk['workshop/3776838872'], (live: true, backup: false));
       });
 
       // The rule has to stay narrow. This folder is unloadable too, and one of
@@ -953,7 +954,10 @@ void main() {
       expect(seen.first.phase, BackupScanPhase.reading);
       expect(
         seen.map((BackupScanProgress p) => p.phase),
-        contains(BackupScanPhase.comparing),
+        containsAll(<BackupScanPhase>[
+          BackupScanPhase.comparing,
+          BackupScanPhase.finishing,
+        ]),
       );
       expect(seen.last, (
         phase: BackupScanPhase.preparing,
@@ -985,6 +989,7 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.emptyBackup,
       );
+      expect(result.junk['myprojects/alpha'], (live: false, backup: true));
     });
 
     // Wallpaper Engine rebuilds these, so a folder holding only them holds
@@ -1181,7 +1186,10 @@ void main() {
         );
 
         expect(
-          result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+          result.cards[const BackupCard(
+            WallpaperLibrary.workshop,
+            '793602574',
+          )],
           BackupState.synced,
         );
         expect(

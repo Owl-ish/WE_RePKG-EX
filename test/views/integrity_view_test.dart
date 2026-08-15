@@ -253,7 +253,7 @@ void main() {
       await show(tester, mixed());
 
       expect(
-        find.textContaining(AppI10n.integrityVerdictShaderCacheOnly),
+        find.textContaining(AppI10n.integrityVerdictProjectUnreadable),
         findsNothing,
       );
       expect(

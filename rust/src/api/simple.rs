@@ -1,6 +1,14 @@
+use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+#[cfg(not(windows))]
+use std::time::UNIX_EPOCH;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -182,6 +190,571 @@ pub async fn delete_transparent_pngs_rust(file_paths: Vec<String>) -> Vec<String
         }
     }
     errors
+}
+
+const REBUILT_SHADER_DIR: &str = r"shaders\blobssm40\";
+
+fn normalise_relative(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase()
+}
+
+fn is_rebuilt_shader_path_rust(relative: &Path) -> bool {
+    normalise_relative(relative).starts_with(REBUILT_SHADER_DIR)
+}
+
+/// Walks one wallpaper tree without following links.
+///
+/// DirectoryEntry metadata gives the file size while Windows is already
+/// enumerating the tree, avoiding the extra Dart stat call for every file.
+fn walk_wallpaper_files<F>(root: &Path, mut visit: F) -> std::io::Result<bool>
+where
+    F: FnMut(&Path, u64) -> bool,
+{
+    let mut pending = vec![root.to_path_buf()];
+
+    while let Some(folder) = pending.pop() {
+        for entry in std::fs::read_dir(folder)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            let file_path = entry.path();
+
+            if kind.is_dir() {
+                pending.push(file_path);
+            } else if kind.is_file() {
+                let relative = file_path
+                    .strip_prefix(root)
+                    .map_err(std::io::Error::other)?;
+                if is_rebuilt_shader_path_rust(relative) {
+                    continue;
+                }
+                if !visit(relative, entry.metadata()?.len()) {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
+    Ok(true)
+}
+
+/// True when the backup still contains every meaningful live file at the same
+/// size. Extra backup files are intentionally ignored.
+fn backup_covers_live(live: &Path, backup: &Path) -> std::io::Result<bool> {
+    if !live.is_dir() || !backup.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "wallpaper folder is missing",
+        ));
+    }
+
+    let mut held = HashMap::<String, u64>::new();
+    walk_wallpaper_files(backup, |relative, size| {
+        held.insert(normalise_relative(relative), size);
+        true
+    })?;
+
+    walk_wallpaper_files(live, |relative, size| {
+        held.get(&normalise_relative(relative))
+            .is_some_and(|backup_size| *backup_size == size)
+    })
+}
+
+fn compare_backup_folders_blocking(
+    live_root: String,
+    backup_root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> HashMap<String, bool> {
+    if folder_names.is_empty() {
+        return HashMap::new();
+    }
+
+    let names = Arc::new(folder_names);
+    let next = Arc::new(AtomicUsize::new(0));
+    let results = Arc::new(Mutex::new(HashMap::<String, bool>::new()));
+    let worker_count = (workers as usize).clamp(1, 64).min(names.len());
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for _ in 0..worker_count {
+        let names = Arc::clone(&names);
+        let next = Arc::clone(&next);
+        let results = Arc::clone(&results);
+        let live_root = PathBuf::from(&live_root);
+        let backup_root = PathBuf::from(&backup_root);
+
+        handles.push(std::thread::spawn(move || loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= names.len() {
+                break;
+            }
+
+            let name = &names[index];
+            let standing = backup_covers_live(&live_root.join(name), &backup_root.join(name));
+            if let Ok(covers) = standing {
+                results.lock().unwrap().insert(name.clone(), covers);
+            }
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let snapshot = results.lock().unwrap().clone();
+    snapshot
+}
+
+/// Compares the named recursive wallpaper folders in parallel.
+///
+/// The map contains only readable pairs: true means the backup covers the live
+/// tree, false means at least one live file is missing or has a different size.
+/// Unreadable pairs are omitted so Dart keeps the same no-verdict behaviour.
+#[flutter_rust_bridge::frb]
+pub async fn compare_backup_folders_rust(
+    live_root: String,
+    backup_root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> Result<HashMap<String, bool>, String> {
+    tokio::task::spawn_blocking(move || {
+        compare_backup_folders_blocking(live_root, backup_root, folder_names, workers)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))
+}
+
+
+
+/// True when a wallpaper folder is empty or contains only disposable files.
+///
+/// Live folders allow only .dxs shader-cache files. Backup folders additionally
+/// allow the rebuilt shaders/blobsSM40 tree. Links reject the folder so native
+/// scanning preserves Dart's followLinks: false maintenance semantics.
+fn wallpaper_folder_is_junk(folder: &Path, backup: bool) -> std::io::Result<bool> {
+    if !folder.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "wallpaper folder is missing",
+        ));
+    }
+
+    let mut pending = std::collections::VecDeque::from([folder.to_path_buf()]);
+    while let Some(current) = pending.pop_front() {
+        for entry in std::fs::read_dir(current)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            let entry_path = entry.path();
+
+            if kind.is_symlink() {
+                return Ok(false);
+            }
+            if kind.is_dir() {
+                pending.push_back(entry_path);
+                continue;
+            }
+            if !kind.is_file() {
+                continue;
+            }
+
+            let relative = entry_path
+                .strip_prefix(folder)
+                .map_err(std::io::Error::other)?;
+            let is_dxs = relative
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("dxs"));
+            if !is_dxs && !(backup && is_rebuilt_shader_path_rust(relative)) {
+                return Ok(false);
+            }
+        }
+    }
+
+    Ok(true)
+}
+
+fn find_junk_folders_blocking(
+    root: String,
+    folder_names: Vec<String>,
+    backup: bool,
+    workers: u32,
+) -> Vec<String> {
+    if folder_names.is_empty() {
+        return Vec::new();
+    }
+
+    let names = Arc::new(folder_names);
+    let next = Arc::new(AtomicUsize::new(0));
+    let results = Arc::new(Mutex::new(Vec::<String>::new()));
+    let worker_count = (workers as usize).clamp(1, 64).min(names.len());
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for _ in 0..worker_count {
+        let names = Arc::clone(&names);
+        let next = Arc::clone(&next);
+        let results = Arc::clone(&results);
+        let root = PathBuf::from(&root);
+
+        handles.push(std::thread::spawn(move || loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= names.len() {
+                break;
+            }
+
+            let name = &names[index];
+            if matches!(wallpaper_folder_is_junk(&root.join(name), backup), Ok(true)) {
+                results.lock().unwrap().push(name.clone());
+            }
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let snapshot = results.lock().unwrap().clone();
+    snapshot
+}
+
+/// Finds empty/cache-only wallpaper folders in parallel.
+///
+/// Missing or unreadable folders are omitted, matching the Dart maintenance
+/// pass where those cases are simply not classified as junk.
+#[flutter_rust_bridge::frb]
+pub async fn find_junk_folders_rust(
+    root: String,
+    folder_names: Vec<String>,
+    backup: bool,
+    workers: u32,
+) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        find_junk_folders_blocking(root, folder_names, backup, workers)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))
+}
+
+#[derive(Clone, Debug)]
+pub struct IntegrityFolderEntryRead {
+    pub name: String,
+    pub is_directory: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct IntegrityFolderRead {
+    pub entries: Vec<IntegrityFolderEntryRead>,
+    pub project_present: bool,
+    pub project_json: Option<String>,
+}
+
+fn read_integrity_folders_blocking(
+    root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> HashMap<String, IntegrityFolderRead> {
+    if folder_names.is_empty() {
+        return HashMap::new();
+    }
+
+    let root = PathBuf::from(root);
+    let names = Arc::new(folder_names);
+    let next = Arc::new(AtomicUsize::new(0));
+    let results = Arc::new(Mutex::new(HashMap::<String, IntegrityFolderRead>::new()));
+    let worker_count = (workers as usize).clamp(1, 64).min(names.len());
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for _ in 0..worker_count {
+        let root = root.clone();
+        let names = Arc::clone(&names);
+        let next = Arc::clone(&next);
+        let results = Arc::clone(&results);
+
+        handles.push(std::thread::spawn(move || loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= names.len() {
+                break;
+            }
+
+            let name = &names[index];
+            let folder = root.join(name);
+            let Ok(read_dir) = std::fs::read_dir(&folder) else {
+                continue;
+            };
+            let mut entries = Vec::<IntegrityFolderEntryRead>::new();
+            let mut readable = true;
+            let mut project_present = false;
+
+            for entry in read_dir {
+                let Ok(entry) = entry else {
+                    readable = false;
+                    break;
+                };
+                let Ok(kind) = entry.file_type() else {
+                    readable = false;
+                    break;
+                };
+                let entry_name = entry.file_name().to_string_lossy().into_owned();
+                let is_directory = kind.is_dir();
+                if !is_directory && entry_name.eq_ignore_ascii_case("project.json") {
+                    project_present = true;
+                }
+                entries.push(IntegrityFolderEntryRead {
+                    name: entry_name,
+                    is_directory,
+                });
+            }
+
+            if !readable {
+                continue;
+            }
+            let project_json = if project_present {
+                std::fs::read_to_string(folder.join("project.json")).ok()
+            } else {
+                None
+            };
+            results.lock().unwrap().insert(
+                name.clone(),
+                IntegrityFolderRead {
+                    entries,
+                    project_present,
+                    project_json,
+                },
+            );
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let snapshot = results.lock().unwrap().clone();
+    snapshot
+}
+
+/// Reads each wallpaper folder's top-level entries and project.json in one
+/// native batch. Unreadable or vanished folders are omitted so Dart keeps the
+/// integrity scan's existing skip behavior.
+#[flutter_rust_bridge::frb]
+pub async fn read_integrity_folders_rust(
+    root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> Result<HashMap<String, IntegrityFolderRead>, String> {
+    tokio::task::spawn_blocking(move || {
+        read_integrity_folders_blocking(root, folder_names, workers)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))
+}
+
+#[derive(Clone, Debug)]
+pub struct WallpaperProjectRead {
+    pub json: String,
+    /// Matches Dart FileStat.changed on Windows: project.json creation time.
+    pub changed_micros: f64,
+}
+
+#[cfg(windows)]
+fn file_changed_micros(metadata: &std::fs::Metadata) -> f64 {
+    // Windows FILETIME is 100ns ticks since 1601-01-01. Dart's Windows stat
+    // implementation exposes ftCreationTime as FileStat.changed.
+    const WINDOWS_TO_UNIX_EPOCH_100NS: i128 = 116_444_736_000_000_000;
+    (metadata.creation_time() as i128 - WINDOWS_TO_UNIX_EPOCH_100NS)
+        .div_euclid(10) as f64
+}
+
+#[cfg(not(windows))]
+fn file_changed_micros(metadata: &std::fs::Metadata) -> f64 {
+    let time = metadata.created().or_else(|_| metadata.modified()).unwrap_or(UNIX_EPOCH);
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(value) => value.as_micros() as f64,
+        Err(value) => -(value.duration().as_micros() as f64),
+    }
+}
+
+fn read_wallpaper_projects_blocking(
+    root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> HashMap<String, WallpaperProjectRead> {
+    if folder_names.is_empty() {
+        return HashMap::new();
+    }
+
+    let names = Arc::new(folder_names);
+    let next = Arc::new(AtomicUsize::new(0));
+    let results = Arc::new(Mutex::new(HashMap::<String, WallpaperProjectRead>::new()));
+    let worker_count = (workers as usize).clamp(1, 64).min(names.len());
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for _ in 0..worker_count {
+        let names = Arc::clone(&names);
+        let next = Arc::clone(&next);
+        let results = Arc::clone(&results);
+        let root = PathBuf::from(&root);
+
+        handles.push(std::thread::spawn(move || loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= names.len() {
+                break;
+            }
+
+            let name = &names[index];
+            let project = root.join(name).join("project.json");
+            let Ok(mut file) = std::fs::File::open(&project) else {
+                continue;
+            };
+            let Ok(metadata) = file.metadata() else {
+                continue;
+            };
+            let mut json = String::new();
+            if file.read_to_string(&mut json).is_err() {
+                continue;
+            }
+            results.lock().unwrap().insert(
+                name.clone(),
+                WallpaperProjectRead {
+                    json,
+                    changed_micros: file_changed_micros(&metadata),
+                },
+            );
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let snapshot = results.lock().unwrap().clone();
+    snapshot
+}
+
+/// Reads project.json plus the timestamp the Dart grids already use, in one
+/// native batch. Missing or unreadable files are omitted. JSON stays raw so
+/// Dart keeps the app's existing field coercion and parse-error behavior.
+#[flutter_rust_bridge::frb]
+pub async fn read_wallpaper_projects_rust(
+    root: String,
+    folder_names: Vec<String>,
+    workers: u32,
+) -> Result<HashMap<String, WallpaperProjectRead>, String> {
+    tokio::task::spawn_blocking(move || {
+        read_wallpaper_projects_blocking(root, folder_names, workers)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))
+}
+
+
+fn folder_version_token(folder: &Path) -> std::io::Result<Option<String>> {
+    let mut stamps = Vec::<(String, u64, i128)>::new();
+    for entry in std::fs::read_dir(folder)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if !kind.is_file() {
+            continue;
+        }
+        let metadata = entry.metadata()?;
+        let modified = metadata.modified()?;
+        let millis = match modified.duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_millis() as i128,
+            Err(error) => -(error.duration().as_millis() as i128),
+        };
+        stamps.push((
+            entry.file_name().to_string_lossy().into_owned(),
+            metadata.len(),
+            millis,
+        ));
+    }
+    if stamps.is_empty() {
+        return Ok(None);
+    }
+    stamps.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(Some(
+        stamps
+            .into_iter()
+            .map(|(name, size, modified)| format!("{}|{}|{}", name, size, modified))
+            .collect::<Vec<_>>()
+            .join(";"),
+    ))
+}
+
+fn my_projects_inventory_blocking(
+    root: String,
+    ignored_prefixes: Vec<String>,
+    workers: u32,
+) -> Result<HashMap<String, Option<String>>, String> {
+    let root = PathBuf::from(root);
+    if !root.is_dir() {
+        return Ok(HashMap::new());
+    }
+
+    let mut names = Vec::<String>::new();
+    let entries = std::fs::read_dir(&root).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        if !kind.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if ignored_prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+            continue;
+        }
+        names.push(name);
+    }
+
+    if names.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let names = Arc::new(names);
+    let next = Arc::new(AtomicUsize::new(0));
+    let results = Arc::new(Mutex::new(HashMap::<String, Option<String>>::new()));
+    let worker_count = (workers as usize).clamp(1, 64).min(names.len());
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for _ in 0..worker_count {
+        let names = Arc::clone(&names);
+        let next = Arc::clone(&next);
+        let results = Arc::clone(&results);
+        let root = root.clone();
+
+        handles.push(std::thread::spawn(move || loop {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= names.len() {
+                break;
+            }
+
+            let name = &names[index];
+            let version = folder_version_token(&root.join(name)).ok().flatten();
+            results.lock().unwrap().insert(name.clone(), version);
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    let snapshot = results.lock().unwrap().clone();
+    Ok(snapshot)
+}
+
+/// Lists MyProjects folders and computes their top-level-file version tokens in
+/// one native pass. Every visible folder is returned; a null value means the
+/// folder had no top-level files or became unreadable after enumeration.
+#[flutter_rust_bridge::frb]
+pub async fn my_projects_inventory_rust(
+    root: String,
+    ignored_prefixes: Vec<String>,
+    workers: u32,
+) -> Result<HashMap<String, Option<String>>, String> {
+    tokio::task::spawn_blocking(move || {
+        my_projects_inventory_blocking(root, ignored_prefixes, workers)
+    })
+    .await
+    .map_err(|e| format!("Task execution error: {}", e))?
 }
 
 #[cfg(test)]
@@ -563,4 +1136,217 @@ mod tests {
         assert!(opaque.exists(), "an opaque png must not be deleted");
         assert!(soft_edge.exists(), "one soft pixel is not a mask");
     }
+
+    fn write_backup_fixture(root: &Path, relative: &str, bytes: &[u8]) {
+        let file = root.join(relative);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, bytes).unwrap();
+    }
+
+    #[test]
+    fn recursive_backup_comparison_matches_live_files_and_ignores_extras() {
+        let dir = tmp_dir();
+        let live = dir.join("live");
+        let backup = dir.join("backup");
+        write_backup_fixture(&live, "nested/scene.json", b"same");
+        write_backup_fixture(&backup, "nested/scene.json", b"same");
+        write_backup_fixture(&backup, "old-file.txt", b"residue");
+
+        assert!(backup_covers_live(&live, &backup).unwrap());
+    }
+
+    #[test]
+    fn recursive_backup_comparison_reports_missing_or_different_live_files() {
+        let dir = tmp_dir();
+        let live = dir.join("live");
+        let backup = dir.join("backup");
+        write_backup_fixture(&live, "project.json", b"newer");
+        write_backup_fixture(&backup, "project.json", b"old");
+
+        assert!(!backup_covers_live(&live, &backup).unwrap());
+    }
+
+    #[test]
+    fn rebuilt_shader_cache_does_not_make_a_backup_stale() {
+        let dir = tmp_dir();
+        let live = dir.join("live");
+        let backup = dir.join("backup");
+        write_backup_fixture(&live, "project.json", b"same");
+        write_backup_fixture(&backup, "project.json", b"same");
+        write_backup_fixture(
+            &live,
+            "shaders/blobssm40/cache.bin",
+            b"live cache",
+        );
+
+        assert!(backup_covers_live(&live, &backup).unwrap());
+    }
+
+    #[test]
+    fn parallel_backup_comparison_omits_unreadable_pairs() {
+        let dir = tmp_dir();
+        let live = dir.join("live");
+        let backup = dir.join("backup");
+        write_backup_fixture(&live.join("good"), "project.json", b"same");
+        write_backup_fixture(&backup.join("good"), "project.json", b"same");
+        std::fs::create_dir_all(live.join("missing")).unwrap();
+
+        let result = compare_backup_folders_blocking(
+            live.to_string_lossy().into_owned(),
+            backup.to_string_lossy().into_owned(),
+            vec!["good".into(), "missing".into()],
+            12,
+        );
+
+        assert_eq!(result.get("good"), Some(&true));
+        assert!(!result.contains_key("missing"));
+    }
+
+    #[test]
+    fn live_junk_allows_only_dxs_files() {
+        let dir = tmp_dir();
+        let empty = dir.join("empty");
+        let cache = dir.join("cache");
+        let project = dir.join("project");
+        std::fs::create_dir_all(&empty).unwrap();
+        write_backup_fixture(&cache, "nested/cache.DXS", b"cache");
+        write_backup_fixture(&project, "project.json", b"project");
+
+        assert!(wallpaper_folder_is_junk(&empty, false).unwrap());
+        assert!(wallpaper_folder_is_junk(&cache, false).unwrap());
+        assert!(!wallpaper_folder_is_junk(&project, false).unwrap());
+    }
+
+    #[test]
+    fn rebuilt_shader_tree_is_junk_only_for_backups() {
+        let dir = tmp_dir();
+        let folder = dir.join("shader-only");
+        write_backup_fixture(&folder, "shaders/blobsSM40/cache.bin", b"cache");
+
+        assert!(wallpaper_folder_is_junk(&folder, true).unwrap());
+        assert!(!wallpaper_folder_is_junk(&folder, false).unwrap());
+    }
+
+    #[test]
+    fn parallel_junk_scan_returns_only_junk_folders() {
+        let dir = tmp_dir();
+        let root = dir.join("root");
+        std::fs::create_dir_all(root.join("empty")).unwrap();
+        write_backup_fixture(&root.join("cache"), "shader.dxs", b"cache");
+        write_backup_fixture(&root.join("normal"), "project.json", b"project");
+
+        let result = find_junk_folders_blocking(
+            root.to_string_lossy().into_owned(),
+            vec!["empty".into(), "cache".into(), "normal".into(), "missing".into()],
+            false,
+            4,
+        );
+
+        assert!(result.contains(&"empty".to_string()));
+        assert!(result.contains(&"cache".to_string()));
+        assert!(!result.contains(&"normal".to_string()));
+        assert!(!result.contains(&"missing".to_string()));
+    }
+
+    #[test]
+    fn integrity_reader_batches_entries_and_project_state() {
+        let dir = tmp_dir();
+        let root = dir.join("library");
+        write_backup_fixture(&root.join("good"), "project.json", br#"{"file":"scene.pkg"}"#);
+        write_backup_fixture(&root.join("good"), "scene.pkg", b"payload");
+        std::fs::create_dir_all(root.join("good").join("materials")).unwrap();
+        write_backup_fixture(&root.join("broken"), "project.json", b"{ not valid json");
+        write_backup_fixture(&root.join("no-project"), "video.mp4", b"media");
+
+        let result = read_integrity_folders_blocking(
+            root.to_string_lossy().into_owned(),
+            vec![
+                "good".into(),
+                "broken".into(),
+                "no-project".into(),
+                "missing".into(),
+            ],
+            4,
+        );
+
+        let good = result.get("good").unwrap();
+        assert!(good.project_present);
+        assert_eq!(good.project_json.as_deref(), Some(r#"{"file":"scene.pkg"}"#));
+        assert!(good.entries.iter().any(|entry| {
+            entry.name == "materials" && entry.is_directory
+        }));
+        assert!(good.entries.iter().any(|entry| {
+            entry.name == "scene.pkg" && !entry.is_directory
+        }));
+
+        let broken = result.get("broken").unwrap();
+        assert!(broken.project_present);
+        assert_eq!(broken.project_json.as_deref(), Some("{ not valid json"));
+
+        let no_project = result.get("no-project").unwrap();
+        assert!(!no_project.project_present);
+        assert!(no_project.project_json.is_none());
+        assert!(!result.contains_key("missing"));
+    }
+
+    #[test]
+    fn parallel_project_reader_reads_existing_files_and_keeps_raw_json() {
+        let dir = tmp_dir();
+        let root = dir.join("library");
+        write_backup_fixture(&root.join("good"), "project.json", br#"{"title":"Alpha"}"#);
+        write_backup_fixture(&root.join("broken"), "project.json", b"{ not valid json");
+        std::fs::create_dir_all(root.join("missing")).unwrap();
+
+        let result = read_wallpaper_projects_blocking(
+            root.to_string_lossy().into_owned(),
+            vec!["good".into(), "broken".into(), "missing".into()],
+            4,
+        );
+
+        assert_eq!(
+            result.get("good").map(|project| project.json.as_str()),
+            Some(r#"{"title":"Alpha"}"#),
+        );
+        assert_eq!(
+            result.get("broken").map(|project| project.json.as_str()),
+            Some("{ not valid json"),
+        );
+        assert!(result.get("good").unwrap().changed_micros > 0.0);
+        assert!(!result.contains_key("missing"));
+    }
+
+
+    #[test]
+    fn myprojects_inventory_keeps_names_and_matches_top_level_version_tokens() {
+        let dir = tmp_dir();
+        let alpha = dir.join("alpha");
+        let empty = dir.join("empty");
+        let ignored = dir.join(".werepkg-ex-rescue-old");
+        std::fs::create_dir_all(alpha.join("assets")).unwrap();
+        std::fs::create_dir_all(&empty).unwrap();
+        std::fs::create_dir_all(&ignored).unwrap();
+        std::fs::write(alpha.join("z.txt"), b"zz").unwrap();
+        std::fs::write(alpha.join("a.txt"), b"a").unwrap();
+        std::fs::write(alpha.join("assets").join("nested.txt"), b"ignored").unwrap();
+        std::fs::write(dir.join("loose.txt"), b"ignored").unwrap();
+
+        let inventory = my_projects_inventory_blocking(
+            dir.to_string_lossy().into_owned(),
+            vec![".werepkg-ex-rescue-".to_string()],
+            4,
+        )
+        .unwrap();
+
+        assert_eq!(inventory.len(), 2);
+        assert!(inventory.contains_key("alpha"));
+        assert_eq!(inventory.get("empty"), Some(&None));
+        assert!(!inventory.contains_key(".werepkg-ex-rescue-old"));
+
+        let token = inventory.get("alpha").unwrap().as_ref().unwrap();
+        let parts = token.split(';').collect::<Vec<_>>();
+        assert_eq!(parts.len(), 2, "nested files must not affect the token");
+        assert!(parts[0].starts_with("a.txt|1|"));
+        assert!(parts[1].starts_with("z.txt|2|"));
+    }
+
 }

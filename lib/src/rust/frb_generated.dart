@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 470280936;
+  int get rustContentHash => -1833967701;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -77,6 +77,13 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<Map<String, bool>> crateApiSimpleCompareBackupFoldersRust({
+    required String liveRoot,
+    required String backupRoot,
+    required List<String> folderNames,
+    required int workers,
+  });
+
   Future<String?> crateApiSimpleDeleteAllToTrash({
     required List<String> filePaths,
   });
@@ -87,10 +94,37 @@ abstract class RustLibApi extends BaseApi {
     required List<String> filePaths,
   });
 
+  Future<List<String>> crateApiSimpleFindJunkFoldersRust({
+    required String root,
+    required List<String> folderNames,
+    required bool backup,
+    required int workers,
+  });
+
   Future<void> crateApiSimpleInitApp();
 
   Future<bool> crateApiSimpleIsPngFullyTransparentRust({
     required String filePath,
+  });
+
+  Future<Map<String, String?>> crateApiSimpleMyProjectsInventoryRust({
+    required String root,
+    required List<String> ignoredPrefixes,
+    required int workers,
+  });
+
+  Future<Map<String, IntegrityFolderRead>>
+  crateApiSimpleReadIntegrityFoldersRust({
+    required String root,
+    required List<String> folderNames,
+    required int workers,
+  });
+
+  Future<Map<String, WallpaperProjectRead>>
+  crateApiSimpleReadWallpaperProjectsRust({
+    required String root,
+    required List<String> folderNames,
+    required int workers,
   });
 }
 
@@ -101,6 +135,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  Future<Map<String, bool>> crateApiSimpleCompareBackupFoldersRust({
+    required String liveRoot,
+    required String backupRoot,
+    required List<String> folderNames,
+    required int workers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(liveRoot, serializer);
+          sse_encode_String(backupRoot, serializer);
+          sse_encode_list_String(folderNames, serializer);
+          sse_encode_u_32(workers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_Map_String_bool_None,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleCompareBackupFoldersRustConstMeta,
+        argValues: [liveRoot, backupRoot, folderNames, workers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleCompareBackupFoldersRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "compare_backup_folders_rust",
+        argNames: ["liveRoot", "backupRoot", "folderNames", "workers"],
+      );
 
   @override
   Future<String?> crateApiSimpleDeleteAllToTrash({
@@ -114,7 +187,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -145,7 +218,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -175,7 +248,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -197,6 +270,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<String>> crateApiSimpleFindJunkFoldersRust({
+    required String root,
+    required List<String> folderNames,
+    required bool backup,
+    required int workers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_list_String(folderNames, serializer);
+          sse_encode_bool(backup, serializer);
+          sse_encode_u_32(workers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleFindJunkFoldersRustConstMeta,
+        argValues: [root, folderNames, backup, workers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleFindJunkFoldersRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "find_junk_folders_rust",
+        argNames: ["root", "folderNames", "backup", "workers"],
+      );
+
+  @override
   Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -205,7 +317,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 6,
             port: port_,
           );
         },
@@ -235,7 +347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 7,
             port: port_,
           );
         },
@@ -256,6 +368,159 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["filePath"],
       );
 
+  @override
+  Future<Map<String, String?>> crateApiSimpleMyProjectsInventoryRust({
+    required String root,
+    required List<String> ignoredPrefixes,
+    required int workers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_list_String(ignoredPrefixes, serializer);
+          sse_encode_u_32(workers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_Map_String_opt_String_None,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleMyProjectsInventoryRustConstMeta,
+        argValues: [root, ignoredPrefixes, workers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleMyProjectsInventoryRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "my_projects_inventory_rust",
+        argNames: ["root", "ignoredPrefixes", "workers"],
+      );
+
+  @override
+  Future<Map<String, IntegrityFolderRead>>
+  crateApiSimpleReadIntegrityFoldersRust({
+    required String root,
+    required List<String> folderNames,
+    required int workers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_list_String(folderNames, serializer);
+          sse_encode_u_32(workers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_Map_String_integrity_folder_read_None,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleReadIntegrityFoldersRustConstMeta,
+        argValues: [root, folderNames, workers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleReadIntegrityFoldersRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "read_integrity_folders_rust",
+        argNames: ["root", "folderNames", "workers"],
+      );
+
+  @override
+  Future<Map<String, WallpaperProjectRead>>
+  crateApiSimpleReadWallpaperProjectsRust({
+    required String root,
+    required List<String> folderNames,
+    required int workers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(root, serializer);
+          sse_encode_list_String(folderNames, serializer);
+          sse_encode_u_32(workers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_Map_String_wallpaper_project_read_None,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleReadWallpaperProjectsRustConstMeta,
+        argValues: [root, folderNames, workers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleReadWallpaperProjectsRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "read_wallpaper_projects_rust",
+        argNames: ["root", "folderNames", "workers"],
+      );
+
+  @protected
+  Map<String, bool> dco_decode_Map_String_bool_None(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Map.fromEntries(
+      dco_decode_list_record_string_bool(raw).map((e) => MapEntry(e.$1, e.$2)),
+    );
+  }
+
+  @protected
+  Map<String, IntegrityFolderRead>
+  dco_decode_Map_String_integrity_folder_read_None(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Map.fromEntries(
+      dco_decode_list_record_string_integrity_folder_read(
+        raw,
+      ).map((e) => MapEntry(e.$1, e.$2)),
+    );
+  }
+
+  @protected
+  Map<String, String?> dco_decode_Map_String_opt_String_None(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Map.fromEntries(
+      dco_decode_list_record_string_opt_string(
+        raw,
+      ).map((e) => MapEntry(e.$1, e.$2)),
+    );
+  }
+
+  @protected
+  Map<String, WallpaperProjectRead>
+  dco_decode_Map_String_wallpaper_project_read_None(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Map.fromEntries(
+      dco_decode_list_record_string_wallpaper_project_read(
+        raw,
+      ).map((e) => MapEntry(e.$1, e.$2)),
+    );
+  }
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -269,9 +534,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
+  IntegrityFolderEntryRead dco_decode_integrity_folder_entry_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return IntegrityFolderEntryRead(
+      name: dco_decode_String(arr[0]),
+      isDirectory: dco_decode_bool(arr[1]),
+    );
+  }
+
+  @protected
+  IntegrityFolderRead dco_decode_integrity_folder_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return IntegrityFolderRead(
+      entries: dco_decode_list_integrity_folder_entry_read(arr[0]),
+      projectPresent: dco_decode_bool(arr[1]),
+      projectJson: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<IntegrityFolderEntryRead> dco_decode_list_integrity_folder_entry_read(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_integrity_folder_entry_read)
+        .toList();
   }
 
   @protected
@@ -281,9 +587,98 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<(String, bool)> dco_decode_list_record_string_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_record_string_bool).toList();
+  }
+
+  @protected
+  List<(String, IntegrityFolderRead)>
+  dco_decode_list_record_string_integrity_folder_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_record_string_integrity_folder_read)
+        .toList();
+  }
+
+  @protected
+  List<(String, String?)> dco_decode_list_record_string_opt_string(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_record_string_opt_string)
+        .toList();
+  }
+
+  @protected
+  List<(String, WallpaperProjectRead)>
+  dco_decode_list_record_string_wallpaper_project_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_record_string_wallpaper_project_read)
+        .toList();
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  (String, bool) dco_decode_record_string_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (dco_decode_String(arr[0]), dco_decode_bool(arr[1]));
+  }
+
+  @protected
+  (String, IntegrityFolderRead) dco_decode_record_string_integrity_folder_read(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (
+      dco_decode_String(arr[0]),
+      dco_decode_integrity_folder_read(arr[1]),
+    );
+  }
+
+  @protected
+  (String, String?) dco_decode_record_string_opt_string(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (dco_decode_String(arr[0]), dco_decode_opt_String(arr[1]));
+  }
+
+  @protected
+  (String, WallpaperProjectRead)
+  dco_decode_record_string_wallpaper_project_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (
+      dco_decode_String(arr[0]),
+      dco_decode_wallpaper_project_read(arr[1]),
+    );
+  }
+
+  @protected
+  int dco_decode_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -296,6 +691,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  WallpaperProjectRead dco_decode_wallpaper_project_read(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return WallpaperProjectRead(
+      json: dco_decode_String(arr[0]),
+      changedMicros: dco_decode_f_64(arr[1]),
+    );
+  }
+
+  @protected
+  Map<String, bool> sse_decode_Map_String_bool_None(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_record_string_bool(deserializer);
+    return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
+  }
+
+  @protected
+  Map<String, IntegrityFolderRead>
+  sse_decode_Map_String_integrity_folder_read_None(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_record_string_integrity_folder_read(
+      deserializer,
+    );
+    return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
+  }
+
+  @protected
+  Map<String, String?> sse_decode_Map_String_opt_String_None(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_record_string_opt_string(deserializer);
+    return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
+  }
+
+  @protected
+  Map<String, WallpaperProjectRead>
+  sse_decode_Map_String_wallpaper_project_read_None(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_record_string_wallpaper_project_read(
+      deserializer,
+    );
+    return Map.fromEntries(inner.map((e) => MapEntry(e.$1, e.$2)));
   }
 
   @protected
@@ -312,6 +761,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  IntegrityFolderEntryRead sse_decode_integrity_folder_entry_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_isDirectory = sse_decode_bool(deserializer);
+    return IntegrityFolderEntryRead(
+      name: var_name,
+      isDirectory: var_isDirectory,
+    );
+  }
+
+  @protected
+  IntegrityFolderRead sse_decode_integrity_folder_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_entries = sse_decode_list_integrity_folder_entry_read(deserializer);
+    var var_projectPresent = sse_decode_bool(deserializer);
+    var var_projectJson = sse_decode_opt_String(deserializer);
+    return IntegrityFolderRead(
+      entries: var_entries,
+      projectPresent: var_projectPresent,
+      projectJson: var_projectJson,
+    );
+  }
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -324,10 +807,82 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<IntegrityFolderEntryRead> sse_decode_list_integrity_folder_entry_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <IntegrityFolderEntryRead>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_integrity_folder_entry_read(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<(String, bool)> sse_decode_list_record_string_bool(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <(String, bool)>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_record_string_bool(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<(String, IntegrityFolderRead)>
+  sse_decode_list_record_string_integrity_folder_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <(String, IntegrityFolderRead)>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_record_string_integrity_folder_read(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<(String, String?)> sse_decode_list_record_string_opt_string(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <(String, String?)>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_record_string_opt_string(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<(String, WallpaperProjectRead)>
+  sse_decode_list_record_string_wallpaper_project_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <(String, WallpaperProjectRead)>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_record_string_wallpaper_project_read(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -342,6 +897,51 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  (String, bool) sse_decode_record_string_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_String(deserializer);
+    var var_field1 = sse_decode_bool(deserializer);
+    return (var_field0, var_field1);
+  }
+
+  @protected
+  (String, IntegrityFolderRead) sse_decode_record_string_integrity_folder_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_String(deserializer);
+    var var_field1 = sse_decode_integrity_folder_read(deserializer);
+    return (var_field0, var_field1);
+  }
+
+  @protected
+  (String, String?) sse_decode_record_string_opt_string(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_String(deserializer);
+    var var_field1 = sse_decode_opt_String(deserializer);
+    return (var_field0, var_field1);
+  }
+
+  @protected
+  (String, WallpaperProjectRead)
+  sse_decode_record_string_wallpaper_project_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_String(deserializer);
+    var var_field1 = sse_decode_wallpaper_project_read(deserializer);
+    return (var_field0, var_field1);
+  }
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint32();
+  }
+
+  @protected
   int sse_decode_u_8(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8();
@@ -353,9 +953,70 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WallpaperProjectRead sse_decode_wallpaper_project_read(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_json = sse_decode_String(deserializer);
+    var var_changedMicros = sse_decode_f_64(deserializer);
+    return WallpaperProjectRead(
+      json: var_json,
+      changedMicros: var_changedMicros,
+    );
+  }
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  void sse_encode_Map_String_bool_None(
+    Map<String, bool> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_record_string_bool(
+      self.entries.map((e) => (e.key, e.value)).toList(),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_Map_String_integrity_folder_read_None(
+    Map<String, IntegrityFolderRead> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_record_string_integrity_folder_read(
+      self.entries.map((e) => (e.key, e.value)).toList(),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_Map_String_opt_String_None(
+    Map<String, String?> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_record_string_opt_string(
+      self.entries.map((e) => (e.key, e.value)).toList(),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_Map_String_wallpaper_project_read_None(
+    Map<String, WallpaperProjectRead> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_record_string_wallpaper_project_read(
+      self.entries.map((e) => (e.key, e.value)).toList(),
+      serializer,
+    );
   }
 
   @protected
@@ -371,11 +1032,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_integrity_folder_entry_read(
+    IntegrityFolderEntryRead self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_bool(self.isDirectory, serializer);
+  }
+
+  @protected
+  void sse_encode_integrity_folder_read(
+    IntegrityFolderRead self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_integrity_folder_entry_read(self.entries, serializer);
+    sse_encode_bool(self.projectPresent, serializer);
+    sse_encode_opt_String(self.projectJson, serializer);
+  }
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_integrity_folder_entry_read(
+    List<IntegrityFolderEntryRead> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_integrity_folder_entry_read(item, serializer);
     }
   }
 
@@ -390,6 +1090,54 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_record_string_bool(
+    List<(String, bool)> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_record_string_bool(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_record_string_integrity_folder_read(
+    List<(String, IntegrityFolderRead)> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_record_string_integrity_folder_read(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_record_string_opt_string(
+    List<(String, String?)> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_record_string_opt_string(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_record_string_wallpaper_project_read(
+    List<(String, WallpaperProjectRead)> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_record_string_wallpaper_project_read(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -397,6 +1145,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_String(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_record_string_bool(
+    (String, bool) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.$1, serializer);
+    sse_encode_bool(self.$2, serializer);
+  }
+
+  @protected
+  void sse_encode_record_string_integrity_folder_read(
+    (String, IntegrityFolderRead) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.$1, serializer);
+    sse_encode_integrity_folder_read(self.$2, serializer);
+  }
+
+  @protected
+  void sse_encode_record_string_opt_string(
+    (String, String?) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.$1, serializer);
+    sse_encode_opt_String(self.$2, serializer);
+  }
+
+  @protected
+  void sse_encode_record_string_wallpaper_project_read(
+    (String, WallpaperProjectRead) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.$1, serializer);
+    sse_encode_wallpaper_project_read(self.$2, serializer);
+  }
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint32(self);
   }
 
   @protected
@@ -408,6 +1202,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_wallpaper_project_read(
+    WallpaperProjectRead self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.json, serializer);
+    sse_encode_f_64(self.changedMicros, serializer);
   }
 
   @protected

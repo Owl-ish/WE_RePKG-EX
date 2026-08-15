@@ -6,7 +6,6 @@ import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
-import 'package:we_repkg/widgets/ellipsis_animation_text.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
 
 class EmptyView extends ConsumerWidget {
@@ -35,7 +34,7 @@ class EmptyView extends ConsumerWidget {
                     color: Theme.of(context).primaryColor,
                   ),
                 ),
-                EllipsisAnimationText(text: tr(AppI10n.loading)),
+                Text(tr(AppI10n.loading)),
               ]
             : [
                 Icon(Icons.error_outline, size: 48, color: Colors.grey),

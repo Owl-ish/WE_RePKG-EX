@@ -8,6 +8,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/acf.dart';
+import 'package:we_repkg/src/rust/api/simple.dart' as rust;
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
@@ -32,18 +33,18 @@ enum BackupFolder { liveWorkshop, liveMyProjects, backupRoot }
 
 /// What the scan is doing, for the tab to say so instead of spinning silently.
 ///
-/// [comparing] is the long one: it walks both backup trees, and on a real
-/// library that is ten of the scan's twelve seconds. [reading] has no total
-/// worth reporting, since it is seven listings running at once. [details] is
-/// the counted title and preview read; [preparing] covers the short handoff
-/// while those results become the visible grid.
-enum BackupScanPhase { reading, comparing, details, preparing }
+/// [comparing] is the long one: it checks whether live files are still covered
+/// by their backups. [finishing] covers the short tail while the lightweight
+/// junk checks finish. [reading] has no useful total. [details] remains for
+/// callers that want counted face reads; [preparing] covers the final handoff.
+enum BackupScanPhase { reading, comparing, finishing, details, preparing }
 
 typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
 
 typedef BackupScan = ({
   Map<BackupCard, BackupState> cards,
   Map<String, ({bool live, bool backup})> presence,
+  Map<String, ({bool live, bool backup})> junk,
   List<ReconcileEntry> reconcile,
   bool acfRead,
   Set<BackupFolder> missing,
@@ -62,6 +63,28 @@ Future<BackupScan> scanBackup({
   void Function(BackupScanProgress)? onProgress,
 }) async {
   onProgress?.call((phase: BackupScanPhase.reading, done: 0, total: 0));
+  final Future<Set<String>> liveWorkshopFuture = listFolderNames(
+    liveWorkshopPath,
+  );
+  final Future<({Set<String> names, Map<String, String> versions})>
+  myProjectsFuture = _myProjectsInventory(liveMyProjectsPath);
+  final Future<Set<String>> backupWorkshopFuture = listFolderNames(
+    backupWorkshopPath(backupRoot),
+  );
+  final Future<Set<String>> backupMyProjectsFuture = listFolderNames(
+    backupMyProjectsPath(backupRoot),
+  );
+  final Future<({Map<String, String> byId, bool acfRead})> acfFuture =
+      workshopVersions(acfPath);
+  final Future<Map<String, BackupRecord>> recordsFuture = readBackupRecords(
+    backupRoot,
+  );
+  final Future<Set<BackupFolder>> missingFuture = _missingFolders(
+    liveWorkshopPath,
+    liveMyProjectsPath,
+    backupRoot,
+  );
+
   final (
     Set<String> liveWorkshop,
     ({Set<String> names, Map<String, String> versions}) myProjects,
@@ -71,13 +94,13 @@ Future<BackupScan> scanBackup({
     Map<String, BackupRecord> records,
     Set<BackupFolder> missing,
   ) = await (
-    listFolderNames(liveWorkshopPath),
-    _myProjectsInventory(liveMyProjectsPath),
-    listFolderNames(backupWorkshopPath(backupRoot)),
-    listFolderNames(backupMyProjectsPath(backupRoot)),
-    workshopVersions(acfPath),
-    readBackupRecords(backupRoot),
-    _missingFolders(liveWorkshopPath, liveMyProjectsPath, backupRoot),
+    liveWorkshopFuture,
+    myProjectsFuture,
+    backupWorkshopFuture,
+    backupMyProjectsFuture,
+    acfFuture,
+    recordsFuture,
+    missingFuture,
   ).wait;
   final Set<String> liveMyProjects = myProjects.names;
 
@@ -109,34 +132,74 @@ Future<BackupScan> scanBackup({
     backupWorkshop,
     backupMyProjects,
   );
-  // Count wallpapers, not the internal live/backup checks. The previous total
-  // counted a shared wallpaper three times and made 3,400 items read as 10,000.
-  final int total = presence.length;
-  final Set<String> walkedCards = <String>{};
-  void walked(WallpaperLibrary library, Iterable<String> names) {
-    final int before = walkedCards.length;
-    for (final String name in names) {
-      walkedCards.add(BackupCard(library, name).id);
-    }
-    if (walkedCards.length == before) return;
-    // The directory checks are only one arm of the comparison. Leave one step
-    // open until every parallel arm has returned, rather than showing 100% while
-    // file comparison is still working.
-    final int reported = walkedCards.length >= total
-        ? total - 1
-        : walkedCards.length;
+  // Report the work that actually dominates the wait: coverage comparisons.
+  // Junk checks run beside it and usually stop at the first ordinary file.
+  final int compareTotal = workshopToCompare.length + sharedMyProjects.length;
+  int compared = 0;
+  void comparedBatch(int folders) {
+    compared += folders;
     onProgress?.call((
-      phase: BackupScanPhase.comparing,
-      done: reported,
-      total: total,
+      phase: compared >= compareTotal
+          ? BackupScanPhase.finishing
+          : BackupScanPhase.comparing,
+      done: compared,
+      total: compareTotal,
     ));
   }
 
-  // Nothing to compare is a first run against an empty backup folder. Saying
-  // "0 of 0" there is worse than staying on the previous line.
-  if (total > 0) {
-    onProgress?.call((phase: BackupScanPhase.comparing, done: 0, total: total));
+  if (compareTotal > 0) {
+    onProgress?.call((
+      phase: BackupScanPhase.comparing,
+      done: 0,
+      total: compareTotal,
+    ));
   }
+  final Future<Map<String, CopyStanding>>
+  workshopStandingFuture = copyStandings(
+    livePath: liveWorkshopPath,
+    backupPath: backupWorkshopPath(backupRoot),
+    // A Workshop wallpaper is packed, so scene.pkg sits at the top level and
+    // moves whenever the author republishes. Measured on a real library, not
+    // one of 2192 folders held a file below the top level outside the
+    // rebuilt shader cache.
+    recursive: false,
+    shared: sharedWorkshop,
+    compare: workshopToCompare,
+    onBatch: comparedBatch,
+  );
+  final Future<Map<String, CopyStanding>> myProjectsStandingFuture =
+      copyStandings(
+        livePath: liveMyProjectsPath,
+        backupPath: backupMyProjectsPath(backupRoot),
+        // A myprojects wallpaper is usually unpacked and its edits land in
+        // subfolders: the top level alone found 3 of 46 stale backups.
+        recursive: true,
+        shared: sharedMyProjects,
+        compare: sharedMyProjects,
+        onBatch: comparedBatch,
+      );
+
+  final Future<Set<String>> junkLiveWorkshopFuture = _junkFolders(
+    liveWorkshopPath,
+    liveWorkshop,
+    live: true,
+  );
+  final Future<Set<String>> junkLiveMyProjectsFuture = _junkFolders(
+    liveMyProjectsPath,
+    liveMyProjects,
+    live: true,
+  );
+  final Future<Set<String>> junkBackupWorkshopFuture = _junkFolders(
+    backupWorkshopPath(backupRoot),
+    backupWorkshop,
+    live: false,
+  );
+  final Future<Set<String>> junkBackupMyProjectsFuture = _junkFolders(
+    backupMyProjectsPath(backupRoot),
+    backupMyProjects,
+    live: false,
+  );
+
   final (
     Map<String, CopyStanding> workshopStanding,
     Map<String, CopyStanding> myProjectsStanding,
@@ -145,56 +208,17 @@ Future<BackupScan> scanBackup({
     Set<String> junkBackupWorkshop,
     Set<String> junkBackupMyProjects,
   ) = await (
-    copyStandings(
-      livePath: liveWorkshopPath,
-      backupPath: backupWorkshopPath(backupRoot),
-      // A Workshop wallpaper is packed, so scene.pkg sits at the top level and
-      // moves whenever the author republishes. Measured on a real library, not
-      // one of 2192 folders held a file below the top level outside the
-      // rebuilt shader cache.
-      recursive: false,
-      shared: sharedWorkshop,
-      compare: workshopToCompare,
-    ),
-    copyStandings(
-      livePath: liveMyProjectsPath,
-      backupPath: backupMyProjectsPath(backupRoot),
-      // A myprojects wallpaper is usually unpacked and its edits land in
-      // subfolders: the top level alone found 3 of 46 stale backups.
-      recursive: true,
-      shared: sharedMyProjects,
-      compare: sharedMyProjects,
-    ),
-    _junkFolders(
-      liveWorkshopPath,
-      liveWorkshop,
-      live: true,
-      onNames: (names) => walked(WallpaperLibrary.workshop, names),
-    ),
-    _junkFolders(
-      liveMyProjectsPath,
-      liveMyProjects,
-      live: true,
-      onNames: (names) => walked(WallpaperLibrary.myProjects, names),
-    ),
-    _junkFolders(
-      backupWorkshopPath(backupRoot),
-      backupWorkshop,
-      live: false,
-      onNames: (names) => walked(WallpaperLibrary.workshop, names),
-    ),
-    _junkFolders(
-      backupMyProjectsPath(backupRoot),
-      backupMyProjects,
-      live: false,
-      onNames: (names) => walked(WallpaperLibrary.myProjects, names),
-    ),
+    workshopStandingFuture,
+    myProjectsStandingFuture,
+    junkLiveWorkshopFuture,
+    junkLiveMyProjectsFuture,
+    junkBackupWorkshopFuture,
+    junkBackupMyProjectsFuture,
   ).wait;
-
   onProgress?.call((
     phase: BackupScanPhase.preparing,
-    done: total,
-    total: total,
+    done: compareTotal,
+    total: compareTotal,
   ));
 
   final BackupDiffResult diff = backupDiff(
@@ -212,9 +236,16 @@ Future<BackupScan> scanBackup({
   _addLiveJunkCards(diff, WallpaperLibrary.myProjects, junkLiveMyProjects);
   _markJunkCards(diff, WallpaperLibrary.workshop, junkBackupWorkshop);
   _markJunkCards(diff, WallpaperLibrary.myProjects, junkBackupMyProjects);
+  final Map<String, ({bool live, bool backup})> junk = _cardPresence(
+    junkLiveWorkshop,
+    junkLiveMyProjects,
+    junkBackupWorkshop,
+    junkBackupMyProjects,
+  );
   return (
     cards: diff.cards,
     presence: presence,
+    junk: junk,
     reconcile: diff.reconcile,
     acfRead: acf.acfRead,
     missing: missing,
@@ -300,16 +331,37 @@ Future<Map<BackupCard, CardFace>> readCardFaces({
   }
 
   if (cards.isNotEmpty) read(0);
+  final Future<Map<String, CardFace>> facesLiveWFuture = _faces(
+    liveWorkshopPath,
+    liveW,
+    onBatch: read,
+  );
+  final Future<Map<String, CardFace>> facesLiveMFuture = _faces(
+    liveMyProjectsPath,
+    liveM,
+    onBatch: read,
+  );
+  final Future<Map<String, CardFace>> facesGoneWFuture = _faces(
+    backupWorkshopPath(backupRoot),
+    goneW,
+    onBatch: read,
+  );
+  final Future<Map<String, CardFace>> facesGoneMFuture = _faces(
+    backupMyProjectsPath(backupRoot),
+    goneM,
+    onBatch: read,
+  );
+
   final (
     Map<String, CardFace> facesLiveW,
     Map<String, CardFace> facesLiveM,
     Map<String, CardFace> facesGoneW,
     Map<String, CardFace> facesGoneM,
   ) = await (
-    _faces(liveWorkshopPath, liveW, onBatch: read),
-    _faces(liveMyProjectsPath, liveM, onBatch: read),
-    _faces(backupWorkshopPath(backupRoot), goneW, onBatch: read),
-    _faces(backupMyProjectsPath(backupRoot), goneM, onBatch: read),
+    facesLiveWFuture,
+    facesLiveMFuture,
+    facesGoneWFuture,
+    facesGoneMFuture,
   ).wait;
 
   return <BackupCard, CardFace>{
@@ -330,19 +382,79 @@ Future<Map<String, CardFace>> _faces(
   void Function(int folders)? onBatch,
 }) async {
   if (root == null || names.isEmpty) return <String, CardFace>{};
-  return _perFolder<CardFace>(root, names, _face, onBatch: onBatch);
+
+  try {
+    final Map<String, rust.WallpaperProjectRead> projects = await rust
+        .readWallpaperProjectsRust(root: root, folderNames: names, workers: 24);
+    return _perFolder<CardFace>(root, names, (Directory folder) {
+      final rust.WallpaperProjectRead? project =
+          projects[path.basename(folder.path)];
+      return _faceFromJson(
+        folder,
+        project?.json,
+        changedMicros: project?.changedMicros,
+      );
+    }, onBatch: onBatch);
+  } catch (_) {
+    // Keep the existing Dart reader as a safety net if the native bridge is
+    // unavailable or a future platform cannot service the batch call.
+    return _perFolder<CardFace>(
+      root,
+      names,
+      (Directory folder) => _face(folder),
+      onBatch: onBatch,
+    );
+  }
+}
+
+Future<CardFace?> _faceFromJson(
+  Directory folder,
+  String? jsonString, {
+  double? changedMicros,
+}) async {
+  if (jsonString == null) return null;
+  final File file = File(path.join(folder.path, WallpaperFiles.project));
+  try {
+    final Map<String, dynamic> parsed =
+        json.decode(jsonString) as Map<String, dynamic>;
+
+    final DateTime modified;
+    if (changedMicros != null) {
+      modified = DateTime.fromMicrosecondsSinceEpoch(changedMicros.round());
+    } else {
+      modified = (await file.stat()).changed;
+    }
+
+    final String? preview = parsed[WallpaperProjectFields.preview] as String?;
+    return (
+      title:
+          parsed[WallpaperProjectFields.title] as String? ??
+          path.basename(folder.path),
+      preview: preview == null ? '' : path.join(folder.path, preview),
+      type: (parsed[WallpaperProjectFields.type] as String? ?? '')
+          .toLowerCase(),
+      rating: (parsed[WallpaperProjectFields.contentRating] as String? ?? '')
+          .toLowerCase(),
+      modified: modified,
+    );
+  } catch (e) {
+    debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path} $e');
+    return null;
+  }
 }
 
 Future<CardFace?> _face(Directory folder) async {
   final File file = File(path.join(folder.path, WallpaperFiles.project));
-  if (!await file.exists()) return null;
+  final bool exists = await file.exists();
+  if (!exists) return null;
   try {
     final Map<String, dynamic> parsed =
         json.decode(await file.readAsString()) as Map<String, dynamic>;
+    // The same field the extract grid dates a wallpaper by, so both grids
+    // mean the same thing by their date order.
+    final DateTime modified = (await file.stat()).changed;
+
     final String? preview = parsed[WallpaperProjectFields.preview] as String?;
-    // The same field the extract grid dates a wallpaper by, so both grids mean
-    // the same thing by their date order.
-    final FileStat stat = await file.stat();
     // myprojects wallpapers often have no title. A hand-made one can also put a
     // number where the string belongs, which the cast throws on and the catch
     // below turns into no face at all, matching what the extract grid does with
@@ -356,7 +468,7 @@ Future<CardFace?> _face(Directory folder) async {
           .toLowerCase(),
       rating: (parsed[WallpaperProjectFields.contentRating] as String? ?? '')
           .toLowerCase(),
-      modified: stat.changed,
+      modified: modified,
     );
   } catch (e) {
     debugPrint('${tr(AppI10n.logParseWallpaperSkipped)} ${folder.path} $e');
@@ -520,12 +632,20 @@ Future<Set<String>> _junkFolders(
   String? root,
   Set<String> names, {
   required bool live,
-  void Function(List<String> names)? onNames,
 }) async {
   if (root == null || names.isEmpty) return const <String>{};
-  return (await _perFolder<bool>(root, names, onNames: onNames, (
-    Directory folder,
-  ) async {
+  try {
+    return (await rust.findJunkFoldersRust(
+      root: root,
+      folderNames: names.toList(),
+      backup: !live,
+      workers: 4,
+    )).toSet();
+  } catch (_) {
+    // Keep the Dart scan as a safety net when the native bridge is unavailable,
+    // including unit tests that do not initialise the desktop Rust library.
+  }
+  return (await _perFolder<bool>(root, names, (Directory folder) async {
     final bool junk = live
         ? await isLiveWallpaperJunk(folder)
         : await isBackupWallpaperJunk(folder);
@@ -633,7 +753,6 @@ Future<Map<String, T>> _perFolder<T extends Object>(
   Iterable<String> names,
   Future<T?> Function(Directory folder) work, {
   void Function(int folders)? onBatch,
-  void Function(List<String> names)? onNames,
   int batchSize = 24,
 }) async {
   final Map<String, T> found = <String, T>{};
@@ -648,54 +767,40 @@ Future<Map<String, T>> _perFolder<T extends Object>(
       if (result != null) found[batch[j]] = result;
     }
     onBatch?.call(batch.length);
-    onNames?.call(batch);
   }
   return found;
 }
 
-/// Every file under a wallpaper folder, or null if it could not be read.
+/// Whether the backup still covers every live file that matters.
 ///
-/// A folder that moved mid-scan skips rather than aborting the library.
-Future<List<FileEntry>?> _files(
-  Directory folder, {
+/// Extra backup files are intentionally ignored, matching [compareCopy]. Walking
+/// the live tree once and probing only its matching backup files avoids a second
+/// recursive backup-tree walk and can stop on the first stale file.
+Future<CopyStanding?> _copyStanding({
+  required Directory liveFolder,
+  required Directory backupFolder,
   required bool recursive,
 }) async {
-  final List<FileEntry> files = <FileEntry>[];
   try {
-    await for (final FileSystemEntity entity in folder.list(
+    if (!await liveFolder.exists() || !await backupFolder.exists()) return null;
+    await for (final FileSystemEntity entity in liveFolder.list(
       recursive: recursive,
       followLinks: false,
     )) {
       if (entity is! File) continue;
-      files.add((
-        path: path.relative(entity.path, from: folder.path),
-        size: await entity.length(),
-      ));
-    }
-  } on FileSystemException {
-    return null;
-  }
-  return files;
-}
-
-/// Whether a backup folder holds any file that counts as wallpaper content.
-/// Stops on the first one and never stats file sizes: an uncompared Workshop
-/// backup only needs an empty/not-empty answer.
-Future<bool?> _hasComparableFile(
-  Directory folder, {
-  required bool recursive,
-}) async {
-  try {
-    await for (final FileSystemEntity entity in folder.list(
-      recursive: recursive,
-      followLinks: false,
-    )) {
-      if (entity is File &&
-          !isRebuiltShaderPath(path.relative(entity.path, from: folder.path))) {
-        return true;
+      final String relative = path.relative(entity.path, from: liveFolder.path);
+      if (isRebuiltShaderPath(relative)) continue;
+      final (FileStat live, FileStat backup) = await (
+        entity.stat(),
+        File(path.join(backupFolder.path, relative)).stat(),
+      ).wait;
+      if (live.type != FileSystemEntityType.file) return null;
+      if (backup.type != FileSystemEntityType.file ||
+          backup.size != live.size) {
+        return CopyStanding.behind;
       }
     }
-    return false;
+    return CopyStanding.covers;
   } on FileSystemException {
     return null;
   }
@@ -703,10 +808,9 @@ Future<bool?> _hasComparableFile(
 
 /// Where each backup folder stands against its live counterpart.
 ///
-/// [shared] is every name both sides hold; [compare] is the subset worth a full
-/// comparison. Everything in [shared] is still checked for being empty, because
-/// a folder with nothing in it is not a backup whatever a record says, and a
-/// Workshop card that already has a baseline is never compared at all.
+/// Only [compare] is opened. Empty/junk detection belongs to the dedicated junk
+/// pass, so a Workshop wallpaper with a saved baseline no longer gets walked a
+/// second time merely to rediscover the same maintenance state.
 Future<Map<String, CopyStanding>> copyStandings({
   required String? livePath,
   required String? backupPath,
@@ -715,33 +819,46 @@ Future<Map<String, CopyStanding>> copyStandings({
   required Set<String> compare,
   void Function(int folders)? onBatch,
 }) async {
-  if (livePath == null || backupPath == null || shared.isEmpty) {
+  if (livePath == null || backupPath == null || compare.isEmpty) {
     return <String, CopyStanding>{};
   }
+  final Set<String> wanted = <String>{
+    for (final String name in shared)
+      if (compare.contains(name)) name,
+  };
+  if (wanted.isEmpty) return <String, CopyStanding>{};
+
+  if (recursive) {
+    try {
+      final Map<String, bool> native = await rust.compareBackupFoldersRust(
+        liveRoot: livePath,
+        backupRoot: backupPath,
+        folderNames: wanted.toList(),
+        workers: 12,
+      );
+      onBatch?.call(wanted.length);
+      return <String, CopyStanding>{
+        for (final MapEntry<String, bool> entry in native.entries)
+          entry.key: entry.value ? CopyStanding.covers : CopyStanding.behind,
+      };
+    } catch (_) {
+      // Keep the existing Dart path as a safety net if the native bridge is
+      // unavailable or the native scan itself cannot start.
+    }
+  }
+
   return _perFolder<CopyStanding>(
     backupPath,
-    shared,
+    wanted,
     onBatch: onBatch,
-    // Recursive MyProjects reads contend heavily on OneDrive-backed folders.
-    // Eight was the smallest near-fastest value on the real 1,180-folder
-    // library; 12 and 16 were no faster, while four was substantially slower.
     batchSize: recursive ? 8 : 24,
-    (Directory backupFolder) async {
-      final String name = path.basename(backupFolder.path);
-      if (!compare.contains(name)) {
-        final bool? hasContent = await _hasComparableFile(
-          backupFolder,
-          recursive: recursive,
-        );
-        return hasContent == false ? CopyStanding.empty : null;
-      }
-      final (List<FileEntry>? backup, List<FileEntry>? live) = await (
-        _files(backupFolder, recursive: recursive),
-        _files(Directory(path.join(livePath, name)), recursive: recursive),
-      ).wait;
-      if (backup == null || live == null) return null;
-      return compareCopy(live: live, backup: backup);
-    },
+    (Directory backupFolder) => _copyStanding(
+      liveFolder: Directory(
+        path.join(livePath, path.basename(backupFolder.path)),
+      ),
+      backupFolder: backupFolder,
+      recursive: recursive,
+    ),
   );
 }
 
@@ -830,12 +947,34 @@ Future<String?> liveBackupVersion(
 
 Future<({Set<String> names, Map<String, String> versions})>
 _myProjectsInventory(String? folderPath) async {
-  final Set<String> names = await listFolderNames(folderPath);
-  if (folderPath == null) return (names: names, versions: <String, String>{});
-  return (
-    names: names,
-    versions: await _perFolder<String>(folderPath, names, _folderToken),
-  );
+  if (folderPath == null) {
+    return (names: <String>{}, versions: <String, String>{});
+  }
+
+  try {
+    final Map<String, String?> native = await rust.myProjectsInventoryRust(
+      root: folderPath,
+      ignoredPrefixes: const <String>[
+        WallpaperFiles.rescueStagePrefix,
+        WallpaperFiles.restoreStagePrefix,
+        WallpaperFiles.emptyBackupStagePrefix,
+      ],
+      workers: 12,
+    );
+    return (
+      names: native.keys.toSet(),
+      versions: <String, String>{
+        for (final MapEntry<String, String?> entry in native.entries)
+          if (entry.value != null) entry.key: entry.value!,
+      },
+    );
+  } catch (_) {
+    final Set<String> names = await listFolderNames(folderPath);
+    return (
+      names: names,
+      versions: await _perFolder<String>(folderPath, names, _folderToken),
+    );
+  }
 }
 
 Future<String?> _folderToken(Directory folder) async {

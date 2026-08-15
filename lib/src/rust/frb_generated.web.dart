@@ -21,19 +21,79 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  Map<String, bool> dco_decode_Map_String_bool_None(dynamic raw);
+
+  @protected
+  Map<String, IntegrityFolderRead>
+  dco_decode_Map_String_integrity_folder_read_None(dynamic raw);
+
+  @protected
+  Map<String, String?> dco_decode_Map_String_opt_String_None(dynamic raw);
+
+  @protected
+  Map<String, WallpaperProjectRead>
+  dco_decode_Map_String_wallpaper_project_read_None(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
+  IntegrityFolderEntryRead dco_decode_integrity_folder_entry_read(dynamic raw);
+
+  @protected
+  IntegrityFolderRead dco_decode_integrity_folder_read(dynamic raw);
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<IntegrityFolderEntryRead> dco_decode_list_integrity_folder_entry_read(
+    dynamic raw,
+  );
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<(String, bool)> dco_decode_list_record_string_bool(dynamic raw);
+
+  @protected
+  List<(String, IntegrityFolderRead)>
+  dco_decode_list_record_string_integrity_folder_read(dynamic raw);
+
+  @protected
+  List<(String, String?)> dco_decode_list_record_string_opt_string(dynamic raw);
+
+  @protected
+  List<(String, WallpaperProjectRead)>
+  dco_decode_list_record_string_wallpaper_project_read(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  (String, bool) dco_decode_record_string_bool(dynamic raw);
+
+  @protected
+  (String, IntegrityFolderRead) dco_decode_record_string_integrity_folder_read(
+    dynamic raw,
+  );
+
+  @protected
+  (String, String?) dco_decode_record_string_opt_string(dynamic raw);
+
+  @protected
+  (String, WallpaperProjectRead)
+  dco_decode_record_string_wallpaper_project_read(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -42,19 +102,104 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  WallpaperProjectRead dco_decode_wallpaper_project_read(dynamic raw);
+
+  @protected
+  Map<String, bool> sse_decode_Map_String_bool_None(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Map<String, IntegrityFolderRead>
+  sse_decode_Map_String_integrity_folder_read_None(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Map<String, String?> sse_decode_Map_String_opt_String_None(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Map<String, WallpaperProjectRead>
+  sse_decode_Map_String_wallpaper_project_read_None(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
+  IntegrityFolderEntryRead sse_decode_integrity_folder_entry_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IntegrityFolderRead sse_decode_integrity_folder_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<IntegrityFolderEntryRead> sse_decode_list_integrity_folder_entry_read(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<(String, bool)> sse_decode_list_record_string_bool(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<(String, IntegrityFolderRead)>
+  sse_decode_list_record_string_integrity_folder_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<(String, String?)> sse_decode_list_record_string_opt_string(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<(String, WallpaperProjectRead)>
+  sse_decode_list_record_string_wallpaper_project_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  (String, bool) sse_decode_record_string_bool(SseDeserializer deserializer);
+
+  @protected
+  (String, IntegrityFolderRead) sse_decode_record_string_integrity_folder_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  (String, String?) sse_decode_record_string_opt_string(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  (String, WallpaperProjectRead)
+  sse_decode_record_string_wallpaper_project_read(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -63,7 +208,36 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  WallpaperProjectRead sse_decode_wallpaper_project_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  void sse_encode_Map_String_bool_None(
+    Map<String, bool> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_Map_String_integrity_folder_read_None(
+    Map<String, IntegrityFolderRead> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_Map_String_opt_String_None(
+    Map<String, String?> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_Map_String_wallpaper_project_read_None(
+    Map<String, WallpaperProjectRead> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -72,7 +246,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_integrity_folder_entry_read(
+    IntegrityFolderEntryRead self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_integrity_folder_read(
+    IntegrityFolderRead self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_integrity_folder_entry_read(
+    List<IntegrityFolderEntryRead> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
@@ -81,13 +276,70 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_record_string_bool(
+    List<(String, bool)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_record_string_integrity_folder_read(
+    List<(String, IntegrityFolderRead)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_record_string_opt_string(
+    List<(String, String?)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_record_string_wallpaper_project_read(
+    List<(String, WallpaperProjectRead)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_bool(
+    (String, bool) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_record_string_integrity_folder_read(
+    (String, IntegrityFolderRead) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_record_string_opt_string(
+    (String, String?) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_record_string_wallpaper_project_read(
+    (String, WallpaperProjectRead) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wallpaper_project_read(
+    WallpaperProjectRead self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);

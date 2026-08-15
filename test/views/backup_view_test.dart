@@ -48,6 +48,8 @@ CardFace faceOf(String title) =>
 
 BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
+  Map<String, ({bool live, bool backup})> junk =
+      const <String, ({bool live, bool backup})>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
 }) => (
@@ -59,6 +61,7 @@ BackupScan scanOf({
         backup: entry.value != BackupState.notBackedUp,
       ),
   },
+  junk: junk,
   reconcile: reconcile,
   acfRead: true,
   missing: missing,
@@ -128,7 +131,7 @@ void main() {
         .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
         .value;
 
-    testWidgets('the scan says what it is doing, and how far along', (
+    testWidgets('the scan keeps native comparison feedback animated', (
       tester,
     ) async {
       final ProviderContainer container = ProviderContainer(
@@ -156,7 +159,23 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(barValue(tester), 0.25);
+      expect(find.text(AppI10n.backupScanComparing), findsOneWidget);
+      expect(
+        barValue(tester),
+        isNull,
+        reason:
+            'native comparison completes as one batch, so fake progress would freeze',
+      );
+
+      container.read(backupScanProgressProvider).value = (
+        phase: BackupScanPhase.finishing,
+        done: 120,
+        total: 120,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text(AppI10n.backupScanFinishing), findsOneWidget);
+      expect(barValue(tester), isNull);
     });
 
     // A rescan does not cancel the one running, and both write their progress
@@ -187,7 +206,7 @@ void main() {
       );
     });
 
-    testWidgets('reading the tiles says so too, and counts them', (
+    testWidgets('tile preparation stays in the same loading phase', (
       tester,
     ) async {
       final ProviderContainer container = ProviderContainer(
@@ -203,26 +222,8 @@ void main() {
       );
       await waiting(tester, container);
 
-      expect(find.text(AppI10n.backupReadingDetails), findsOneWidget);
-
-      container.read(backupScanProgressProvider).value = (
-        phase: BackupScanPhase.details,
-        done: 10,
-        total: 40,
-      );
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(find.text(AppI10n.backupReadingDetailsCount), findsOneWidget);
-      expect(barValue(tester), 0.25);
-
-      container.read(backupScanProgressProvider).value = (
-        phase: BackupScanPhase.preparing,
-        done: 40,
-        total: 40,
-      );
-      await tester.pump(const Duration(milliseconds: 400));
-
       expect(find.text(AppI10n.backupPreparingGrid), findsOneWidget);
+      expect(find.text(AppI10n.backupReadingDetails), findsNothing);
       expect(find.text(AppI10n.backupReadingDetailsCount), findsNothing);
       expect(barValue(tester), isNull);
     });
@@ -359,10 +360,13 @@ void main() {
       WidgetTester tester,
       BackupScan scan, {
       List<BackupTile> tiles = const <BackupTile>[],
+      String? workshopPath,
     }) => tester.pumpWidget(
       ProviderScope(
         overrides: [
           backupRootProvider.overrideWithValue(r'C:\backup'),
+          if (workshopPath != null)
+            wallpaperPathProvider.overrideWithValue(workshopPath),
           backupScanProvider.overrideWithValue(
             AsyncValue<BackupScan>.data(scan),
           ),
@@ -439,6 +443,34 @@ void main() {
       expect(find.text(AppI10n.backupStateSynced), findsOneWidget);
       expect(find.text(AppI10n.homeLibraryWorkshop), findsOneWidget);
       expect(find.text(AppI10n.homeLibraryMyProjects), findsOneWidget);
+    });
+
+    testWidgets('Empty/Junk exposes only the folder that needs cleanup', (
+      tester,
+    ) async {
+      const BackupCard card = BackupCard(
+        WallpaperLibrary.workshop,
+        'junk-live',
+      );
+      await showScan(
+        tester,
+        scanOf(
+          cards: <BackupCard, BackupState>{card: BackupState.emptyBackup},
+          junk: const <String, ({bool live, bool backup})>{
+            'workshop/junk-live': (live: true, backup: false),
+          },
+        ),
+        tiles: <BackupTile>[
+          (card: card, state: BackupState.emptyBackup, face: null),
+        ],
+        workshopPath: r'C:\workshop',
+      );
+
+      final BackupTileView tile = tester.widget<BackupTileView>(
+        find.byType(BackupTileView),
+      );
+      expect(tile.folders.live, r'C:\workshop\junk-live');
+      expect(tile.folders.backup, isNull);
     });
 
     // A folder with no readable project.json still occupies the backup, and it
