@@ -114,11 +114,7 @@ void main() {
   testWidgets('a row opens only from its folder button', (tester) async {
     await show(tester, (
       findings: <IntegrityFinding>[
-        finding(
-          IntegrityRoot.liveWorkshop,
-          'aaa',
-          IntegrityVerdict.shaderCacheOnly,
-        ),
+        finding(IntegrityRoot.liveWorkshop, 'aaa', IntegrityVerdict.mediaOnly),
       ],
       scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 1},
       missing: const <IntegrityRoot>{},
@@ -136,11 +132,7 @@ void main() {
   ) async {
     await show(tester, (
       findings: <IntegrityFinding>[
-        finding(
-          IntegrityRoot.liveWorkshop,
-          'aaa',
-          IntegrityVerdict.shaderCacheOnly,
-        ),
+        finding(IntegrityRoot.liveWorkshop, 'aaa', IntegrityVerdict.mediaOnly),
       ],
       scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 1},
       missing: const <IntegrityRoot>{},
@@ -148,7 +140,7 @@ void main() {
 
     final Text summary = tester.widget<Text>(find.text(AppI10n.integrityAbout));
     final Text advice = tester.widget<Text>(
-      find.text(AppI10n.integrityAdviceShaderCacheOnly),
+      find.text(AppI10n.integrityAdviceMediaOnly),
     );
     expect(
       summary.style!.fontSize,
@@ -259,6 +251,11 @@ void main() {
       expect(
         find.text('${AppI10n.integrityVerdictMediaOnly} 1'),
         findsOneWidget,
+      );
+      expect(find.text('cache'), findsNothing);
+      expect(
+        find.textContaining(AppI10n.integrityVerdictShaderCacheOnly),
+        findsNothing,
       );
     });
   });
@@ -443,11 +440,7 @@ void main() {
   testWidgets('issue pills keep a visible tinted surface', (tester) async {
     await show(tester, (
       findings: <IntegrityFinding>[
-        finding(
-          IntegrityRoot.liveWorkshop,
-          'aaa',
-          IntegrityVerdict.shaderCacheOnly,
-        ),
+        finding(IntegrityRoot.liveWorkshop, 'aaa', IntegrityVerdict.mediaOnly),
       ],
       scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 1},
       missing: const <IntegrityRoot>{},
@@ -481,7 +474,7 @@ void main() {
           finding(
             IntegrityRoot.liveWorkshop,
             'current',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.mediaOnly,
           ),
         ],
         scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 2},
@@ -517,17 +510,17 @@ void main() {
           finding(
             IntegrityRoot.liveWorkshop,
             'live-a',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.unpackedSceneNoProject,
           ),
           finding(
             IntegrityRoot.liveWorkshop,
             'live-b',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.unpackedSceneNoProject,
           ),
           finding(
             IntegrityRoot.backupWorkshop,
             'backup-a',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.unpackedSceneNoProject,
           ),
         ],
         scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 3},
@@ -548,7 +541,7 @@ void main() {
     await tester.pump();
 
     expect(received, hasLength(2));
-    expect(receivedRepair, IntegrityRepair.recycleShaderCache);
+    expect(receivedRepair, IntegrityRepair.writeProject);
     expect(
       received!.map((IntegrityFinding finding) => finding.root).toSet(),
       <IntegrityRoot>{IntegrityRoot.liveWorkshop},
@@ -565,12 +558,12 @@ void main() {
           finding(
             IntegrityRoot.liveWorkshop,
             'live-a',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.unpackedSceneNoProject,
           ),
           finding(
             IntegrityRoot.liveWorkshop,
             'live-b',
-            IntegrityVerdict.shaderCacheOnly,
+            IntegrityVerdict.unpackedSceneNoProject,
           ),
         ],
         scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 2},
@@ -591,7 +584,7 @@ void main() {
     await tester.pump();
 
     expect(received, hasLength(1));
-    expect(receivedRepair, IntegrityRepair.recycleShaderCache);
+    expect(receivedRepair, IntegrityRepair.writeProject);
     expect(received!.single.name, 'live-b');
   });
 
@@ -604,22 +597,18 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await show(tester, (
       findings: <IntegrityFinding>[
-        finding(
-          IntegrityRoot.liveWorkshop,
-          'live',
-          IntegrityVerdict.shaderCacheOnly,
-        ),
+        finding(IntegrityRoot.liveWorkshop, 'live', IntegrityVerdict.mediaOnly),
         finding(
           IntegrityRoot.backupWorkshop,
           'backup',
-          IntegrityVerdict.shaderCacheOnly,
+          IntegrityVerdict.mediaOnly,
         ),
       ],
       scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 2},
       missing: const <IntegrityRoot>{},
     ));
 
-    final Finder advice = find.text(AppI10n.integrityAdviceShaderCacheOnly);
+    final Finder advice = find.text(AppI10n.integrityAdviceMediaOnly);
     expect(advice, findsOneWidget);
     final Rect heading = tester.getRect(
       find.text(AppI10n.integrityRootLiveWorkshop),

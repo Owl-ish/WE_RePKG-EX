@@ -420,108 +420,69 @@ class _Loaded extends ConsumerWidget {
 
 /// The current state's primary operation, held above the wallpaper grid.
 ///
-/// Unlike the filters' faint attention pulse, this keeps a visible halo at
-/// every point in the animation and only varies its reach and intensity.
-class _GlowingActionButton extends StatefulWidget {
+/// It rests like the status pills, then adds a stronger outward-only pulse.
+class _GlowingActionButton extends StatelessWidget {
   const _GlowingActionButton({
     required this.label,
     required this.icon,
     required this.colour,
     required this.onPressed,
+    this.destructive = false,
   });
 
   final String label;
   final IconData icon;
   final Color colour;
   final VoidCallback? onPressed;
-
-  @override
-  State<_GlowingActionButton> createState() => _GlowingActionButtonState();
-}
-
-class _GlowingActionButtonState extends State<_GlowingActionButton>
-    with SingleTickerProviderStateMixin {
-  static const Duration _period = Duration(milliseconds: 1400);
-
-  late final AnimationController _glow = AnimationController(
-    vsync: this,
-    duration: _period,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.onPressed != null) _glow.repeat(reverse: true);
-  }
-
-  @override
-  void didUpdateWidget(_GlowingActionButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.onPressed != null && !_glow.isAnimating) {
-      _glow.repeat(reverse: true);
-    } else if (widget.onPressed == null && _glow.isAnimating) {
-      _glow.stop();
-      _glow.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _glow.dispose();
-    super.dispose();
-  }
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
-    final bool enabled = widget.onPressed != null;
-    final Color colour = enabled
-        ? widget.colour
-        : Theme.of(context).disabledColor;
-    return Tooltip(
-      message: widget.label,
-      child: AnimatedBuilder(
-        animation: _glow,
-        builder: (BuildContext context, Widget? child) {
-          final double strength = Curves.easeInOut.transform(_glow.value);
-          return DecoratedBox(
-            key: const ValueKey<String>('backup-all-action-glow'),
-            decoration: BoxDecoration(
-              borderRadius: LayoutNums.pill,
-              boxShadow: enabled
-                  ? <BoxShadow>[
-                      BoxShadow(
-                        color: colour.withValues(alpha: .18),
-                        blurRadius: 10,
-                        spreadRadius: .5,
-                      ),
-                      BoxShadow(
-                        color: colour.withValues(alpha: .12 + .26 * strength),
-                        blurRadius: 14 + 10 * strength,
-                        spreadRadius: .5 + 2 * strength,
-                      ),
-                    ]
-                  : const <BoxShadow>[],
-            ),
-            child: child,
+    final bool enabled = onPressed != null;
+    final ThemeData theme = Theme.of(context);
+    final ActionButtonTheme actionColors = theme.actionButtons;
+    final Color resolvedColour = enabled
+        ? (destructive ? actionColors.destructiveForeground : colour)
+        : theme.disabledColor;
+    // Non-destructive state actions rest like their status pills. Destructive
+    // actions use the app-wide danger surface, then the same outward pulse.
+    final Color fill = destructive
+        ? (enabled
+              ? actionColors.destructiveBackground
+              : actionColors.destructiveBackground.withValues(alpha: .5))
+        : Color.alphaBlend(
+            resolvedColour.withValues(alpha: enabled ? .07 : .05),
+            theme.scaffoldBackgroundColor,
           );
-        },
+    final Color border = destructive
+        ? (enabled
+              ? actionColors.destructiveBorder
+              : actionColors.destructiveBorder.withValues(alpha: .5))
+        : resolvedColour.withValues(alpha: enabled ? .2 : .15);
+    return Tooltip(
+      message: label,
+      child: BackupActionGlow(
+        colour: resolvedColour,
+        enabled: enabled,
+        borderRadius: LayoutNums.pill,
+        glowKey: const ValueKey<String>('backup-all-action-glow'),
         child: Material(
-          color: colour.withValues(alpha: enabled ? .1 : .06),
+          color: fill,
           shape: RoundedRectangleBorder(
             borderRadius: LayoutNums.pill,
-            side: BorderSide(color: colour.withValues(alpha: .48)),
+            side: BorderSide(color: border),
           ),
           child: InkWell(
             borderRadius: LayoutNums.pill,
-            onTap: widget.onPressed,
+            onTap: onPressed,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 spacing: LayoutNums.compactGap,
                 children: <Widget>[
-                  Icon(widget.icon, size: 17, color: colour),
-                  Text(widget.label, style: TextStyle(color: colour)),
+                  Icon(icon, size: 16, color: resolvedColour),
+                  Text(label, style: TextStyle(color: resolvedColour)),
                 ],
               ),
             ),
@@ -691,6 +652,9 @@ class _Grid extends ConsumerWidget {
                                 context,
                                 BackupState.emptyBackup,
                               ).colour,
+                              destructive: backupActionIsDestructive(
+                                BackupAction.recycleJunk,
+                              ),
                               onPressed: () => applyBackupAction(
                                 context,
                                 BackupAction.recycleJunk,

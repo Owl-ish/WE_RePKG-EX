@@ -196,6 +196,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         DetailAction(
           label: backupActionLabel(action),
           onPressed: onAction,
+          destructive: backupActionIsDestructive(action),
         ),
     if (widget.folders.live case final String live)
       DetailAction(
@@ -291,22 +292,44 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                       Positioned(
                         right: LayoutNums.smallGap,
                         bottom: 28,
-                        child: Material(
-                          color: Theme.of(
-                            context,
-                          ).actionButtons.primaryBackground,
-                          shape: const CircleBorder(),
-                          child: AppIconButton(
-                            icon: backupActionIcon(action),
-                            tooltip: backupActionLabel(action),
-                            onPressed: onAction,
-                            width: 34,
-                            height: 34,
-                            iconSize: 18,
-                            color: Theme.of(
+                        child: Builder(
+                          builder: (BuildContext context) {
+                            final bool destructive = backupActionIsDestructive(
+                              action,
+                            );
+                            final ActionButtonTheme colors = Theme.of(
                               context,
-                            ).actionButtons.primaryForeground,
-                          ),
+                            ).actionButtons;
+                            final Color glowColour = destructive
+                                ? colors.destructiveForeground
+                                : colors.primaryForeground;
+                            return BackupActionGlow(
+                              colour: glowColour,
+                              enabled: true,
+                              borderRadius: BorderRadius.circular(999),
+                              glowKey: const ValueKey<String>(
+                                'backup-tile-action-glow',
+                              ),
+                              scale: .7,
+                              child: destructive
+                                  ? AppActionIconButton.destructive(
+                                      icon: backupActionIcon(action),
+                                      tooltip: backupActionLabel(action),
+                                      onPressed: onAction,
+                                      width: 34,
+                                      height: 34,
+                                      iconSize: 18,
+                                    )
+                                  : AppActionIconButton(
+                                      icon: backupActionIcon(action),
+                                      tooltip: backupActionLabel(action),
+                                      onPressed: onAction,
+                                      width: 34,
+                                      height: 34,
+                                      iconSize: 18,
+                                    ),
+                            );
+                          },
                         ),
                       ),
                   if (checked) const SelectionTint(),

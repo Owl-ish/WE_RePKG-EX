@@ -163,9 +163,12 @@ IntegrityResolution _resolutionFor(
   IntegrityRepair.recycleShaderCache => IntegrityResolution.recycled,
 };
 
-bool _isDestructive(IntegrityRepair repair, MediaRepairChoice? mediaChoice) =>
+bool integrityRepairIsDestructive(IntegrityRepair repair) =>
     repair == IntegrityRepair.rescue ||
-    repair == IntegrityRepair.recycleShaderCache ||
+    repair == IntegrityRepair.recycleShaderCache;
+
+bool _isDestructive(IntegrityRepair repair, MediaRepairChoice? mediaChoice) =>
+    integrityRepairIsDestructive(repair) ||
     (repair == IntegrityRepair.resolveMedia &&
         mediaChoice == MediaRepairChoice.recycle);
 

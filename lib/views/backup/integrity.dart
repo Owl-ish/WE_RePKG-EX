@@ -545,21 +545,37 @@ class _GroupHeader extends StatelessWidget {
           ),
         ),
         if (look.repair case final IntegrityRepair repair)
-          TextButton.icon(
-            icon: const Icon(_resolveIcon, size: 16),
-            onPressed: () => onRepair(context, repair, findings),
-            style: TextButton.styleFrom(
-              foregroundColor: look.colour,
-              backgroundColor: look.colour.withValues(alpha: .1),
-              padding: const EdgeInsets.symmetric(
-                horizontal: LayoutNums.mediumGap,
-                vertical: LayoutNums.smallGap,
-              ),
-              shape: const StadiumBorder(),
-            ),
-            label: Text(
-              tr(AppI10n.integrityFixAll, args: <String>['${findings.length}']),
-            ),
+          Builder(
+            builder: (BuildContext context) {
+              final bool destructive = integrityRepairIsDestructive(repair);
+              final ActionButtonTheme actions = theme.actionButtons;
+              return TextButton.icon(
+                icon: const Icon(_resolveIcon, size: 16),
+                onPressed: () => onRepair(context, repair, findings),
+                style: TextButton.styleFrom(
+                  foregroundColor: destructive
+                      ? actions.destructiveForeground
+                      : look.colour,
+                  backgroundColor: destructive
+                      ? actions.destructiveBackground
+                      : look.colour.withValues(alpha: .1),
+                  side: destructive
+                      ? BorderSide(color: actions.destructiveBorder)
+                      : null,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: LayoutNums.mediumGap,
+                    vertical: LayoutNums.smallGap,
+                  ),
+                  shape: const StadiumBorder(),
+                ),
+                label: Text(
+                  tr(
+                    AppI10n.integrityFixAll,
+                    args: <String>['${findings.length}'],
+                  ),
+                ),
+              );
+            },
           ),
       ],
     );
@@ -665,6 +681,7 @@ class _FindingRow extends StatelessWidget {
                 if (look.repair case final IntegrityRepair repair)
                   _ResolveButton(
                     colour: look.colour,
+                    destructive: integrityRepairIsDestructive(repair),
                     onPressed: () =>
                         onRepair(context, repair, <IntegrityFinding>[finding]),
                   ),
@@ -687,15 +704,30 @@ class _FindingRow extends StatelessWidget {
 }
 
 class _ResolveButton extends StatelessWidget {
-  const _ResolveButton({required this.colour, required this.onPressed});
+  const _ResolveButton({
+    required this.colour,
+    required this.destructive,
+    required this.onPressed,
+  });
 
   final Color colour;
+  final bool destructive;
   final VoidCallback onPressed;
 
   static const double _size = 36;
 
   @override
   Widget build(BuildContext context) {
+    if (destructive) {
+      return AppActionIconButton.destructive(
+        icon: _resolveIcon,
+        iconSize: 18,
+        width: _size,
+        height: _size,
+        tooltip: tr(AppI10n.integrityFixResolve),
+        onPressed: onPressed,
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colour.withValues(alpha: .13),

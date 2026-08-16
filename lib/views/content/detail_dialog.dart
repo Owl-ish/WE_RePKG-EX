@@ -99,10 +99,18 @@ Future<PreviewStats?> _previewStats(String previews) {
 
 /// One button down the right of the dialog.
 class DetailAction {
-  const DetailAction({required this.label, required this.onPressed});
+  const DetailAction({
+    required this.label,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  const DetailAction.destructive({required this.label, required this.onPressed})
+    : destructive = true;
 
   final String label;
   final VoidCallback onPressed;
+  final bool destructive;
 }
 
 /// Extra caller-owned content inside the normal metadata panel.
@@ -616,10 +624,16 @@ class _GivenActions extends StatelessWidget {
         spacing: _DetailActionLayout.spacing,
         children: <Widget>[
           for (final DetailAction action in actions)
-            _DetailActionButton(
-              label: action.label,
-              onPressed: action.onPressed,
-            ),
+            if (action.destructive)
+              _DetailActionButton.destructive(
+                label: action.label,
+                onPressed: action.onPressed,
+              )
+            else
+              _DetailActionButton(
+                label: action.label,
+                onPressed: action.onPressed,
+              ),
         ],
       ),
     );

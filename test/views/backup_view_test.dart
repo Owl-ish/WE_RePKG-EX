@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/config/theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
@@ -24,6 +25,7 @@ import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/backup.dart';
+import 'package:we_repkg/views/backup/backup_action.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/views/states/no_results.dart';
@@ -446,6 +448,77 @@ void main() {
       expect(find.text(AppI10n.homeLibraryMyProjects), findsOneWidget);
     });
 
+    testWidgets(
+      'bulk and circular tile actions use the shared glow treatment',
+      (tester) async {
+        const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'gone');
+        await showScan(
+          tester,
+          scanOf(cards: <BackupCard, BackupState>{card: BackupState.vanished}),
+          tiles: <BackupTile>[
+            (card: card, state: BackupState.vanished, face: faceOf('Gone')),
+          ],
+        );
+        await settle(tester);
+
+        final Finder bulkGlow = find.byKey(
+          const ValueKey<String>('backup-all-action-glow'),
+        );
+        final Finder tileGlow = find.byKey(
+          const ValueKey<String>('backup-tile-action-glow'),
+        );
+        expect(bulkGlow, findsOneWidget);
+        expect(tileGlow, findsOneWidget);
+
+        final Finder bulkWrapper = find.ancestor(
+          of: bulkGlow,
+          matching: find.byType(BackupActionGlow),
+        );
+        final Finder tileWrapper = find.ancestor(
+          of: tileGlow,
+          matching: find.byType(BackupActionGlow),
+        );
+        expect(bulkWrapper, findsOneWidget);
+        expect(tileWrapper, findsOneWidget);
+
+        final BackupActionGlow bulk = tester.widget<BackupActionGlow>(
+          bulkWrapper,
+        );
+        final BackupActionGlow tile = tester.widget<BackupActionGlow>(
+          tileWrapper,
+        );
+        expect(bulk.enabled, isTrue);
+        expect(tile.enabled, isTrue);
+        expect(bulk.scale, 1);
+        expect(tile.scale, .7);
+
+        final BuildContext bulkContext = tester.element(bulkWrapper);
+        expect(
+          bulk.colour,
+          backupStateLook(bulkContext, BackupState.vanished).colour,
+        );
+
+        final Finder circularMaterial = find.descendant(
+          of: tileGlow,
+          matching: find.byWidgetPredicate(
+            (Widget widget) =>
+                widget is Material && widget.shape is CircleBorder,
+          ),
+        );
+        final Finder circularButton = find.descendant(
+          of: tileGlow,
+          matching: find.byType(AppIconButton),
+        );
+        expect(circularMaterial, findsOneWidget);
+        expect(circularButton, findsOneWidget);
+        final AppIconButton button = tester.widget<AppIconButton>(
+          circularButton,
+        );
+        expect(button.color, isNotNull);
+        expect(tile.colour, button.color);
+      },
+    );
+
     testWidgets('Empty/Junk exposes only the folder that needs cleanup', (
       tester,
     ) async {
@@ -651,6 +724,10 @@ void main() {
             const ValueKey<String>('backup-all-action-glow'),
           ),
         );
+        final Finder actionMaterial = find.descendant(
+          of: actionGlow,
+          matching: find.byType(Material),
+        );
         final Finder actionLabel = find.descendant(
           of: actionGlow,
           matching: find.text(AppI10n.backupActionRecycleAll),
@@ -660,6 +737,7 @@ void main() {
         expect(groupHeader, findsOneWidget);
         expect(issueNote, findsOneWidget);
         expect(actionGlow, findsOneWidget);
+        expect(actionMaterial, findsOneWidget);
         expect(actionLabel, findsOneWidget);
 
         final double noteWidth = tester.getSize(issueNote).width;
@@ -691,6 +769,20 @@ void main() {
         final Text noteText = tester.widget<Text>(noteTextFinder);
         expect(noteText.maxLines, 2);
         expect(tester.getSize(issueNote).height, lessThanOrEqualTo(48));
+
+        final Material material = tester.widget<Material>(actionMaterial);
+        final BuildContext actionContext = tester.element(actionMaterial);
+        final ActionButtonTheme actionColors = Theme.of(
+          actionContext,
+        ).actionButtons;
+        expect(material.color, actionColors.destructiveBackground);
+        final RoundedRectangleBorder shape =
+            material.shape! as RoundedRectangleBorder;
+        expect(shape.side.color, actionColors.destructiveBorder);
+        expect(shape.side.width, lessThanOrEqualTo(1.1));
+        final Text label = tester.widget<Text>(actionLabel);
+        expect(label.style?.fontWeight, isNull);
+        expect(label.style?.color, actionColors.destructiveForeground);
       },
     );
 
@@ -997,10 +1089,9 @@ void main() {
         await tester.pump(kDoubleTapTimeout);
 
         expect(selected(), {'workshop/b'});
-        // The details the double click asked for open over a folder that is not
-        // there, which is fine and is not what this is about; settling here
-        // keeps its route and its timers out of the next test.
-        await tester.pumpAndSettle();
+        // Do not use pumpAndSettle here. Backup actions deliberately keep a
+        // pulse running, so there is no settled frame to wait for.
+        await tester.pump(const Duration(milliseconds: 400));
       });
 
       // Clicking past the tiles is how a selection is put down without hunting
@@ -1128,7 +1219,7 @@ void main() {
         tiles = named(<String>['d', 'c', 'b', 'a']);
         container.invalidate(backupTilesProvider);
         container.invalidate(backupVisibleTilesProvider);
-        await tester.pumpAndSettle();
+        await settle(tester);
 
         await click(tester, 2, modifier: LogicalKeyboardKey.shiftLeft);
 
