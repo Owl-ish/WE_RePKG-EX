@@ -98,7 +98,17 @@ Future<PreviewStats?> _previewStats(String previews) {
 }
 
 /// One button down the right of the dialog.
-typedef DetailAction = ({String label, VoidCallback onPressed});
+class DetailAction {
+  const DetailAction({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+}
+
+/// Extra caller-owned content inside the normal metadata panel.
+/// Kept optional so ordinary wallpaper details are unchanged.
+typedef DetailExtraBuilder =
+    Widget Function(BuildContext context, Color foreground);
 
 /// Opens the details for [wallpaper], growing from [origin] when a grid tile
 /// supplies its on-screen rectangle. Other callers open from the window centre.
@@ -110,6 +120,8 @@ Future<void> showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
   List<DetailAction>? actions,
+  DetailExtraBuilder? extraContentBuilder,
+  bool includePreview = true,
 }) async {
   // Measuring and cache warming happen before the route is pushed, so a second
   // double click in that window would open two overlapping dialogs.
@@ -120,6 +132,8 @@ Future<void> showWallpaperDetail(
       wallpaper,
       origin: origin,
       actions: actions,
+      extraContentBuilder: extraContentBuilder,
+      includePreview: includePreview,
     );
   } finally {
     _openingWallpaperDetails.remove(wallpaper.id);
@@ -131,16 +145,20 @@ Future<void> _showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
   List<DetailAction>? actions,
+  DetailExtraBuilder? extraContentBuilder,
+  required bool includePreview,
 }) async {
   // Measured before opening: doing it inside would resize the dialog
-  // mid-animation.
-  final PreviewStats? stats = await _previewStats(wallpaper.previews);
+  // mid-animation. Callers that have no useful preview skip the decode entirely.
+  final PreviewStats? stats = includePreview
+      ? await _previewStats(wallpaper.previews)
+      : null;
   if (!context.mounted) return;
 
   // The preview and the frosted panel are two Images over one file. Uncached
   // they resolve on separate frames and the blur flickers partway through the
   // open animation.
-  if (wallpaper.previews.isNotEmpty) {
+  if (includePreview && wallpaper.previews.isNotEmpty) {
     await precacheImage(
       _paneImage(context, wallpaper.previews),
       context,
@@ -169,6 +187,8 @@ Future<void> _showWallpaperDetail(
       wallpaper: wallpaper,
       stats: stats,
       actions: actions,
+      extraContentBuilder: extraContentBuilder,
+      includePreview: includePreview,
     ),
     transitionBuilder: (context, animation, _, child) {
       final Animation<double> dialogAnimation = CurvedAnimation(
@@ -195,6 +215,8 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
     required this.wallpaper,
     this.stats,
     this.actions,
+    this.extraContentBuilder,
+    this.includePreview = true,
   });
 
   final WallpaperInfo wallpaper;
@@ -204,6 +226,14 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
 
   /// Buttons in place of the extract ones. Null for the extract grid's own.
   final List<DetailAction>? actions;
+
+  /// Optional content supplied by specialized callers.
+  final DetailExtraBuilder? extraContentBuilder;
+
+  /// Whether the caller supplied a meaningful wallpaper preview.
+  /// When false, the details content reclaims that pane instead of rendering
+  /// an empty/broken preview placeholder.
+  final bool includePreview;
 
   @override
   ConsumerState<WallpaperDetailDialog> createState() =>
@@ -235,17 +265,21 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
 
     final Size screen = MediaQuery.of(context).size;
 
-    // Pane takes the image's ratio so cover crops nothing, unless that would
-    // push the dialog past the window edge.
-    const double panelWidth = 340;
+    // Preview-backed details keep the existing 340px metadata panel. When a
+    // caller has no meaningful preview, the dialog keeps the same outer size a
+    // square preview would have used and gives all of that space to content.
+    const double standardPanelWidth = 340;
     final double maxWidth = screen.width * .84;
-    // Square, not 16/9, when the preview could not be measured: every Wallpaper
-    // Engine preview is square, so a wide fallback is the odd one out.
-    final double aspect = widget.stats?.aspect ?? 1;
     final double height = min(screen.height * .72, _paneMaxHeight);
-    double previewWidth = height * aspect;
-    if (previewWidth + panelWidth > maxWidth) {
-      previewWidth = maxWidth - panelWidth;
+    final double aspect = widget.stats?.aspect ?? 1;
+    double previewWidth = 0;
+    double panelWidth = min(maxWidth, height + standardPanelWidth);
+    if (widget.includePreview) {
+      previewWidth = height * aspect;
+      if (previewWidth + standardPanelWidth > maxWidth) {
+        previewWidth = maxWidth - standardPanelWidth;
+      }
+      panelWidth = standardPanelWidth;
     }
     final double width = previewWidth + panelWidth;
 
@@ -269,50 +303,135 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              width: previewWidth,
-              child: _Preview(wallpaper: widget.wallpaper),
-            ),
+            if (widget.includePreview)
+              SizedBox(
+                width: previewWidth,
+                child: _Preview(wallpaper: widget.wallpaper),
+              ),
             SizedBox(
               width: panelWidth,
               child: _GlassPanel(
                 wallpaper: widget.wallpaper,
                 onDark: onDark,
                 luminance: widget.stats?.luminance ?? .5,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          onPressed: _close,
-                          icon: Icon(Icons.close_rounded, color: foreground),
-                          tooltip: tr(AppI10n.close),
-                        ),
-                      ),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: WallpaperMeta(
-                            wallpaper: widget.wallpaper,
-                            copyable: true,
-                            foreground: foreground,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (widget.actions case final List<DetailAction> actions)
-                        _GivenActions(actions: actions)
-                      else
-                        _Actions(wallpaper: widget.wallpaper),
-                    ],
-                  ),
+                useWallpaperBackdrop: widget.includePreview,
+                child: _DetailPanelContent(
+                  wallpaper: widget.wallpaper,
+                  foreground: foreground,
+                  actions: widget.actions,
+                  extraContentBuilder: widget.extraContentBuilder,
+                  contentOnly: !widget.includePreview,
+                  onClose: _close,
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DetailPanelContent extends StatelessWidget {
+  const _DetailPanelContent({
+    required this.wallpaper,
+    required this.foreground,
+    required this.actions,
+    required this.extraContentBuilder,
+    required this.contentOnly,
+    required this.onClose,
+  });
+
+  final WallpaperInfo wallpaper;
+  final Color foreground;
+  final List<DetailAction>? actions;
+  final DetailExtraBuilder? extraContentBuilder;
+  final bool contentOnly;
+  final VoidCallback onClose;
+
+  Widget _actions() => switch (actions) {
+    final List<DetailAction> given => _GivenActions(actions: given),
+    null => _Actions(wallpaper: wallpaper),
+  };
+
+  Widget _meta() => WallpaperMeta(
+    wallpaper: wallpaper,
+    copyable: true,
+    foreground: foreground,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final DetailExtraBuilder? extra = extraContentBuilder;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              onPressed: onClose,
+              icon: Icon(Icons.close_rounded, color: foreground),
+              tooltip: tr(AppI10n.close),
+            ),
+          ),
+          if (contentOnly && extra != null)
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Expanded(
+                    flex: 5,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _meta(),
+                    ),
+                  ),
+                  VerticalDivider(
+                    color: foreground.withValues(alpha: .25),
+                    width: 1,
+                    thickness: 1,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 7,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Expanded(child: extra(context, foreground)),
+                        const SizedBox(height: 16),
+                        _actions(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...<Widget>[
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    _meta(),
+                    if (extra != null) ...<Widget>[
+                      const SizedBox(height: 16),
+                      Divider(
+                        color: foreground.withValues(alpha: .25),
+                        height: 1,
+                      ),
+                      const SizedBox(height: 14),
+                      extra(context, foreground),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _actions(),
+          ],
+        ],
       ),
     );
   }
@@ -328,6 +447,7 @@ class _GlassPanel extends StatelessWidget {
     required this.wallpaper,
     required this.onDark,
     required this.luminance,
+    required this.useWallpaperBackdrop,
     required this.child,
   });
 
@@ -337,6 +457,8 @@ class _GlassPanel extends StatelessWidget {
 
   /// Mean brightness of the wallpaper behind this pane, 0 to 1.
   final double luminance;
+
+  final bool useWallpaperBackdrop;
 
   final Widget child;
 
@@ -382,22 +504,25 @@ class _GlassPanel extends StatelessWidget {
           // reaches outside its own bounds, where nothing valid exists while
           // the dialog is scaling open, and the edges churn. TileMode.clamp
           // keeps the border clean without overscaling past the clip.
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(
-              sigmaX: _blurSigma,
-              sigmaY: _blurSigma,
-              tileMode: TileMode.clamp,
-            ),
-            child: ColorFiltered(
-              colorFilter: ColorFilter.matrix(_correction(_saturation, lift)),
-              child: Image(
-                image: _paneImage(context, wallpaper.previews),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    ColoredBox(color: tint),
+          if (useWallpaperBackdrop)
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: _blurSigma,
+                sigmaY: _blurSigma,
+                tileMode: TileMode.clamp,
               ),
-            ),
-          ),
+              child: ColorFiltered(
+                colorFilter: ColorFilter.matrix(_correction(_saturation, lift)),
+                child: Image(
+                  image: _paneImage(context, wallpaper.previews),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      ColoredBox(color: tint),
+                ),
+              ),
+            )
+          else
+            ColoredBox(color: tint),
           Container(
             key: const ValueKey<String>('wallpaper-detail-panel-scrim'),
             decoration: BoxDecoration(

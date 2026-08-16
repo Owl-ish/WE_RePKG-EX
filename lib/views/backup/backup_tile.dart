@@ -15,11 +15,13 @@ import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
+import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/selection_tint.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
+import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/views/backup/backup_action.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
@@ -35,6 +37,7 @@ class BackupTileView extends StatelessWidget {
     required this.folders,
     required this.onTap,
     this.onAction,
+    this.junkKind,
   });
 
   final double width;
@@ -45,6 +48,7 @@ class BackupTileView extends StatelessWidget {
   /// range needs actually lives.
   final VoidCallback onTap;
   final VoidCallback? onAction;
+  final WallpaperJunkKind? junkKind;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +61,7 @@ class BackupTileView extends StatelessWidget {
       onTap: onTap,
       action: actionForBackupState(tile.state),
       onAction: onAction,
+      junkKind: junkKind,
       badges: <Widget>[
         Positioned(left: 4, top: 4, child: _StateBadge(state: tile.state)),
         Positioned(
@@ -132,6 +137,7 @@ class _TileFrame extends ConsumerStatefulWidget {
     required this.onTap,
     this.action,
     this.onAction,
+    this.junkKind,
   });
 
   final double width;
@@ -147,6 +153,7 @@ class _TileFrame extends ConsumerStatefulWidget {
   final VoidCallback onTap;
   final BackupAction? action;
   final VoidCallback? onAction;
+  final WallpaperJunkKind? junkKind;
 
   @override
   ConsumerState<_TileFrame> createState() => _TileFrameState();
@@ -177,14 +184,17 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   List<DetailAction> _actions() => <DetailAction>[
     if (widget.action case final BackupAction action)
       if (widget.onAction case final VoidCallback onAction)
-        (label: backupActionLabel(action), onPressed: onAction),
+        DetailAction(
+          label: backupActionLabel(action),
+          onPressed: onAction,
+        ),
     if (widget.folders.live case final String live)
-      (
+      DetailAction(
         label: tr(AppI10n.backupOpenLiveFolder),
         onPressed: () => browserFolder(live),
       ),
     if (widget.folders.backup case final String backup)
-      (
+      DetailAction(
         label: tr(AppI10n.backupOpenBackupFolder),
         onPressed: () => browserFolder(backup),
       ),
@@ -204,6 +214,14 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       wallpaper,
       origin: origin,
       actions: _actions(),
+      includePreview: widget.junkKind == null,
+      extraContentBuilder: widget.junkKind == null
+          ? null
+          : (BuildContext context, Color foreground) => _JunkDetailContent(
+              folderPath: folder,
+              kind: widget.junkKind!,
+              foreground: foreground,
+            ),
     );
   }
 
@@ -289,6 +307,44 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _JunkDetailContent extends StatelessWidget {
+  const _JunkDetailContent({
+    required this.folderPath,
+    required this.kind,
+    required this.foreground,
+  });
+
+  final String folderPath;
+  final WallpaperJunkKind kind;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final String explanation = switch (kind) {
+      WallpaperJunkKind.empty => AppI10n.backupJunkDetailsEmpty,
+      WallpaperJunkKind.shaderCacheOnly => AppI10n.backupJunkDetailsShader,
+      WallpaperJunkKind.mixed => AppI10n.backupJunkDetailsMixed,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          tr(explanation),
+          style: TextStyle(color: foreground, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: FileTreePanel(
+            key: const ValueKey<String>('backup-junk-file-tree'),
+            folderPath: folderPath,
+            foreground: foreground,
+          ),
+        ),
+      ],
     );
   }
 }

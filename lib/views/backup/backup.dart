@@ -15,6 +15,7 @@ import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
+import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/views/backup/backup_action.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
@@ -327,7 +328,8 @@ class _Loaded extends ConsumerWidget {
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
-    final BackupAction? action = shown.reconcile
+    final BackupAction? action =
+        shown.reconcile || shown.state == BackupState.emptyBackup
         ? null
         : actionForBackupState(shown.state);
     final Map<BackupState, ({Color colour, String label})> looks =
@@ -376,21 +378,6 @@ class _Loaded extends ConsumerWidget {
             ],
           ),
         ),
-        if (!shown.reconcile &&
-            shown.state == BackupState.emptyBackup &&
-            counts[BackupState.emptyBackup]! > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
-            child: IssueNote(
-              colour: Theme.of(context).status.note,
-              child: Text(
-                tr(AppI10n.backupEmptyJunkAbout),
-                style: Theme.of(
-                  context,
-                ).meta.mediumStyle.copyWith(height: 1.35),
-              ),
-            ),
-          ),
         if (action != null)
           Padding(
             padding: const EdgeInsets.only(top: LayoutNums.contentGap),
@@ -634,6 +621,188 @@ class _Grid extends ConsumerWidget {
     };
   }
 
+  ({String title, String about}) _junkText(WallpaperJunkKind kind) =>
+      switch (kind) {
+        WallpaperJunkKind.empty => (
+          title: AppI10n.backupJunkEmptyTitle,
+          about: AppI10n.backupJunkEmptyAbout,
+        ),
+        WallpaperJunkKind.shaderCacheOnly => (
+          title: AppI10n.backupJunkShaderTitle,
+          about: AppI10n.backupJunkShaderAbout,
+        ),
+        WallpaperJunkKind.mixed => (
+          title: AppI10n.backupJunkMixedTitle,
+          about: AppI10n.backupJunkMixedAbout,
+        ),
+      };
+
+  Widget _junkGrid(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<BackupTile>> tiles, {
+    required BackupScan scan,
+    required String? backupRoot,
+    required String? workshop,
+    required String? myProjects,
+  }) {
+    return switch (tiles) {
+      AsyncData<List<BackupTile>>(value: final List<BackupTile> value)
+          when value.isEmpty =>
+        const NoResultsView(key: NoResultsView.viewKey),
+      AsyncData<List<BackupTile>>(:final List<BackupTile> value) => Builder(
+        builder: (BuildContext context) {
+          final List<String> ids = <String>[
+            for (final BackupTile tile in value) tile.card.id,
+          ];
+          final Map<WallpaperJunkKind, List<BackupTile>> groups =
+              <WallpaperJunkKind, List<BackupTile>>{
+                for (final WallpaperJunkKind kind in WallpaperJunkKind.values)
+                  kind: <BackupTile>[],
+              };
+          for (final BackupTile tile in value) {
+            groups[scan.junk[tile.card.id]?.kind ?? WallpaperJunkKind.empty]!
+                .add(tile);
+          }
+          return CustomScrollView(
+            key: const ValueKey<String>('backup-junk-grid'),
+            slivers: <Widget>[
+              for (final WallpaperJunkKind kind in WallpaperJunkKind.values)
+                if (groups[kind]!.isNotEmpty) ...<Widget>[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        top: LayoutNums.contentGap,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: _GlowingActionButton(
+                              label: tr(
+                                AppI10n.backupActionRecycleAll,
+                                namedArgs: <String, String>{
+                                  'count': '${groups[kind]!.length}',
+                                },
+                              ),
+                              icon: backupActionIcon(BackupAction.recycleJunk),
+                              colour: backupStateLook(
+                                context,
+                                BackupState.emptyBackup,
+                              ).colour,
+                              onPressed: () => applyBackupAction(
+                                context,
+                                BackupAction.recycleJunk,
+                                <BackupCard>[
+                                  for (final BackupTile tile in groups[kind]!)
+                                    tile.card,
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: LayoutNums.smallGap),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1100),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: IssueNote(
+                                  key: ValueKey<String>(
+                                    'backup-junk-note-${kind.name}',
+                                  ),
+                                  compact: true,
+                                  colour: Theme.of(context).status.note,
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: <InlineSpan>[
+                                        TextSpan(
+                                          text:
+                                              '${tr(_junkText(kind).title)} - ',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: tr(_junkText(kind).about),
+                                        ),
+                                      ],
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).meta.mediumStyle.copyWith(height: 1.2),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.only(
+                      top: LayoutNums.contentGap,
+                      bottom: LayoutNums.sectionGap,
+                    ),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 180,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: 1,
+                          ),
+                      delegate: SliverChildBuilderDelegate((
+                        BuildContext context,
+                        int index,
+                      ) {
+                        final BackupTile tile = groups[kind]![index];
+                        final int flatIndex = ids.indexOf(tile.card.id);
+                        return LayoutBuilder(
+                          builder: (BuildContext context, BoxConstraints box) =>
+                              BackupTileView(
+                                key: ValueKey<String>(tile.card.id),
+                                width: box.maxWidth,
+                                tile: tile,
+                                junkKind: kind,
+                                folders: cardFolders(
+                                  library: tile.card.library,
+                                  name: tile.card.name,
+                                  liveExists:
+                                      scan.junk[tile.card.id]?.live ?? false,
+                                  backupExists:
+                                      scan.junk[tile.card.id]?.backup ?? false,
+                                  backupRoot: backupRoot,
+                                  liveWorkshopPath: workshop,
+                                  liveMyProjectsPath: myProjects,
+                                ),
+                                onTap: () => _click(ref, ids, flatIndex),
+                                onAction: () => applyBackupAction(
+                                  context,
+                                  BackupAction.recycleJunk,
+                                  <BackupCard>[tile.card],
+                                ),
+                              ),
+                        );
+                      }, childCount: groups[kind]!.length),
+                    ),
+                  ),
+                ],
+            ],
+          );
+        },
+      ),
+      AsyncError<List<BackupTile>>(:final Object error) => Center(
+        child: Text('${tr(AppI10n.backupTilesFailed)} $error'),
+      ),
+      _ => const _Scanning(idle: AppI10n.backupPreparingGrid),
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final String? backupRoot = ref.watch(backupRootProvider);
@@ -664,6 +833,18 @@ class _Grid extends ConsumerWidget {
               ),
               onTap: onTap,
             ),
+      );
+    }
+
+    if (ref.watch(backupStateFilterProvider).state == BackupState.emptyBackup) {
+      return _junkGrid(
+        context,
+        ref,
+        ref.watch(backupVisibleTilesProvider),
+        scan: scan,
+        backupRoot: backupRoot,
+        workshop: workshop,
+        myProjects: myProjects,
       );
     }
 

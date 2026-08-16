@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
@@ -21,6 +22,7 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/backup.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
@@ -28,7 +30,6 @@ import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
-import 'package:we_repkg/widgets/issue_note.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
 import 'package:we_repkg/widgets/selection_tint.dart';
 
@@ -48,8 +49,8 @@ CardFace faceOf(String title) =>
 
 BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
-  Map<String, ({bool live, bool backup})> junk =
-      const <String, ({bool live, bool backup})>{},
+  Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk =
+      const <String, ({bool live, bool backup, WallpaperJunkKind kind})>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
 }) => (
@@ -456,9 +457,17 @@ void main() {
         tester,
         scanOf(
           cards: <BackupCard, BackupState>{card: BackupState.emptyBackup},
-          junk: const <String, ({bool live, bool backup})>{
-            'workshop/junk-live': (live: true, backup: false),
-          },
+          junk:
+              const <
+                String,
+                ({bool live, bool backup, WallpaperJunkKind kind})
+              >{
+                'workshop/junk-live': (
+                  live: true,
+                  backup: false,
+                  kind: WallpaperJunkKind.empty,
+                ),
+              },
         ),
         tiles: <BackupTile>[
           (card: card, state: BackupState.emptyBackup, face: null),
@@ -472,6 +481,360 @@ void main() {
       expect(tile.folders.live, r'C:\workshop\junk-live');
       expect(tile.folders.backup, isNull);
     });
+
+    testWidgets('Empty/Junk groups empty and shader-cache folders separately', (
+      tester,
+    ) async {
+      const BackupCard empty = BackupCard(WallpaperLibrary.workshop, 'empty');
+      const BackupCard shader = BackupCard(WallpaperLibrary.workshop, 'shader');
+      final List<BackupTile> tiles = <BackupTile>[
+        (card: empty, state: BackupState.emptyBackup, face: null),
+        (card: shader, state: BackupState.emptyBackup, face: null),
+      ];
+      await showScan(
+        tester,
+        scanOf(
+          cards: <BackupCard, BackupState>{
+            empty: BackupState.emptyBackup,
+            shader: BackupState.emptyBackup,
+          },
+          junk:
+              const <
+                String,
+                ({bool live, bool backup, WallpaperJunkKind kind})
+              >{
+                'workshop/empty': (
+                  live: true,
+                  backup: false,
+                  kind: WallpaperJunkKind.empty,
+                ),
+                'workshop/shader': (
+                  live: true,
+                  backup: false,
+                  kind: WallpaperJunkKind.shaderCacheOnly,
+                ),
+              },
+        ),
+        tiles: tiles,
+        workshopPath: r'C:\workshop',
+      );
+      await settle(tester);
+
+      final Finder junkGrid = find.byKey(
+        const ValueKey<String>('backup-junk-grid'),
+      );
+      expect(junkGrid, findsOneWidget);
+
+      void expectMountedGroup({
+        required WallpaperJunkKind kind,
+        required String title,
+        required String about,
+        required String tileId,
+      }) {
+        final Finder issueNote = find.byKey(
+          ValueKey<String>('backup-junk-note-${kind.name}'),
+        );
+        final Finder tileFinder = find.byKey(ValueKey<String>(tileId));
+        expect(issueNote, findsOneWidget);
+        expect(tileFinder, findsOneWidget);
+
+        // Anchor every assertion to this group's own sliver header. A
+        // CustomScrollView may unmount the other group's header or tile while
+        // scrolling, so global first/second widget positions are not stable.
+        final Finder groupHeader = find.ancestor(
+          of: issueNote,
+          matching: find.byType(SliverToBoxAdapter),
+        );
+        expect(groupHeader, findsOneWidget);
+
+        final Finder actionGlow = find.descendant(
+          of: groupHeader,
+          matching: find.byKey(
+            const ValueKey<String>('backup-all-action-glow'),
+          ),
+        );
+        final Finder actionLabel = find.descendant(
+          of: groupHeader,
+          matching: find.text(AppI10n.backupActionRecycleAll),
+        );
+        final Finder noteTextFinder = find.descendant(
+          of: issueNote,
+          matching: find.byWidgetPredicate(
+            (Widget widget) => widget is Text && widget.textSpan != null,
+          ),
+        );
+
+        expect(actionGlow, findsOneWidget);
+        expect(actionLabel, findsOneWidget);
+        expect(noteTextFinder, findsOneWidget);
+        final Text noteText = tester.widget<Text>(noteTextFinder);
+        expect(noteText.textSpan!.toPlainText(), '$title - $about');
+        expect(noteText.maxLines, 2);
+        expect(tester.getSize(issueNote).height, lessThanOrEqualTo(48));
+        expect(
+          tester.getTopLeft(actionLabel).dy,
+          lessThan(tester.getTopLeft(issueNote).dy),
+        );
+        expect(
+          tester.getBottomLeft(issueNote).dy,
+          lessThan(tester.getTopLeft(tileFinder).dy),
+        );
+      }
+
+      // Each group is checked only while its own tile is mounted. The second
+      // SliverGrid is lazy, so scrolling to it is part of the behavior under
+      // test rather than something the assertions should pretend does not
+      // exist.
+      expectMountedGroup(
+        kind: WallpaperJunkKind.empty,
+        title: AppI10n.backupJunkEmptyTitle,
+        about: AppI10n.backupJunkEmptyAbout,
+        tileId: 'workshop/empty',
+      );
+
+      await tester.drag(junkGrid, const Offset(0, -600));
+      await settle(tester);
+
+      expectMountedGroup(
+        kind: WallpaperJunkKind.shaderCacheOnly,
+        title: AppI10n.backupJunkShaderTitle,
+        about: AppI10n.backupJunkShaderAbout,
+        tileId: 'workshop/shader',
+      );
+    });
+
+    testWidgets(
+      'Empty/Junk callouts stay wide and recycle actions match the grid edge',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'empty');
+        await showScan(
+          tester,
+          scanOf(
+            cards: <BackupCard, BackupState>{card: BackupState.emptyBackup},
+            junk:
+                const <
+                  String,
+                  ({bool live, bool backup, WallpaperJunkKind kind})
+                >{
+                  'workshop/empty': (
+                    live: true,
+                    backup: false,
+                    kind: WallpaperJunkKind.empty,
+                  ),
+                },
+          ),
+          tiles: const <BackupTile>[
+            (card: card, state: BackupState.emptyBackup, face: null),
+          ],
+          workshopPath: r'C:\workshop',
+        );
+        await settle(tester);
+
+        final Finder junkGrid = find.byKey(
+          const ValueKey<String>('backup-junk-grid'),
+        );
+        final Finder issueNote = find.byKey(
+          const ValueKey<String>('backup-junk-note-empty'),
+        );
+        final Finder groupHeader = find.ancestor(
+          of: issueNote,
+          matching: find.byType(SliverToBoxAdapter),
+        );
+        final Finder actionGlow = find.descendant(
+          of: groupHeader,
+          matching: find.byKey(
+            const ValueKey<String>('backup-all-action-glow'),
+          ),
+        );
+        final Finder actionLabel = find.descendant(
+          of: actionGlow,
+          matching: find.text(AppI10n.backupActionRecycleAll),
+        );
+
+        expect(junkGrid, findsOneWidget);
+        expect(groupHeader, findsOneWidget);
+        expect(issueNote, findsOneWidget);
+        expect(actionGlow, findsOneWidget);
+        expect(actionLabel, findsOneWidget);
+
+        final double noteWidth = tester.getSize(issueNote).width;
+        final double gridWidth = tester.getSize(junkGrid).width;
+        expect(noteWidth, greaterThan(1000));
+        expect(noteWidth, lessThanOrEqualTo(1100));
+        expect(noteWidth, greaterThan(gridWidth * .7));
+        expect(noteWidth, lessThan(gridWidth * .82));
+        expect(
+          tester.getTopLeft(issueNote).dx,
+          closeTo(tester.getTopLeft(junkGrid).dx, 1),
+        );
+        expect(
+          tester.getTopRight(actionGlow).dx,
+          closeTo(tester.getTopRight(junkGrid).dx, 1),
+        );
+        expect(
+          tester.getBottomLeft(actionGlow).dy,
+          lessThan(tester.getTopLeft(issueNote).dy),
+        );
+
+        final Finder noteTextFinder = find.descendant(
+          of: issueNote,
+          matching: find.byWidgetPredicate(
+            (Widget widget) => widget is Text && widget.textSpan != null,
+          ),
+        );
+        expect(noteTextFinder, findsOneWidget);
+        final Text noteText = tester.widget<Text>(noteTextFinder);
+        expect(noteText.maxLines, 2);
+        expect(tester.getSize(issueNote).height, lessThanOrEqualTo(48));
+      },
+    );
+
+    test('Empty/Junk labels stay compact in both translations', () {
+      final Map<String, dynamic> english =
+          jsonDecode(File('assets/translations/en-US.json').readAsStringSync())
+              as Map<String, dynamic>;
+      final Map<String, dynamic> chinese =
+          jsonDecode(File('assets/translations/zh-CN.json').readAsStringSync())
+              as Map<String, dynamic>;
+
+      expect(english['backup']['junk']['emptyTitle'], 'Empty Folders');
+      expect(
+        english['backup']['action']['recycleAll'],
+        'Recycle Bin All ({count})',
+      );
+      expect(chinese['backup']['junk']['emptyTitle'], '空文件夹');
+      expect(chinese['backup']['action']['recycleAll'], '全部移到回收站（{count}）');
+    });
+
+    testWidgets(
+      'double-clicking Empty/Junk keeps rich details and shows its file tree',
+      (tester) async {
+        // Widget tests run in FakeAsync. Keep real filesystem setup out of
+        // that async scheduler or the test can wait forever before the first
+        // widget interaction.
+        final Directory workshop = Directory.systemTemp.createTempSync(
+          'we_repkg_junk_detail',
+        );
+        addTearDown(() {
+          if (workshop.existsSync()) workshop.deleteSync(recursive: true);
+        });
+        final Directory cache = Directory(
+          '${workshop.path}${Platform.pathSeparator}shader'
+          '${Platform.pathSeparator}shaders${Platform.pathSeparator}blobssm40',
+        );
+        cache.createSync(recursive: true);
+        File(
+          '${cache.path}${Platform.pathSeparator}cache.dxs',
+        ).writeAsStringSync('generated shader data');
+
+        const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'shader');
+        await showScan(
+          tester,
+          scanOf(
+            cards: <BackupCard, BackupState>{card: BackupState.emptyBackup},
+            junk:
+                const <
+                  String,
+                  ({bool live, bool backup, WallpaperJunkKind kind})
+                >{
+                  'workshop/shader': (
+                    live: true,
+                    backup: false,
+                    kind: WallpaperJunkKind.shaderCacheOnly,
+                  ),
+                },
+          ),
+          tiles: const <BackupTile>[
+            (card: card, state: BackupState.emptyBackup, face: null),
+          ],
+          workshopPath: workshop.path,
+        );
+        await settle(tester);
+
+        final Finder tile = find.byType(BackupTileView);
+        await tester.tap(tile);
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.tap(tile);
+
+        // The details read and each tree expansion use real filesystem
+        // futures. Give those futures short real-async windows, then pump the
+        // widget tree. Do not use pumpAndSettle because this screen has an
+        // intentional continuous glow animation.
+        Future<bool> waitFor(Finder finder) async {
+          for (int attempt = 0; attempt < 40; attempt++) {
+            if (finder.evaluate().isNotEmpty) return true;
+            await tester.runAsync(() async {
+              await Future<void>.delayed(const Duration(milliseconds: 25));
+            });
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          return finder.evaluate().isNotEmpty;
+        }
+
+        final Finder treeFinder = find.byKey(
+          const ValueKey<String>('backup-junk-file-tree'),
+        );
+        await waitFor(treeFinder);
+
+        final bool hasRichActions = find
+            .byKey(const ValueKey<String>('wallpaper-detail-actions'))
+            .evaluate()
+            .isNotEmpty;
+        final bool usedPlainAlert = find
+            .byType(AlertDialog)
+            .evaluate()
+            .isNotEmpty;
+        final bool hasExplanation = find
+            .text(AppI10n.backupJunkDetailsShader)
+            .evaluate()
+            .isNotEmpty;
+        final bool hasTree = treeFinder.evaluate().isNotEmpty;
+        final bool showedNestedFolder =
+            hasTree && await waitFor(find.text('blobssm40'));
+        final bool showedFile =
+            hasTree && await waitFor(find.text('cache.dxs'));
+        final List<SingleChildScrollView> treeScrollViews = hasTree
+            ? tester
+                  .widgetList<SingleChildScrollView>(
+                    find.descendant(
+                      of: treeFinder,
+                      matching: find.byType(SingleChildScrollView),
+                    ),
+                  )
+                  .toList()
+            : const <SingleChildScrollView>[];
+        final bool hasVerticalTreeScroll = treeScrollViews.any(
+          (view) => view.scrollDirection == Axis.vertical,
+        );
+        final bool hasHorizontalTreeScroll = treeScrollViews.any(
+          (view) => view.scrollDirection == Axis.horizontal,
+        );
+        final int treeScrollbarCount = hasTree
+            ? find
+                  .descendant(of: treeFinder, matching: find.byType(Scrollbar))
+                  .evaluate()
+                  .length
+            : 0;
+
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await settle(tester);
+
+        expect(hasRichActions, isTrue);
+        expect(usedPlainAlert, isFalse);
+        expect(hasExplanation, isTrue);
+        expect(hasTree, isTrue);
+        expect(showedNestedFolder, isTrue);
+        expect(showedFile, isTrue);
+        expect(hasVerticalTreeScroll, isTrue);
+        expect(hasHorizontalTreeScroll, isTrue);
+        expect(treeScrollbarCount, 2);
+      },
+    );
 
     // A folder with no readable project.json still occupies the backup, and it
     // is exactly the one the integrity tab exists to point at.
@@ -1009,9 +1372,26 @@ void main() {
         ];
         await pumpPills(tester, tiles: tiles);
 
-        expect(find.byType(IssueNote), findsOneWidget);
-        expect(find.text(AppI10n.backupEmptyJunkAbout), findsOneWidget);
-        expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+        final Finder note = find.byKey(
+          const ValueKey<String>('backup-junk-note-empty'),
+        );
+        expect(note, findsOneWidget);
+        expect(
+          tester
+              .widgetList<RichText>(
+                find.descendant(of: note, matching: find.byType(RichText)),
+              )
+              .map((RichText text) => text.text.toPlainText())
+              .join(),
+          contains(AppI10n.backupJunkEmptyAbout),
+        );
+        expect(
+          find.descendant(
+            of: note,
+            matching: find.byIcon(Icons.info_outline_rounded),
+          ),
+          findsOneWidget,
+        );
       });
 
       // On a library with nothing to back up that pill is dead, and opening on

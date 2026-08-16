@@ -8,19 +8,21 @@ class IssueNote extends StatelessWidget {
     required this.colour,
     required this.child,
     this.icon = Icons.info_outline_rounded,
+    this.compact = false,
   });
 
   final Color colour;
   final IconData icon;
   final Widget child;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: LayoutNums.mediumGap,
-        vertical: LayoutNums.smallGap,
+        vertical: compact ? LayoutNums.tinyGap / 2 : LayoutNums.smallGap,
       ),
       decoration: BoxDecoration(
         color: colour.withValues(alpha: .08),

@@ -11,6 +11,7 @@ import 'package:we_repkg/provider/backup.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
+import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/backup/backup.dart';
 import 'package:we_repkg/views/backup/backup_action.dart';
@@ -98,7 +99,7 @@ void main() {
       presence: <String, ({bool live, bool backup})>{
         card.id: (live: true, backup: false),
       },
-      junk: <String, ({bool live, bool backup})>{},
+      junk: <String, ({bool live, bool backup, WallpaperJunkKind kind})>{},
       reconcile: <ReconcileEntry>[],
       acfRead: true,
       missing: <BackupFolder>{},
