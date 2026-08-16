@@ -116,6 +116,15 @@ class ReconcileTileView extends StatelessWidget {
           ),
         ),
         Positioned(right: 4, top: 4, child: _PresenceMatrix(entry: tile.entry)),
+        if (tile.entry.needsBackup.isNotEmpty)
+          Positioned(
+            left: 4,
+            bottom: 28,
+            child: _Pill(
+              colour: backupStateLook(context, BackupState.notBackedUp).colour,
+              text: tr(AppI10n.backupStateNotBackedUp),
+            ),
+          ),
       ],
     );
   }
