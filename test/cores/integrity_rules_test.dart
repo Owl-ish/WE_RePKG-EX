@@ -147,14 +147,14 @@ void main() {
   });
 
   group('the order the concerns are shown in', () {
-    // A verdict left out of the order gets no pill and no list. Two are out on
-    // purpose: a sound folder is nothing to report, and an empty one is the
-    // backup tab's to answer for.
-    test('covers every verdict but the two the tab does not list', () {
+    // A verdict left out of the order gets no pill and no list. Sound is fine;
+    // empty and shader-cache-only leftovers belong to Backup's Empty/Junk view.
+    test('covers every verdict but the three the tab does not list', () {
       expect(<IntegrityVerdict>{
         ...integrityVerdictOrder,
         IntegrityVerdict.sound,
         IntegrityVerdict.empty,
+        IntegrityVerdict.shaderCacheOnly,
       }, IntegrityVerdict.values.toSet());
     });
 
@@ -168,6 +168,7 @@ void main() {
 
       expect(counts[IntegrityVerdict.mediaOnly], 2);
       expect(counts[IntegrityVerdict.payloadMissing], 0);
+      expect(counts.containsKey(IntegrityVerdict.shaderCacheOnly), isFalse);
       expect(counts.keys, hasLength(integrityVerdictOrder.length));
     });
 

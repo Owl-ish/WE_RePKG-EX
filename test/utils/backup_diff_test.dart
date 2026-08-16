@@ -131,11 +131,9 @@ void main() {
     });
 
     test('-- LM BW --', () {
-      expectReconcile(
-        shape(false, true, true, false),
-        <WallpaperLibrary>{WallpaperLibrary.workshop},
-        <WallpaperLibrary>{WallpaperLibrary.myProjects},
-      );
+      expectReconcile(shape(false, true, true, false), <WallpaperLibrary>{
+        WallpaperLibrary.workshop,
+      }, <WallpaperLibrary>{});
     });
 
     test('-- LM BW BM', () {
@@ -151,11 +149,9 @@ void main() {
     });
 
     test('LW -- -- BM', () {
-      expectReconcile(
-        shape(true, false, false, true),
-        <WallpaperLibrary>{WallpaperLibrary.myProjects},
-        <WallpaperLibrary>{WallpaperLibrary.workshop},
-      );
+      expectReconcile(shape(true, false, false, true), <WallpaperLibrary>{
+        WallpaperLibrary.myProjects,
+      }, <WallpaperLibrary>{});
     });
 
     test('LW -- BW --', () {
@@ -171,31 +167,38 @@ void main() {
     });
 
     test('LW LM -- --', () {
-      expectCards(shape(true, true, false, false), <BackupCard, BackupState>{
-        workshop(n): BackupState.notBackedUp,
-        myProjects(n): BackupState.notBackedUp,
-      });
+      expectReconcile(
+        shape(true, true, false, false),
+        <WallpaperLibrary>{},
+        <WallpaperLibrary>{
+          WallpaperLibrary.workshop,
+          WallpaperLibrary.myProjects,
+        },
+      );
     });
 
     test('LW LM -- BM', () {
-      expectCards(shape(true, true, false, true), <BackupCard, BackupState>{
-        workshop(n): BackupState.notBackedUp,
-        myProjects(n): BackupState.synced,
-      });
+      expectReconcile(
+        shape(true, true, false, true),
+        <WallpaperLibrary>{},
+        <WallpaperLibrary>{},
+      );
     });
 
     test('LW LM BW --', () {
-      expectCards(shape(true, true, true, false), <BackupCard, BackupState>{
-        workshop(n): BackupState.synced,
-        myProjects(n): BackupState.notBackedUp,
-      });
+      expectReconcile(
+        shape(true, true, true, false),
+        <WallpaperLibrary>{},
+        <WallpaperLibrary>{},
+      );
     });
 
     test('LW LM BW BM', () {
-      expectCards(shape(true, true, true, true), <BackupCard, BackupState>{
-        workshop(n): BackupState.synced,
-        myProjects(n): BackupState.synced,
-      });
+      expectReconcile(
+        shape(true, true, true, true),
+        <WallpaperLibrary>{},
+        <WallpaperLibrary>{},
+      );
     });
   });
 
@@ -259,9 +262,9 @@ void main() {
   });
 
   group('tier 2, reconcile', () {
-    // The packed original left behind by an unsubscribe. Pooled coverage used
-    // to call this synced and hide the leftover from every card.
-    test('a backup Workshop copy with the name live only in myprojects', () {
+    // A backup in either library protects the name, while the placement
+    // mismatch remains a reconcile decision.
+    test('a backup Workshop copy protects a name live only in myprojects', () {
       final BackupDiffResult result = diff(
         liveMyProjects: const <String>{'793602574'},
         backupWorkshop: const <String>{'793602574'},
@@ -272,12 +275,13 @@ void main() {
         const ReconcileEntry(
           name: '793602574',
           states: <WallpaperLibrary, BackupState>{
-            WallpaperLibrary.myProjects: BackupState.notBackedUp,
+            WallpaperLibrary.myProjects: BackupState.synced,
           },
           backupWorkshop: true,
           backupMyProjects: false,
         ),
       ]);
+      expect(result.reconcile.single.needsBackup, isEmpty);
     });
 
     // The unpacked extraction whose live copy was deleted.
@@ -322,8 +326,9 @@ void main() {
       );
     });
 
-    // Two mismatches, one wallpaper, one decision.
-    test('a name with two mismatches is one entry', () {
+    // The placement mismatch is one wallpaper-level decision, and the
+    // opposite-library backup still protects the live copy.
+    test('a placement mismatch is one protected reconcile entry', () {
       final List<ReconcileEntry> entries = diff(
         liveMyProjects: const <String>{'793602574'},
         backupWorkshop: const <String>{'793602574'},
@@ -333,9 +338,7 @@ void main() {
       expect(entries.single.orphans, <WallpaperLibrary>{
         WallpaperLibrary.workshop,
       });
-      expect(entries.single.needsBackup, <WallpaperLibrary>{
-        WallpaperLibrary.myProjects,
-      });
+      expect(entries.single.needsBackup, isEmpty);
     });
 
     // AC 18: a reconcile name is out of the grid entirely, so it cannot show up
@@ -351,28 +354,44 @@ void main() {
       );
     });
 
-    // Only the orphan sends a name here. A live wallpaper nobody has backed up
-    // yet is ordinary business.
-    test('a live wallpaper with no backup at all is not a reconcile', () {
-      expect(
-        diff(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-        ).reconcile,
-        isEmpty,
+    test('duplicate live copies reconcile even with no backup', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile, <ReconcileEntry>[
+        const ReconcileEntry(
+          name: '793602574',
+          states: <WallpaperLibrary, BackupState>{
+            WallpaperLibrary.workshop: BackupState.notBackedUp,
+            WallpaperLibrary.myProjects: BackupState.notBackedUp,
+          },
+          backupWorkshop: false,
+          backupMyProjects: false,
+        ),
+      ]);
+      expect(result.reconcile.single.needsBackup, <WallpaperLibrary>{
+        WallpaperLibrary.workshop,
+        WallpaperLibrary.myProjects,
+      });
     });
 
-    test('a name matched in both libraries is not a reconcile', () {
-      expect(
-        diff(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-          backupWorkshop: const <String>{'793602574'},
-          backupMyProjects: const <String>{'793602574'},
-        ).reconcile,
-        isEmpty,
+    test('duplicate live copies reconcile even with both backups', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.synced,
+        WallpaperLibrary.myProjects: BackupState.synced,
+      });
+      expect(result.reconcile.single.needsBackup, isEmpty);
     });
 
     test('an entry takes the live spelling', () {
@@ -406,20 +425,20 @@ void main() {
       );
     });
 
-    // Coverage is never pooled. The other library's backup holds a different
-    // wallpaper under the same name, so it vouches for nothing.
-    test('the other backup library never covers a card', () {
-      expect(
-        cards(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-          backupWorkshop: const <String>{'793602574'},
-        ),
-        <BackupCard, BackupState>{
-          workshop('793602574'): BackupState.synced,
-          myProjects('793602574'): BackupState.notBackedUp,
-        },
+    test('one backup protects both duplicate live copies before reconcile', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile, hasLength(1));
+      expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.synced,
+        WallpaperLibrary.myProjects: BackupState.synced,
+      });
+      expect(result.reconcile.single.needsBackup, isEmpty);
     });
 
     test('a live version differing from the backed-up one is an update', () {
@@ -785,73 +804,63 @@ void main() {
   });
 
   group('a name live in both libraries', () {
-    // The author unpacks a Workshop wallpaper into myprojects and edits it, so
-    // the two folders hold different content under one name.
-    test('is two cards', () {
-      expect(
-        cards(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-        ),
-        <BackupCard, BackupState>{
-          workshop('793602574'): BackupState.notBackedUp,
-          myProjects('793602574'): BackupState.notBackedUp,
-        },
+    // Two live copies are one wallpaper-level decision, never two ordinary
+    // cards that can quietly drift apart.
+    test('is one reconcile entry', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile, hasLength(1));
+      expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.notBackedUp,
+        WallpaperLibrary.myProjects: BackupState.notBackedUp,
+      });
     });
 
-    // Each library asks its own question: Workshop compares manifests against
-    // its record, myprojects compares the two folders. Both arms are exercised
-    // here, so a card reading the other library's answer shows up.
-    test('tracks a version per card', () {
-      expect(
-        cards(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-          backupWorkshop: const <String>{'793602574'},
-          backupMyProjects: const <String>{'793602574'},
-          liveWorkshopVersions: const <String, String>{
-            '793602574': 'manifest-1',
-          },
-          myProjectsStanding: standing('793602574', CopyStanding.behind),
-          records: const <String, BackupRecord>{
-            'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
-          },
-        ),
-        <BackupCard, BackupState>{
-          workshop('793602574'): BackupState.synced,
-          myProjects('793602574'): BackupState.updateAvailable,
+    // Each live copy still carries its own update state inside reconciliation.
+    test('tracks a version per live copy', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
+        liveWorkshopVersions: const <String, String>{'793602574': 'manifest-1'},
+        myProjectsStanding: standing('793602574', CopyStanding.behind),
+        records: const <String, BackupRecord>{
+          'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
         },
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.synced,
+        WallpaperLibrary.myProjects: BackupState.updateAvailable,
+      });
     });
 
-    // Dismissing on one card must not quiet the other. Dismissed on the
-    // myprojects side, so a card reading the wrong record cannot land on the
-    // expected answer by accident.
-    test('dismisses per card', () {
-      expect(
-        cards(
-          liveWorkshop: const <String>{'793602574'},
-          liveMyProjects: const <String>{'793602574'},
-          backupWorkshop: const <String>{'793602574'},
-          backupMyProjects: const <String>{'793602574'},
-          liveWorkshopVersions: const <String, String>{
-            '793602574': 'manifest-2',
-          },
-          liveMyProjectsVersions: const <String, String>{
-            '793602574': 'digest-2',
-          },
-          myProjectsStanding: standing('793602574', CopyStanding.behind),
-          records: const <String, BackupRecord>{
-            'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
-            'myprojects/793602574': BackupRecord(dismissedVersion: 'digest-2'),
-          },
-        ),
-        <BackupCard, BackupState>{
-          workshop('793602574'): BackupState.updateAvailable,
-          myProjects('793602574'): BackupState.updateDismissed,
+    test('dismisses per live copy', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        liveMyProjects: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
+        liveWorkshopVersions: const <String, String>{'793602574': 'manifest-2'},
+        liveMyProjectsVersions: const <String, String>{'793602574': 'digest-2'},
+        myProjectsStanding: standing('793602574', CopyStanding.behind),
+        records: const <String, BackupRecord>{
+          'workshop/793602574': BackupRecord(backedUpVersion: 'manifest-1'),
+          'myprojects/793602574': BackupRecord(dismissedVersion: 'digest-2'),
         },
       );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.updateAvailable,
+        WallpaperLibrary.myProjects: BackupState.updateDismissed,
+      });
     });
   });
 
@@ -1165,8 +1174,8 @@ void main() {
       ]);
     });
 
-    // A wallpaper in both libraries is two cards under one name, so the tie has
-    // to break somewhere fixed or the pair swaps places between scans.
+    // The sorter can still receive same-name cards from both libraries, so the
+    // tie has to break somewhere fixed.
     test('breaks a tied name on the library', () {
       final List<BackupCard> order = sortedCards(<BackupCard, BackupState>{
         const BackupCard(WallpaperLibrary.workshop, 'alpha'):

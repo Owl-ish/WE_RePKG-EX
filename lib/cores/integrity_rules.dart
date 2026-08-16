@@ -28,16 +28,14 @@ enum IntegrityVerdict {
 /// and which one the tab opens on.
 ///
 /// [IntegrityVerdict.sound] is not here: the check reports only what it could
-/// not load. Neither is [IntegrityVerdict.empty], left out on the user's
-/// instruction because the backup tab has a pill for the empty folders that
-/// matter, the ones standing in for a backup.
+/// not load. Empty and shader-cache-only folders are maintenance leftovers, not
+/// broken wallpapers, so the Backup tab owns them under Empty/Junk instead.
 const List<IntegrityVerdict> integrityVerdictOrder = <IntegrityVerdict>[
   IntegrityVerdict.payloadMissing,
   IntegrityVerdict.projectUnreadable,
   IntegrityVerdict.packedSceneNoProject,
   IntegrityVerdict.unpackedSceneNoProject,
   IntegrityVerdict.mediaOnly,
-  IntegrityVerdict.shaderCacheOnly,
 ];
 
 /// How many folders sit under each concern, zero-filled so a caller can draw
@@ -47,7 +45,9 @@ Map<IntegrityVerdict, int> verdictCounts(Iterable<IntegrityVerdict> found) {
     for (final IntegrityVerdict verdict in integrityVerdictOrder) verdict: 0,
   };
   for (final IntegrityVerdict verdict in found) {
-    counts[verdict] = (counts[verdict] ?? 0) + 1;
+    if (counts.containsKey(verdict)) {
+      counts[verdict] = counts[verdict]! + 1;
+    }
   }
   return counts;
 }

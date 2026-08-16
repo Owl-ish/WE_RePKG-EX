@@ -9,6 +9,7 @@ import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
+import 'package:we_repkg/utils/wallpaper_junk.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -830,7 +831,11 @@ void main() {
           )],
           BackupState.emptyBackup,
         );
-        expect(result.junk['workshop/3776838872'], (live: true, backup: false));
+        expect(result.junk['workshop/3776838872'], (
+          live: true,
+          backup: false,
+          kind: WallpaperJunkKind.shaderCacheOnly,
+        ));
       });
 
       // The rule has to stay narrow. This folder is unloadable too, and one of
@@ -989,7 +994,11 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.emptyBackup,
       );
-      expect(result.junk['myprojects/alpha'], (live: false, backup: true));
+      expect(result.junk['myprojects/alpha'], (
+        live: false,
+        backup: true,
+        kind: WallpaperJunkKind.empty,
+      ));
     });
 
     // Wallpaper Engine rebuilds these, so a folder holding only them holds
@@ -1010,6 +1019,10 @@ void main() {
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.emptyBackup,
       );
+      expect(
+        result.junk['myprojects/alpha']?.kind,
+        WallpaperJunkKind.shaderCacheOnly,
+      );
     });
 
     test('a backup holding only nested dxs files is Empty/Junk', () async {
@@ -1024,6 +1037,10 @@ void main() {
       expect(
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
         BackupState.emptyBackup,
+      );
+      expect(
+        result.junk['myprojects/alpha']?.kind,
+        WallpaperJunkKind.shaderCacheOnly,
       );
     });
 

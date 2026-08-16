@@ -320,12 +320,14 @@ typedef BackupDiffResult = ({
 ///
 /// Three tiers, and the order is the point. Live in neither library is vanished
 /// and nothing may demote it, because a Workshop item Steam delisted without
-/// saying so is the whole reason for the tab. Otherwise one orphan sends the
-/// whole name to reconcile. Everything else is an ordinary card per live
-/// library, covered only by its own backup library.
+/// saying so is the whole reason for the tab. A name live in both libraries is
+/// always a reconcile decision, even with no backup at all. A backup placement
+/// mismatch also reconciles. Everything else is an ordinary card.
 ///
-/// Coverage was pooled in an earlier design and the reversal is deliberate:
-/// see `.claude/backup-restore.md` under States.
+/// Backup protection is wallpaper-level, not library-level: if either backup
+/// library holds the name, the live wallpaper is backed up. The library split
+/// still matters for update/version reporting and for deciding which folders a
+/// reconcile entry offers to keep or remove.
 BackupDiffResult backupDiff({
   required Set<String> liveWorkshop,
   required Set<String> liveMyProjects,
@@ -382,30 +384,40 @@ BackupDiffResult backupDiff({
         ? null
         : BackupCard(WallpaperLibrary.myProjects, lm);
 
+    final bool coveredAnywhere = bw != null || bm != null;
     final Map<WallpaperLibrary, BackupState> states =
         <WallpaperLibrary, BackupState>{};
     if (workshopCard != null) {
-      states[WallpaperLibrary.workshop] = _cardState(
-        library: WallpaperLibrary.workshop,
-        covered: bw != null,
-        liveVersion: versionsW[key],
-        standing: standingW[key],
-        record: byId[workshopCard.id],
-      );
+      states[WallpaperLibrary.workshop] = bw == null && coveredAnywhere
+          ? BackupState.synced
+          : _cardState(
+              library: WallpaperLibrary.workshop,
+              covered: coveredAnywhere,
+              liveVersion: versionsW[key],
+              standing: standingW[key],
+              record: byId[workshopCard.id],
+            );
     }
     if (myProjectsCard != null) {
-      states[WallpaperLibrary.myProjects] = _cardState(
-        library: WallpaperLibrary.myProjects,
-        covered: bm != null,
-        liveVersion: versionsM[key],
-        standing: standingM[key],
-        record: byId[myProjectsCard.id],
-      );
+      states[WallpaperLibrary.myProjects] = bm == null && coveredAnywhere
+          ? BackupState.synced
+          : _cardState(
+              library: WallpaperLibrary.myProjects,
+              covered: coveredAnywhere,
+              liveVersion: versionsM[key],
+              standing: standingM[key],
+              record: byId[myProjectsCard.id],
+            );
     }
 
-    if ((bw != null && lw == null) || (bm != null && lm == null)) {
-      // Tier 1 returned already, so one of the two live names is non-null,
-      // which is also why the order here does not matter.
+    final bool duplicateLive = lw != null && lm != null;
+    final bool placementMismatch =
+        (bw != null && lw == null) || (bm != null && lm == null);
+    if (duplicateLive || placementMismatch) {
+      // Tier 1 returned already, so one of the two live names is non-null. A
+      // duplicate live name is itself the ambiguity: Steam may have restored a
+      // Workshop copy beside an edited MyProjects copy without the user seeing
+      // it happen.
       reconcile.add(
         ReconcileEntry(
           name: lw ?? lm!,

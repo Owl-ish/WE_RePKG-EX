@@ -4,6 +4,24 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 
+/// Why a wallpaper folder is disposable. Kept explicit so the backup tab can
+/// group maintenance work instead of presenting one undifferentiated junk grid.
+enum WallpaperJunkKind { empty, shaderCacheOnly, mixed }
+
+Future<WallpaperJunkKind?> classifyLiveWallpaperJunk(Directory folder) async {
+  if (!await isLiveWallpaperJunk(folder)) return null;
+  return await isEmptyFolderTree(folder)
+      ? WallpaperJunkKind.empty
+      : WallpaperJunkKind.shaderCacheOnly;
+}
+
+Future<WallpaperJunkKind?> classifyBackupWallpaperJunk(Directory folder) async {
+  if (!await isBackupWallpaperJunk(folder)) return null;
+  return await isEmptyFolderTree(folder)
+      ? WallpaperJunkKind.empty
+      : WallpaperJunkKind.shaderCacheOnly;
+}
+
 /// An empty live folder, or one holding only generated `.dxs` shader files.
 Future<bool> isLiveWallpaperJunk(Directory folder) =>
     _containsOnlyFiles(folder, _isDxs);

@@ -44,7 +44,7 @@ typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
 typedef BackupScan = ({
   Map<BackupCard, BackupState> cards,
   Map<String, ({bool live, bool backup})> presence,
-  Map<String, ({bool live, bool backup})> junk,
+  Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk,
   List<ReconcileEntry> reconcile,
   bool acfRead,
   Set<BackupFolder> missing,
@@ -179,34 +179,26 @@ Future<BackupScan> scanBackup({
         onBatch: comparedBatch,
       );
 
-  final Future<Set<String>> junkLiveWorkshopFuture = _junkFolders(
-    liveWorkshopPath,
-    liveWorkshop,
-    live: true,
-  );
-  final Future<Set<String>> junkLiveMyProjectsFuture = _junkFolders(
-    liveMyProjectsPath,
-    liveMyProjects,
-    live: true,
-  );
-  final Future<Set<String>> junkBackupWorkshopFuture = _junkFolders(
-    backupWorkshopPath(backupRoot),
-    backupWorkshop,
-    live: false,
-  );
-  final Future<Set<String>> junkBackupMyProjectsFuture = _junkFolders(
-    backupMyProjectsPath(backupRoot),
-    backupMyProjects,
-    live: false,
-  );
+  final Future<Map<String, WallpaperJunkKind>> junkLiveWorkshopFuture =
+      _junkFolders(liveWorkshopPath, liveWorkshop, live: true);
+  final Future<Map<String, WallpaperJunkKind>> junkLiveMyProjectsFuture =
+      _junkFolders(liveMyProjectsPath, liveMyProjects, live: true);
+  final Future<Map<String, WallpaperJunkKind>> junkBackupWorkshopFuture =
+      _junkFolders(backupWorkshopPath(backupRoot), backupWorkshop, live: false);
+  final Future<Map<String, WallpaperJunkKind>> junkBackupMyProjectsFuture =
+      _junkFolders(
+        backupMyProjectsPath(backupRoot),
+        backupMyProjects,
+        live: false,
+      );
 
   final (
     Map<String, CopyStanding> workshopStanding,
     Map<String, CopyStanding> myProjectsStanding,
-    Set<String> junkLiveWorkshop,
-    Set<String> junkLiveMyProjects,
-    Set<String> junkBackupWorkshop,
-    Set<String> junkBackupMyProjects,
+    Map<String, WallpaperJunkKind> junkLiveWorkshop,
+    Map<String, WallpaperJunkKind> junkLiveMyProjects,
+    Map<String, WallpaperJunkKind> junkBackupWorkshop,
+    Map<String, WallpaperJunkKind> junkBackupMyProjects,
   ) = await (
     workshopStandingFuture,
     myProjectsStandingFuture,
@@ -222,8 +214,8 @@ Future<BackupScan> scanBackup({
   ));
 
   final BackupDiffResult diff = backupDiff(
-    liveWorkshop: liveWorkshop.difference(junkLiveWorkshop),
-    liveMyProjects: liveMyProjects.difference(junkLiveMyProjects),
+    liveWorkshop: liveWorkshop.difference(junkLiveWorkshop.keys.toSet()),
+    liveMyProjects: liveMyProjects.difference(junkLiveMyProjects.keys.toSet()),
     backupWorkshop: backupWorkshop,
     backupMyProjects: backupMyProjects,
     liveWorkshopVersions: acf.byId,
@@ -232,16 +224,32 @@ Future<BackupScan> scanBackup({
     myProjectsStanding: myProjectsStanding,
     records: records,
   );
-  _addLiveJunkCards(diff, WallpaperLibrary.workshop, junkLiveWorkshop);
-  _addLiveJunkCards(diff, WallpaperLibrary.myProjects, junkLiveMyProjects);
-  _markJunkCards(diff, WallpaperLibrary.workshop, junkBackupWorkshop);
-  _markJunkCards(diff, WallpaperLibrary.myProjects, junkBackupMyProjects);
-  final Map<String, ({bool live, bool backup})> junk = _cardPresence(
-    junkLiveWorkshop,
-    junkLiveMyProjects,
-    junkBackupWorkshop,
-    junkBackupMyProjects,
+  _addLiveJunkCards(diff, WallpaperLibrary.workshop, junkLiveWorkshop.keys);
+  _addLiveJunkCards(diff, WallpaperLibrary.myProjects, junkLiveMyProjects.keys);
+  _markJunkCards(diff, WallpaperLibrary.workshop, junkBackupWorkshop.keys);
+  _markJunkCards(diff, WallpaperLibrary.myProjects, junkBackupMyProjects.keys);
+  final Map<String, ({bool live, bool backup})> junkPresence = _cardPresence(
+    junkLiveWorkshop.keys.toSet(),
+    junkLiveMyProjects.keys.toSet(),
+    junkBackupWorkshop.keys.toSet(),
+    junkBackupMyProjects.keys.toSet(),
   );
+  final Map<String, WallpaperJunkKind> junkKinds = _junkKinds(
+    liveWorkshop: junkLiveWorkshop,
+    liveMyProjects: junkLiveMyProjects,
+    backupWorkshop: junkBackupWorkshop,
+    backupMyProjects: junkBackupMyProjects,
+  );
+  final Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk =
+      <String, ({bool live, bool backup, WallpaperJunkKind kind})>{
+        for (final MapEntry<String, ({bool live, bool backup})> entry
+            in junkPresence.entries)
+          entry.key: (
+            live: entry.value.live,
+            backup: entry.value.backup,
+            kind: junkKinds[entry.key] ?? WallpaperJunkKind.empty,
+          ),
+      };
   return (
     cards: diff.cards,
     presence: presence,
@@ -628,29 +636,67 @@ Future<bool> _folderPresent(String? folderPath) async =>
 /// Narrow on purpose: only a folder holding nothing but the rebuilt shader cache
 /// counts. Anything else with content in it, however unloadable, keeps its card,
 /// or a wallpaper the user could still back up would quietly stop existing.
-Future<Set<String>> _junkFolders(
+Future<Map<String, WallpaperJunkKind>> _junkFolders(
   String? root,
   Set<String> names, {
   required bool live,
 }) async {
-  if (root == null || names.isEmpty) return const <String>{};
+  if (root == null || names.isEmpty) {
+    return const <String, WallpaperJunkKind>{};
+  }
   try {
-    return (await rust.findJunkFoldersRust(
+    final List<String> junk = await rust.findJunkFoldersRust(
       root: root,
       folderNames: names.toList(),
       backup: !live,
       workers: 4,
-    )).toSet();
+    );
+    return _classifyKnownJunk(root, junk);
   } catch (_) {
     // Keep the Dart scan as a safety net when the native bridge is unavailable,
     // including unit tests that do not initialise the desktop Rust library.
   }
-  return (await _perFolder<bool>(root, names, (Directory folder) async {
-    final bool junk = live
-        ? await isLiveWallpaperJunk(folder)
-        : await isBackupWallpaperJunk(folder);
-    return junk ? true : null;
-  })).keys.toSet();
+  return _perFolder<WallpaperJunkKind>(
+    root,
+    names,
+    (Directory folder) => live
+        ? classifyLiveWallpaperJunk(folder)
+        : classifyBackupWallpaperJunk(folder),
+  );
+}
+
+Future<Map<String, WallpaperJunkKind>> _classifyKnownJunk(
+  String root,
+  Iterable<String> names,
+) => _perFolder<WallpaperJunkKind>(root, names, (Directory folder) async {
+  if (!await folder.exists()) return null;
+  return await isEmptyFolderTree(folder)
+      ? WallpaperJunkKind.empty
+      : WallpaperJunkKind.shaderCacheOnly;
+});
+
+Map<String, WallpaperJunkKind> _junkKinds({
+  required Map<String, WallpaperJunkKind> liveWorkshop,
+  required Map<String, WallpaperJunkKind> liveMyProjects,
+  required Map<String, WallpaperJunkKind> backupWorkshop,
+  required Map<String, WallpaperJunkKind> backupMyProjects,
+}) {
+  final Map<String, WallpaperJunkKind> result = <String, WallpaperJunkKind>{};
+  void add(WallpaperLibrary library, Map<String, WallpaperJunkKind> found) {
+    for (final MapEntry<String, WallpaperJunkKind> entry in found.entries) {
+      final String id = BackupCard(library, entry.key).id;
+      final WallpaperJunkKind? previous = result[id];
+      result[id] = previous == null || previous == entry.value
+          ? entry.value
+          : WallpaperJunkKind.mixed;
+    }
+  }
+
+  add(WallpaperLibrary.workshop, liveWorkshop);
+  add(WallpaperLibrary.myProjects, liveMyProjects);
+  add(WallpaperLibrary.workshop, backupWorkshop);
+  add(WallpaperLibrary.myProjects, backupMyProjects);
+  return result;
 }
 
 void _addLiveJunkCards(
