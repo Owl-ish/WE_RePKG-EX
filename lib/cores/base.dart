@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
+import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/setting.dart';
@@ -92,7 +93,9 @@ Future<void> setWallpaperPath(WidgetRef ref) async {
   final String? wallpaperPath = await getDirectoryPath();
   if (wallpaperPath == null) return;
 
-  if (wallpaperPath != previousPath) section.requestExtractEntrance();
+  if (wallpaperPath != previousPath) {
+    section.requestEntrance(NavSection.extract);
+  }
   selected.update(null);
   pathNotifier.update(wallpaperPath);
   updateOtherFolder(wallpaperPath);
@@ -106,7 +109,9 @@ Future<void> refreshWallpaperPath(WidgetRef ref) async {
   final updateOtherFolder = otherFolderUpdater(ref);
   final String? wallpaperPath = await getWallpaperPath();
   if (wallpaperPath != null) {
-    if (wallpaperPath != previousPath) section.requestExtractEntrance();
+    if (wallpaperPath != previousPath) {
+      section.requestEntrance(NavSection.extract);
+    }
     pathNotifier.update(wallpaperPath);
     updateOtherFolder(wallpaperPath);
   }

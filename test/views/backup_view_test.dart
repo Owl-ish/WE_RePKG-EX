@@ -1287,6 +1287,7 @@ void main() {
         WidgetTester tester, {
         List<BackupTile> tiles = const <BackupTile>[],
         List<ReconcileTile> reconcile = const <ReconcileTile>[],
+        bool entrance = false,
       }) async {
         container = ProviderContainer(
           overrides: [
@@ -1308,6 +1309,11 @@ void main() {
           ],
         );
         addTearDown(container.dispose);
+        if (entrance) {
+          container
+              .read(currentSectionProvider.notifier)
+              .update(NavSection.backup);
+        }
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
@@ -1355,6 +1361,27 @@ void main() {
         await settle(tester);
       }
 
+      Finder arrivingTiles() => find.descendant(
+        of: find.byType(SelectionGrid),
+        matching: find.byType(SlideTransition),
+      );
+
+      // SelectionGrid calls forward() from a post-frame callback. The first
+      // frame after that establishes the ticker's start timestamp at t=0; only
+      // later timed pumps advance the animation. This helper models that real
+      // lifecycle instead of assuming one large pump both starts and finishes it.
+      Future<void> finishEntrance(WidgetTester tester) async {
+        await tester.pump();
+        // Pump just past the nominal endpoint. At exactly 900ms the controller
+        // can report 1.0 before its completed status has fired, leaving the
+        // transition wrappers in the tree until time advances again.
+        await tester.pump(
+          gridEntranceDuration + const Duration(milliseconds: 1),
+        );
+        // Completion removes the transition wrappers via setState.
+        await tester.pump();
+      }
+
       // The one state with an obvious next step. The rest glow for themselves.
       testWidgets('the grid opens on the wallpapers that are not backed up', (
         tester,
@@ -1376,6 +1403,50 @@ void main() {
         expect(find.text(AppI10n.backupReadingDetails), findsNothing);
         expect(find.text('gone'), findsOneWidget);
         expect(find.text('fresh'), findsNothing);
+      });
+
+      testWidgets('switching state pills does not replay or reflow the grid', (
+        tester,
+      ) async {
+        await pumpPills(tester, tiles: three());
+        final Rect atRest = tester.getRect(find.byType(BackupTileView));
+
+        await tester.tap(find.text('${AppI10n.backupStateVanished} 1'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(arrivingTiles(), findsNothing);
+        expect(tester.getRect(find.byType(BackupTileView)), atRest);
+      });
+
+      testWidgets('switching to Empty/Junk does not replay the entrance', (
+        tester,
+      ) async {
+        await pumpPills(
+          tester,
+          tiles: <BackupTile>[
+            (
+              card: const BackupCard(WallpaperLibrary.workshop, 'fresh'),
+              state: BackupState.notBackedUp,
+              face: null,
+            ),
+            (
+              card: const BackupCard(WallpaperLibrary.workshop, 'junk'),
+              state: BackupState.emptyBackup,
+              face: null,
+            ),
+          ],
+        );
+
+        await tester.tap(find.text('${AppI10n.backupStateEmptyBackup} 1'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey<String>('backup-junk-grid')),
+            matching: find.byType(SlideTransition),
+          ),
+          findsNothing,
+        );
       });
 
       testWidgets('the selected status border stays subtle', (tester) async {
@@ -1500,8 +1571,9 @@ void main() {
         expect(find.byType(NoResultsView), findsNothing);
       });
 
-      // A rescan that clears what was being looked at leaves the same dead pill
-      // over the same empty grid.
+      // A rescan that empties the selected state moves the filter to the next
+      // populated state. This test is only about that filter decision; the
+      // animation replay has its own test below.
       testWidgets('a rescan moves off a state it has emptied', (tester) async {
         List<BackupTile> tiles = three();
         container = ProviderContainer(
@@ -1538,24 +1610,108 @@ void main() {
         await settle(tester);
 
         expect(find.text('gone'), findsOneWidget);
+        expect(
+          container.read(backupStateFilterProvider).state,
+          BackupState.vanished,
+        );
       });
 
-      // The extract grid has always done this and the backup grid snapped in,
-      // which is the same widget behaving two ways.
-      testWidgets('the tiles arrive in a wave, then stop moving', (
+      testWidgets('a completed rescan replays the Backup wave once', (
+        tester,
+      ) async {
+        final List<BackupTile> tiles = three();
+        container = ProviderContainer(
+          overrides: [
+            backupRootProvider.overrideWithValue(r'C:\backup'),
+            backupScanProvider.overrideWith(
+              (Ref ref) => scanOf(
+                cards: <BackupCard, BackupState>{
+                  for (final BackupTile tile in tiles) tile.card: tile.state,
+                },
+              ),
+            ),
+            backupTilesProvider.overrideWith((Ref ref) => tiles),
+          ],
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const Scaffold(body: BackupView()),
+            ),
+          ),
+        );
+        await settle(tester);
+        expect(arrivingTiles(), findsNothing);
+
+        // Same visible result, new completed scan. A rescan is an explicit
+        // replay trigger even when nothing moved between the two snapshots.
+        container.invalidate(backupScanProvider);
+        await settle(tester);
+        expect(arrivingTiles(), findsWidgets);
+
+        await finishEntrance(tester);
+        expect(arrivingTiles(), findsNothing);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(arrivingTiles(), findsNothing);
+      });
+
+      testWidgets('entering Backup plays the tile wave once', (tester) async {
+        await pumpPills(tester, tiles: three(), entrance: true);
+
+        expect(arrivingTiles(), findsWidgets);
+
+        await finishEntrance(tester);
+        expect(arrivingTiles(), findsNothing);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(arrivingTiles(), findsNothing);
+      });
+
+      testWidgets('returning from Integrity replays the Backup wave once', (
         tester,
       ) async {
         await pumpPills(tester, tiles: three());
+        expect(arrivingTiles(), findsNothing);
 
-        Finder arriving() => find.descendant(
-          of: find.byType(SelectionGrid),
+        await tester.tap(find.text(AppI10n.backupTabIntegrity));
+        await settle(tester);
+        expect(find.byType(IntegrityView), findsOneWidget);
+
+        await tester.tap(find.text(AppI10n.backupTabBackup));
+        await tester.pump();
+        expect(arrivingTiles(), findsWidgets);
+
+        await finishEntrance(tester);
+        expect(arrivingTiles(), findsNothing);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(arrivingTiles(), findsNothing);
+      });
+
+      testWidgets('entering Backup animates Empty/Junk too', (tester) async {
+        final List<BackupTile> junk = <BackupTile>[
+          (
+            card: const BackupCard(WallpaperLibrary.workshop, 'junk-a'),
+            state: BackupState.emptyBackup,
+            face: null,
+          ),
+          (
+            card: const BackupCard(WallpaperLibrary.workshop, 'junk-b'),
+            state: BackupState.emptyBackup,
+            face: null,
+          ),
+        ];
+        await pumpPills(tester, tiles: junk, entrance: true);
+
+        final Finder arriving = find.descendant(
+          of: find.byKey(const ValueKey<String>('backup-junk-grid')),
           matching: find.byType(SlideTransition),
         );
-        expect(arriving(), findsWidgets);
+        expect(arriving, findsWidgets);
 
-        await tester.pump(const Duration(seconds: 1));
-
-        expect(arriving(), findsNothing);
+        await finishEntrance(tester);
+        expect(arriving, findsNothing);
       });
 
       // They behave as tabs: one at a time, and the grid is never left empty
@@ -1627,6 +1783,7 @@ void main() {
         expect(find.byType(ReconcileTileView), findsOneWidget);
         expect(find.byType(BackupTileView), findsNothing);
         expect(find.text('muddled'), findsOneWidget);
+        expect(arrivingTiles(), findsNothing);
         // "Needs reconciling" is the one pill whose name does not say what it
         // wants from the user, and the tab is where that has to be answered.
         expect(find.text(AppI10n.backupReconcileAbout), findsOneWidget);

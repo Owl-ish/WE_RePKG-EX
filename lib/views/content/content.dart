@@ -24,12 +24,8 @@ class _ContentViewState extends ConsumerState<ContentView> {
     'wallpaper-grid-content',
   );
 
-  /// Bumped to play the grid's entrance again on a grid that is already up.
-  int _entranceToken = 0;
-
-  /// Whether the next grid to appear should play the entrance. False on the way
-  /// back from the backup area, where the library is the one already seen.
-  bool _entranceOwed = false;
+  /// Tab entry and completed scans both feed the same one-shot replay latch.
+  final GridEntranceReplay _entrance = GridEntranceReplay();
 
   @override
   void initState() {
@@ -40,9 +36,11 @@ class _ContentViewState extends ConsumerState<ContentView> {
       if (!mounted) return;
       final bool replay = ref
           .read(currentSectionProvider.notifier)
-          .consumeExtractEntrance();
-      if (replay && ref.read(currentStateProvider).isComplete) {
-        setState(_owe);
+          .consumeEntrance(NavSection.extract);
+      if (replay &&
+          ref.read(currentStateProvider).isComplete &&
+          _entrance.request()) {
+        setState(() {});
       }
     });
 
@@ -59,26 +57,13 @@ class _ContentViewState extends ConsumerState<ContentView> {
     });
   }
 
-  /// The library is new, so whichever grid shows it plays the entrance: the one
-  /// already up on this token, or the next one to appear.
-  void _owe() {
-    _entranceToken++;
-    _entranceOwed = true;
-  }
-
   Widget _buildGrid(List<WallpaperInfo> list) {
-    if (_entranceOwed) {
-      // Cleared once a grid has taken it, and not through setState: nothing on
-      // screen reads it after the grid is up.
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _entranceOwed = false,
-      );
-    }
+    final bool entranceOnMount = _entrance.take();
     return SelectionGrid(
       key: _gridTransitionKey,
       id: 'wallpaper-grid',
-      entranceToken: _entranceToken,
-      entranceOnMount: _entranceOwed,
+      entranceToken: _entrance.token,
+      entranceOnMount: entranceOnMount,
       itemCount: list.length,
       idAt: (index) => list[index].id,
       // Every selected id, not checkedWallpaperListProvider: that one is
@@ -103,10 +88,19 @@ class _ContentViewState extends ConsumerState<ContentView> {
     );
   }
 
+  Widget _noResults() {
+    _entrance.discard();
+    return const NoResultsView(key: NoResultsView.viewKey);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<RunState>(currentStateProvider, (previous, next) {
-      if (next.isComplete && previous?.isComplete != true) setState(_owe);
+      if (next.isComplete &&
+          previous?.isComplete != true &&
+          _entrance.request()) {
+        setState(() {});
+      }
     });
 
     final RunState runState = ref.watch(currentStateProvider);
@@ -120,7 +114,7 @@ class _ContentViewState extends ConsumerState<ContentView> {
     final Widget content = !runState.isComplete
         ? EmptyView(key: ValueKey<RunState>(runState), runState: runState)
         : list.isEmpty && libraryLoaded
-        ? const NoResultsView(key: NoResultsView.viewKey)
+        ? _noResults()
         : _buildGrid(list);
 
     return Expanded(

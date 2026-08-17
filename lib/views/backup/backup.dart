@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -167,17 +169,48 @@ class _Bar extends ConsumerWidget {
   }
 }
 
-class _Backup extends ConsumerWidget {
+class _Backup extends ConsumerStatefulWidget {
   const _Backup();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Backup> createState() => _BackupState();
+}
+
+class _BackupState extends ConsumerState<_Backup> {
+  final GridEntranceReplay _entrance = GridEntranceReplay();
+  BackupScan? _lastLoadedScan;
+
+  @override
+  void initState() {
+    super.initState();
+    final bool sectionEntrance = ref
+        .read(currentSectionProvider.notifier)
+        .consumeEntrance(NavSection.backup);
+    final bool tabEntrance = ref
+        .read(currentBackupTabProvider.notifier)
+        .consumeEntrance(BackupTab.backup);
+    if (sectionEntrance || tabEntrance) _entrance.request();
+  }
+
+  Widget _loaded(BackupScan scan) {
+    final BackupScan? previous = _lastLoadedScan;
+    _lastLoadedScan = scan;
+    // A completed replacement scan is the other explicit replay trigger.
+    // Comparing the scan object rather than its contents also covers rescans
+    // whose result happens to be identical to the previous one.
+    if (previous != null && !identical(previous, scan)) _entrance.request();
+    return _Loaded(scan: scan, entrance: _entrance);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (ref.watch(backupRootProvider) == null) return const _PickRoot();
+
     return switch (ref.watch(backupScanProvider)) {
       AsyncData<BackupScan>(value: final BackupScan scan)
           when scan.missing.isNotEmpty =>
         _MissingFolders(missing: scan.missing),
-      AsyncData<BackupScan>(:final BackupScan value) => _Loaded(scan: value),
+      AsyncData<BackupScan>(:final BackupScan value) => _loaded(value),
       AsyncError<BackupScan>(:final Object error) => Center(
         child: Text('${tr(AppI10n.backupScanFailed)} $error'),
       ),
@@ -317,9 +350,10 @@ class _PickRoot extends ConsumerWidget {
 /// they are the summary of what is on disk, and narrowing is a way of looking
 /// at it.
 class _Loaded extends ConsumerWidget {
-  const _Loaded({required this.scan});
+  const _Loaded({required this.scan, required this.entrance});
 
   final BackupScan scan;
+  final GridEntranceReplay entrance;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -412,7 +446,7 @@ class _Loaded extends ConsumerWidget {
               style: Theme.of(context).meta.captionStyle,
             ),
           ),
-        const Expanded(child: _Grid()),
+        Expanded(child: _Grid(entrance: entrance)),
       ],
     );
   }
@@ -495,8 +529,63 @@ class _GlowingActionButton extends StatelessWidget {
 
 /// Reading a few thousand titles and previews takes about half a second on top
 /// of the scan, so the pills above are already up while this resolves.
-class _Grid extends ConsumerWidget {
-  const _Grid();
+class _Grid extends ConsumerStatefulWidget {
+  const _Grid({required this.entrance});
+
+  final GridEntranceReplay entrance;
+
+  @override
+  ConsumerState<_Grid> createState() => _GridState();
+}
+
+class _GridState extends ConsumerState<_Grid>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _junkEntrance;
+  late final List<GridEntranceWave> _junkEntranceWaves;
+  bool _junkEntranceDone = true;
+  int _junkEntranceRun = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _junkEntrance =
+        AnimationController(vsync: this, duration: gridEntranceDuration)
+          ..addStatusListener((AnimationStatus status) {
+            if (status == AnimationStatus.completed && mounted) {
+              setState(() => _junkEntranceDone = true);
+            }
+          });
+    _junkEntranceWaves = buildGridEntranceWaves(_junkEntrance);
+  }
+
+  bool _takeEntrance() => widget.entrance.take();
+
+  void _startJunkEntrance() {
+    final int run = ++_junkEntranceRun;
+    _junkEntrance
+      ..stop()
+      ..value = 0;
+    _junkEntranceDone = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && run == _junkEntranceRun) _junkEntrance.forward();
+    });
+  }
+
+  void _finishJunkEntrance() {
+    _junkEntranceRun++;
+    _junkEntrance.stop();
+    if (_junkEntranceDone || !mounted) return;
+    setState(() => _junkEntranceDone = true);
+  }
+
+  @override
+  void dispose() {
+    for (final GridEntranceWave wave in _junkEntranceWaves) {
+      wave.t.dispose();
+    }
+    _junkEntrance.dispose();
+    super.dispose();
+  }
 
   /// Ctrl toggles, shift reaches back to the last click, a plain click takes
   /// this one alone. The same three the extract grid offers.
@@ -542,19 +631,29 @@ class _Grid extends ConsumerWidget {
     required String Function(T tile) idOf,
     required Widget Function(T tile, double width, VoidCallback onTap) build,
     required Widget waiting,
+    required Object reflowIdentity,
   }) {
     return switch (tiles) {
       AsyncData<List<T>>(value: final List<T> value) when value.isEmpty =>
-        const NoResultsView(key: NoResultsView.viewKey),
+        Builder(
+          builder: (BuildContext context) {
+            widget.entrance.discard();
+            return const NoResultsView(key: NoResultsView.viewKey);
+          },
+        ),
       AsyncData<List<T>>(:final List<T> value) => Builder(
         builder: (BuildContext context) {
           final List<String> ids = value.map(idOf).toList();
+          final bool entranceOnMount = _takeEntrance();
           return SelectionGrid(
             key: ValueKey<String>(id),
             id: id,
             // The tab is already inset either side, so only the gap under the
             // pills is this grid's to add.
             padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            entranceToken: widget.entrance.token,
+            entranceOnMount: entranceOnMount,
+            reflowIdentity: reflowIdentity,
             itemCount: value.length,
             idAt: (int index) => ids[index],
             currentSelection: () => ref.read(backupSelectionProvider),
@@ -610,9 +709,15 @@ class _Grid extends ConsumerWidget {
     return switch (tiles) {
       AsyncData<List<BackupTile>>(value: final List<BackupTile> value)
           when value.isEmpty =>
-        const NoResultsView(key: NoResultsView.viewKey),
+        Builder(
+          builder: (BuildContext context) {
+            widget.entrance.discard();
+            return const NoResultsView(key: NoResultsView.viewKey);
+          },
+        ),
       AsyncData<List<BackupTile>>(:final List<BackupTile> value) => Builder(
         builder: (BuildContext context) {
+          if (_takeEntrance()) _startJunkEntrance();
           final List<String> ids = <String>[
             for (final BackupTile tile in value) tile.card.id,
           ];
@@ -712,47 +817,66 @@ class _Grid extends ConsumerWidget {
                       top: LayoutNums.contentGap,
                       bottom: LayoutNums.sectionGap,
                     ),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 180,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            childAspectRatio: 1,
-                          ),
-                      delegate: SliverChildBuilderDelegate((
-                        BuildContext context,
-                        int index,
-                      ) {
-                        final BackupTile tile = groups[kind]![index];
-                        final int flatIndex = ids.indexOf(tile.card.id);
-                        return LayoutBuilder(
-                          builder: (BuildContext context, BoxConstraints box) =>
-                              BackupTileView(
-                                key: ValueKey<String>(tile.card.id),
-                                width: box.maxWidth,
-                                tile: tile,
-                                junkKind: kind,
-                                folders: cardFolders(
-                                  library: tile.card.library,
-                                  name: tile.card.name,
-                                  liveExists:
-                                      scan.junk[tile.card.id]?.live ?? false,
-                                  backupExists:
-                                      scan.junk[tile.card.id]?.backup ?? false,
-                                  backupRoot: backupRoot,
-                                  liveWorkshopPath: workshop,
-                                  liveMyProjectsPath: myProjects,
-                                ),
-                                onTap: () => _click(ref, ids, flatIndex),
-                                onAction: () => applyBackupAction(
-                                  context,
-                                  BackupAction.recycleJunk,
-                                  <BackupCard>[tile.card],
-                                ),
-                              ),
+                    sliver: SliverLayoutBuilder(
+                      builder: (BuildContext context, constraints) {
+                        final int columns = max(
+                          1,
+                          (constraints.crossAxisExtent / (180 + 8)).ceil(),
                         );
-                      }, childCount: groups[kind]!.length),
+                        return SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 180,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                childAspectRatio: 1,
+                              ),
+                          delegate: SliverChildBuilderDelegate((
+                            BuildContext context,
+                            int index,
+                          ) {
+                            final BackupTile tile = groups[kind]![index];
+                            final int flatIndex = ids.indexOf(tile.card.id);
+                            return LayoutBuilder(
+                              builder:
+                                  (
+                                    BuildContext context,
+                                    BoxConstraints box,
+                                  ) => gridEntranceTile(
+                                    done: _junkEntranceDone,
+                                    waves: _junkEntranceWaves,
+                                    index: index,
+                                    columns: columns,
+                                    child: BackupTileView(
+                                      key: ValueKey<String>(tile.card.id),
+                                      width: box.maxWidth,
+                                      tile: tile,
+                                      junkKind: kind,
+                                      folders: cardFolders(
+                                        library: tile.card.library,
+                                        name: tile.card.name,
+                                        liveExists:
+                                            scan.junk[tile.card.id]?.live ??
+                                            false,
+                                        backupExists:
+                                            scan.junk[tile.card.id]?.backup ??
+                                            false,
+                                        backupRoot: backupRoot,
+                                        liveWorkshopPath: workshop,
+                                        liveMyProjectsPath: myProjects,
+                                      ),
+                                      onTap: () => _click(ref, ids, flatIndex),
+                                      onAction: () => applyBackupAction(
+                                        context,
+                                        BackupAction.recycleJunk,
+                                        <BackupCard>[tile.card],
+                                      ),
+                                    ),
+                                  ),
+                            );
+                          }, childCount: groups[kind]!.length),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -768,18 +892,23 @@ class _Grid extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final String? backupRoot = ref.watch(backupRootProvider);
     final String? workshop = ref.watch(wallpaperPathProvider);
     final String? myProjects = ref.watch(myProjectsLibraryProvider);
     final BackupScan scan = ref.watch(backupScanProvider).requireValue;
     final Map<String, ({bool live, bool backup})> presence = scan.presence;
+    final BackupShown shown = ref.watch(backupStateFilterProvider);
+    ref.listen<BackupShown>(backupStateFilterProvider, (previous, next) {
+      if (previous != next && !_junkEntranceDone) _finishJunkEntrance();
+    });
 
-    if (ref.watch(backupStateFilterProvider).reconcile) {
+    if (shown.reconcile) {
       return _grid<ReconcileTile>(
         ref,
         ref.watch(backupVisibleReconcileTilesProvider),
         id: 'backup-reconcile-grid',
+        reflowIdentity: 'reconcile',
         // No count: the only run reporting one is the card read, and its total
         // is the whole library rather than this much shorter list.
         waiting: ScanProgress(label: tr(AppI10n.backupReadingDetails)),
@@ -800,7 +929,7 @@ class _Grid extends ConsumerWidget {
       );
     }
 
-    if (ref.watch(backupStateFilterProvider).state == BackupState.emptyBackup) {
+    if (shown.state == BackupState.emptyBackup) {
       return _junkGrid(
         context,
         ref,
@@ -816,6 +945,7 @@ class _Grid extends ConsumerWidget {
       ref,
       ref.watch(backupVisibleTilesProvider),
       id: 'backup-grid',
+      reflowIdentity: shown.state,
       waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
       idOf: (BackupTile tile) => tile.card.id,
       build: (BackupTile tile, double width, VoidCallback onTap) =>

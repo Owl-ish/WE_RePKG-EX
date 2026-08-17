@@ -10,11 +10,13 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/filter.dart';
+import 'package:we_repkg/provider/navigation.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/content.dart';
 import 'package:we_repkg/views/content/item.dart';
+import 'package:we_repkg/widgets/selection_grid.dart';
 
 /// The maths under the marquee and the shift range have their own tests in
 /// grid_selection_test. This covers the wiring: the gestures, the ticker that
@@ -123,14 +125,41 @@ void main() {
     );
   }
 
-  // The wave means "here is your library". Playing it on the way back from the
-  // backup area would say a scan had run when none had.
+  // The wave marks an explicit entrance: arriving on Extract, or fresh results
+  // after a scan. Ordinary rebuilds of an already-visible library stay still.
   group('the entrance', () {
-    /// Seeds eight wallpapers in [state] and stops a tenth of a second in,
-    /// which is inside the entrance rather than past it.
-    Future<Rect> firstTileEarly(WidgetTester tester, RunState state) async {
+    // SelectionGrid starts the finite entrance from a post-frame callback so the
+    // opening frame is actually visible. In a widget test the ticker therefore
+    // needs one frame to establish its start timestamp before elapsed time means
+    // anything. Keeping that rule here avoids tests accidentally treating the
+    // first timed pump as animation progress when it is really time zero.
+    Future<void> startEntranceClock(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Future<void> finishEntrance(WidgetTester tester) async {
+      await tester.pump(gridEntranceDuration);
+      // The completed status callback marks the wrappers done with setState.
+      await tester.pump();
+    }
+
+    /// Seeds eight wallpapers in [state] and measures a tenth of a second into
+    /// the entrance, after its ticker has a real start timestamp.
+    Future<Rect> firstTileEarly(
+      WidgetTester tester,
+      RunState state, {
+      bool enterExtract = false,
+    }) async {
       container = ProviderContainer();
       addTearDown(container.dispose);
+      if (enterExtract) {
+        final CurrentSection navigation = container.read(
+          currentSectionProvider.notifier,
+        );
+        navigation.update(NavSection.backup);
+        navigation.update(NavSection.extract);
+      }
       container.read(wallpaperListProvider.notifier).addAll(<WallpaperInfo>[
         for (int i = 0; i < 8; i++) make('$i'),
       ]);
@@ -147,6 +176,7 @@ void main() {
       if (!state.isComplete) {
         container.read(currentStateProvider.notifier).update(RunState.complete);
       }
+      await startEntranceClock(tester);
       await tester.pump(const Duration(milliseconds: 100));
       return tester.getRect(find.byType(ImageItem).first);
     }
@@ -157,10 +187,17 @@ void main() {
       expect(await firstTileEarly(tester, RunState.complete), atRest);
     });
 
+    testWidgets('plays when Extract is entered', (tester) async {
+      expect(
+        await firstTileEarly(tester, RunState.complete, enterExtract: true),
+        isNot(atRest),
+      );
+      await finishEntrance(tester);
+    });
+
     testWidgets('plays when a scan has just finished', (tester) async {
       expect(await firstTileEarly(tester, RunState.initial), isNot(atRest));
-      // Let it finish, or its ticker outlives the test.
-      await tester.pump(const Duration(seconds: 1));
+      await finishEntrance(tester);
     });
   });
 

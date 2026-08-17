@@ -17,12 +17,121 @@ import 'package:we_repkg/widgets/smooth_wheel_scroll.dart';
 /// own against the same cells.
 typedef GridGeometry = ({int columns, double tile, double spacing});
 
-/// One diagonal of the entrance: when it runs, and where its tiles come from.
-typedef _Wave = ({
+/// One-shot replay latch shared by tabs that use the grid entrance. A request
+/// survives loading, but once a grid takes it, ordinary rebuilds cannot replay
+/// it.
+class GridEntranceReplay {
+  int _token = 0;
+  bool _owed = false;
+
+  int get token => _token;
+
+  /// Returns whether this request changed the latch from idle to owed.
+  bool request() {
+    if (_owed) return false;
+    _token++;
+    _owed = true;
+    return true;
+  }
+
+  /// Gives the pending replay to the next ready grid exactly once.
+  bool take() {
+    final bool owed = _owed;
+    _owed = false;
+    return owed;
+  }
+
+  /// Uses up a replay when there are deliberately no tiles to animate.
+  void discard() => _owed = false;
+}
+
+/// One diagonal of the shared grid entrance: when it runs, and where its tiles
+/// come from. Kept public inside the app so grouped grids can use the exact same
+/// entrance as [SelectionGrid].
+typedef GridEntranceWave = ({
   CurvedAnimation t,
   Animation<double> scale,
   Animation<Offset> position,
 });
+
+/// Total time for one shared grid entrance.
+const Duration gridEntranceDuration = Duration(milliseconds: 900);
+
+/// Number of diagonals staggered across one entrance.
+const int gridEntranceWaveCount = 12;
+
+/// Builds the diagonal wave animations shared by regular and grouped grids.
+List<GridEntranceWave> buildGridEntranceWaves(Animation<double> parent) =>
+    List<GridEntranceWave>.generate(gridEntranceWaveCount, (int wave) {
+      final double start = (wave * .06).clamp(0, .66);
+      final CurvedAnimation t = CurvedAnimation(
+        parent: parent,
+        curve: Interval(
+          start,
+          (start + .34).clamp(0, 1),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+      return (
+        t: t,
+        scale: TweenSequence<double>(<TweenSequenceItem<double>>[
+          TweenSequenceItem<double>(
+            tween: Tween<double>(
+              begin: .88,
+              end: 1.04,
+            ).chain(CurveTween(curve: Curves.easeOutCubic)),
+            weight: 70,
+          ),
+          TweenSequenceItem<double>(
+            tween: Tween<double>(
+              begin: 1.04,
+              end: 1,
+            ).chain(CurveTween(curve: Curves.easeInOut)),
+            weight: 30,
+          ),
+        ]).animate(t),
+        position: TweenSequence<Offset>(<TweenSequenceItem<Offset>>[
+          TweenSequenceItem<Offset>(
+            tween: Tween<Offset>(
+              begin: const Offset(0, .055),
+              end: const Offset(0, -.012),
+            ).chain(CurveTween(curve: Curves.easeOutCubic)),
+            weight: 70,
+          ),
+          TweenSequenceItem<Offset>(
+            tween: Tween<Offset>(
+              begin: const Offset(0, -.012),
+              end: Offset.zero,
+            ).chain(CurveTween(curve: Curves.easeInOut)),
+            weight: 30,
+          ),
+        ]).animate(t),
+      );
+    });
+
+/// Wraps one tile in its diagonal of the shared entrance.
+Widget gridEntranceTile({
+  required bool done,
+  required List<GridEntranceWave> waves,
+  required int index,
+  required int columns,
+  required Widget child,
+}) {
+  if (done) return child;
+  final GridEntranceWave wave =
+      waves[((index ~/ columns) + (index % columns)).clamp(
+        0,
+        gridEntranceWaveCount - 1,
+      )];
+  return FadeTransition(
+    opacity: wave.t,
+    alwaysIncludeSemantics: true,
+    child: ScaleTransition(
+      scale: wave.scale,
+      child: SlideTransition(position: wave.position, child: child),
+    ),
+  );
+}
 
 /// A scrolling grid of equal square tiles that can be selected by dragging a box
 /// over it.
@@ -45,6 +154,7 @@ class SelectionGrid extends StatefulWidget {
     ),
     this.entranceToken = 0,
     this.entranceOnMount = true,
+    this.reflowIdentity,
   });
 
   /// Names this grid's stored scroll position, and labels its controller.
@@ -80,6 +190,11 @@ class SelectionGrid extends StatefulWidget {
   /// leaves and comes back to content that has not changed: the tiles arriving
   /// again would say something happened when nothing did.
   final bool entranceOnMount;
+
+  /// Lists under different identities are replacements rather than rearrangements.
+  /// Changing this accepts the new ids immediately instead of animating them from
+  /// the previous list. Search and sort can keep the same identity and still reflow.
+  final Object? reflowIdentity;
 
   @override
   State<SelectionGrid> createState() => _SelectionGridState();
@@ -141,9 +256,6 @@ class _SelectionGridState extends State<SelectionGrid>
   bool _entranceDone = false;
   int _entranceRun = 0;
 
-  static const Duration _entranceDuration = Duration(milliseconds: 900);
-  static const int _waves = 12;
-
   /// Where each tile sat before the list last changed, and the reflow that
   /// carries it to where it sits now. Empty except while one is running.
   late final AnimationController _reflow;
@@ -160,58 +272,10 @@ class _SelectionGridState extends State<SelectionGrid>
   /// the whole grid fades instead.
   static const int _reflowMaxRows = 3;
 
-  /// One per diagonal, built once: the maths depends only on which wave a tile
-  /// is in, so building these per tile per rebuild made a few thousand
-  /// short-lived objects a frame.
-  late final List<_Wave> _entranceWaves = List<_Wave>.generate(_waves, (
-    int wave,
-  ) {
-    final double start = (wave * .06).clamp(0, .66);
-    final CurvedAnimation t = CurvedAnimation(
-      parent: _entrance,
-      curve: Interval(
-        start,
-        (start + .34).clamp(0, 1),
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    // Past the resting size and position, then back to them.
-    return (
-      t: t,
-      scale: TweenSequence<double>(<TweenSequenceItem<double>>[
-        TweenSequenceItem<double>(
-          tween: Tween<double>(
-            begin: .88,
-            end: 1.04,
-          ).chain(CurveTween(curve: Curves.easeOutCubic)),
-          weight: 70,
-        ),
-        TweenSequenceItem<double>(
-          tween: Tween<double>(
-            begin: 1.04,
-            end: 1,
-          ).chain(CurveTween(curve: Curves.easeInOut)),
-          weight: 30,
-        ),
-      ]).animate(t),
-      position: TweenSequence<Offset>(<TweenSequenceItem<Offset>>[
-        TweenSequenceItem<Offset>(
-          tween: Tween<Offset>(
-            begin: const Offset(0, .055),
-            end: const Offset(0, -.012),
-          ).chain(CurveTween(curve: Curves.easeOutCubic)),
-          weight: 70,
-        ),
-        TweenSequenceItem<Offset>(
-          tween: Tween<Offset>(
-            begin: const Offset(0, -.012),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: Curves.easeInOut)),
-          weight: 30,
-        ),
-      ]).animate(t),
-    );
-  });
+  /// One per diagonal, built once and shared with grouped grids elsewhere.
+  late final List<GridEntranceWave> _entranceWaves = buildGridEntranceWaves(
+    _entrance,
+  );
 
   @override
   void initState() {
@@ -219,7 +283,7 @@ class _SelectionGridState extends State<SelectionGrid>
     _scrollController = SmoothWheelScrollController(debugLabel: widget.id);
     _topScrollControlActive = ValueNotifier<bool>(false);
     _bottomScrollControlActive = ValueNotifier<bool>(false);
-    _entrance = AnimationController(vsync: this, duration: _entranceDuration)
+    _entrance = AnimationController(vsync: this, duration: gridEntranceDuration)
       ..addStatusListener((AnimationStatus status) {
         if (status == AnimationStatus.completed && mounted) {
           setState(() => _entranceDone = true);
@@ -243,8 +307,24 @@ class _SelectionGridState extends State<SelectionGrid>
   @override
   void didUpdateWidget(SelectionGrid old) {
     super.didUpdateWidget(old);
-    if (widget.entranceToken != old.entranceToken) _startEntrance();
+    final bool replayEntrance = widget.entranceToken != old.entranceToken;
+    if (replayEntrance) {
+      _startEntrance();
+      _acceptListWithoutReflow();
+      return;
+    }
+    if (widget.reflowIdentity != old.reflowIdentity) {
+      _finishEntrance();
+      _acceptListWithoutReflow();
+      return;
+    }
     _reflowIfListMoved();
+  }
+
+  void _acceptListWithoutReflow() {
+    _reflow.stop();
+    _reflowFrom = const <String, int>{};
+    _shown = _ids();
   }
 
   List<String> _ids() => <String>[
@@ -262,6 +342,7 @@ class _SelectionGridState extends State<SelectionGrid>
     if (listEquals(now, _shown)) return;
     final List<String> was = _shown;
     _shown = now;
+    if (!_entranceDone) _finishEntrance();
     // Nothing to come from, so the tiles simply appear. Any reflow still
     // running belonged to the list that has just gone.
     if (was.isEmpty) {
@@ -275,6 +356,12 @@ class _SelectionGridState extends State<SelectionGrid>
       if (from != null) _reflowJump = max(_reflowJump, (from - i).abs());
     }
     _reflow.forward(from: 0);
+  }
+
+  void _finishEntrance() {
+    _entranceRun++;
+    _entrance.stop();
+    _entranceDone = true;
   }
 
   void _startEntrance() {
@@ -291,7 +378,7 @@ class _SelectionGridState extends State<SelectionGrid>
 
   @override
   void dispose() {
-    for (final _Wave wave in _entranceWaves) {
+    for (final GridEntranceWave wave in _entranceWaves) {
       wave.t.dispose();
     }
     _entrance.dispose();
@@ -359,26 +446,13 @@ class _SelectionGridState extends State<SelectionGrid>
   );
 
   /// A tile arriving: past its resting place, then back to it.
-  Widget _arriving(int index, int columns, Widget tile) {
-    if (_entranceDone) return tile;
-    // Tiles on the same diagonal move together. Capped, or off-screen rows sit
-    // waiting their turn.
-    final wave =
-        _entranceWaves[(((index ~/ columns) + (index % columns))).clamp(
-          0,
-          _waves - 1,
-        )];
-    return FadeTransition(
-      opacity: wave.t,
-      // A fade to zero would drop tiles out of the accessibility tree, which
-      // upsets Windows' bridge.
-      alwaysIncludeSemantics: true,
-      child: ScaleTransition(
-        scale: wave.scale,
-        child: SlideTransition(position: wave.position, child: tile),
-      ),
-    );
-  }
+  Widget _arriving(int index, int columns, Widget tile) => gridEntranceTile(
+    done: _entranceDone,
+    waves: _entranceWaves,
+    index: index,
+    columns: columns,
+    child: tile,
+  );
 
   Widget _scrollControlHoverZone({
     required ValueNotifier<bool> active,
