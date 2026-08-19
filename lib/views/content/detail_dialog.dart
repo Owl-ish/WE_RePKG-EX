@@ -116,7 +116,24 @@ class DetailAction {
 /// Extra caller-owned content inside the normal metadata panel.
 /// Kept optional so ordinary wallpaper details are unchanged.
 typedef DetailExtraBuilder =
-    Widget Function(BuildContext context, Color foreground);
+    Widget Function(BuildContext context, Color foreground, bool focused);
+
+/// Optional layout tuning for specialized detail callers.
+class DetailDialogLayout {
+  const DetailDialogLayout({
+    this.panelWidth,
+    this.maxWidthFactor = .84,
+    this.extraFillsPanel = false,
+    this.extraCanFocus = false,
+    this.focusedPreviewWidth = 96,
+  });
+
+  final double? panelWidth;
+  final double maxWidthFactor;
+  final bool extraFillsPanel;
+  final bool extraCanFocus;
+  final double focusedPreviewWidth;
+}
 
 /// Opens the details for [wallpaper], growing from [origin] when a grid tile
 /// supplies its on-screen rectangle. Other callers open from the window centre.
@@ -130,6 +147,7 @@ Future<void> showWallpaperDetail(
   List<DetailAction>? actions,
   DetailExtraBuilder? extraContentBuilder,
   bool includePreview = true,
+  DetailDialogLayout layout = const DetailDialogLayout(),
 }) async {
   // Measuring and cache warming happen before the route is pushed, so a second
   // double click in that window would open two overlapping dialogs.
@@ -142,6 +160,7 @@ Future<void> showWallpaperDetail(
       actions: actions,
       extraContentBuilder: extraContentBuilder,
       includePreview: includePreview,
+      layout: layout,
     );
   } finally {
     _openingWallpaperDetails.remove(wallpaper.id);
@@ -155,6 +174,7 @@ Future<void> _showWallpaperDetail(
   List<DetailAction>? actions,
   DetailExtraBuilder? extraContentBuilder,
   required bool includePreview,
+  required DetailDialogLayout layout,
 }) async {
   // Measured before opening: doing it inside would resize the dialog
   // mid-animation. Callers that have no useful preview skip the decode entirely.
@@ -197,6 +217,7 @@ Future<void> _showWallpaperDetail(
       actions: actions,
       extraContentBuilder: extraContentBuilder,
       includePreview: includePreview,
+      layout: layout,
     ),
     transitionBuilder: (context, animation, _, child) {
       final Animation<double> dialogAnimation = CurvedAnimation(
@@ -225,6 +246,7 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
     this.actions,
     this.extraContentBuilder,
     this.includePreview = true,
+    this.layout = const DetailDialogLayout(),
   });
 
   final WallpaperInfo wallpaper;
@@ -243,6 +265,8 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
   /// an empty/broken preview placeholder.
   final bool includePreview;
 
+  final DetailDialogLayout layout;
+
   @override
   ConsumerState<WallpaperDetailDialog> createState() =>
       _WallpaperDetailDialogState();
@@ -252,11 +276,24 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
   /// The close button and the membership listener can both fire for one
   /// dismissal, and the second pop would take the route underneath.
   bool _popped = false;
+  bool _extraFocused = false;
+
+  static const Duration _focusDuration = Duration(milliseconds: 220);
 
   void _close() {
     if (_popped || !mounted) return;
     _popped = true;
     Navigator.of(context).pop();
+  }
+
+  void _focusExtra() {
+    if (_extraFocused || !widget.layout.extraCanFocus) return;
+    setState(() => _extraFocused = true);
+  }
+
+  void _restorePreview() {
+    if (!_extraFocused) return;
+    setState(() => _extraFocused = false);
   }
 
   @override
@@ -273,23 +310,36 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
 
     final Size screen = MediaQuery.of(context).size;
 
-    // Preview-backed details keep the existing 340px metadata panel. When a
-    // caller has no meaningful preview, the dialog keeps the same outer size a
-    // square preview would have used and gives all of that space to content.
+    // Specialized callers may widen the metadata panel. The default stays 340px.
+    // Without a preview, all available width goes to content.
     const double standardPanelWidth = 340;
-    final double maxWidth = screen.width * .84;
+    final double requestedPanelWidth =
+        widget.layout.panelWidth ?? standardPanelWidth;
+    final double maxWidth = screen.width * widget.layout.maxWidthFactor;
     final double height = min(screen.height * .72, _paneMaxHeight);
     final double aspect = widget.stats?.aspect ?? 1;
-    double previewWidth = 0;
-    double panelWidth = min(maxWidth, height + standardPanelWidth);
+    double normalPreviewWidth = 0;
+    double normalPanelWidth = min(maxWidth, height + requestedPanelWidth);
     if (widget.includePreview) {
-      previewWidth = height * aspect;
-      if (previewWidth + standardPanelWidth > maxWidth) {
-        previewWidth = maxWidth - standardPanelWidth;
+      normalPanelWidth = min(requestedPanelWidth, maxWidth);
+      normalPreviewWidth = height * aspect;
+      if (normalPreviewWidth + normalPanelWidth > maxWidth) {
+        normalPreviewWidth = max(0, maxWidth - normalPanelWidth);
       }
-      panelWidth = standardPanelWidth;
     }
-    final double width = previewWidth + panelWidth;
+    final double width = normalPreviewWidth + normalPanelWidth;
+
+    // File-focus mode keeps the dialog footprint fixed. The preview gives up
+    // its width to the detail pane instead of making a larger modal.
+    final bool canFocus =
+        widget.layout.extraCanFocus &&
+        widget.includePreview &&
+        normalPreviewWidth > widget.layout.focusedPreviewWidth + 24;
+    final bool extraFocused = canFocus && _extraFocused;
+    final double previewWidth = extraFocused
+        ? min(widget.layout.focusedPreviewWidth, normalPreviewWidth)
+        : normalPreviewWidth;
+    final double panelWidth = width - previewWidth;
 
     // Text follows the panel's target brightness, not the wallpaper's, since
     // the panel corrects every wallpaper towards that target anyway.
@@ -312,11 +362,26 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (widget.includePreview)
-              SizedBox(
+              AnimatedContainer(
+                key: const ValueKey<String>('wallpaper-detail-preview-pane'),
+                duration: _focusDuration,
+                curve: Curves.easeInOutCubic,
                 width: previewWidth,
-                child: _Preview(wallpaper: widget.wallpaper),
+                child: MouseRegion(
+                  cursor: extraFocused
+                      ? SystemMouseCursors.click
+                      : MouseCursor.defer,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: extraFocused ? _restorePreview : null,
+                    child: _Preview(wallpaper: widget.wallpaper),
+                  ),
+                ),
               ),
-            SizedBox(
+            AnimatedContainer(
+              key: const ValueKey<String>('wallpaper-detail-panel-pane'),
+              duration: _focusDuration,
+              curve: Curves.easeInOutCubic,
               width: panelWidth,
               child: _GlassPanel(
                 wallpaper: widget.wallpaper,
@@ -329,6 +394,11 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
                   actions: widget.actions,
                   extraContentBuilder: widget.extraContentBuilder,
                   contentOnly: !widget.includePreview,
+                  extraFillsPanel: widget.layout.extraFillsPanel,
+                  extraCanFocus: canFocus,
+                  extraFocused: extraFocused,
+                  onExtraFocus: _focusExtra,
+                  focusDuration: _focusDuration,
                   onClose: _close,
                 ),
               ),
@@ -347,6 +417,11 @@ class _DetailPanelContent extends StatelessWidget {
     required this.actions,
     required this.extraContentBuilder,
     required this.contentOnly,
+    required this.extraFillsPanel,
+    required this.extraCanFocus,
+    required this.extraFocused,
+    required this.onExtraFocus,
+    required this.focusDuration,
     required this.onClose,
   });
 
@@ -355,6 +430,11 @@ class _DetailPanelContent extends StatelessWidget {
   final List<DetailAction>? actions;
   final DetailExtraBuilder? extraContentBuilder;
   final bool contentOnly;
+  final bool extraFillsPanel;
+  final bool extraCanFocus;
+  final bool extraFocused;
+  final VoidCallback onExtraFocus;
+  final Duration focusDuration;
   final VoidCallback onClose;
 
   Widget _actions() => switch (actions) {
@@ -368,11 +448,29 @@ class _DetailPanelContent extends StatelessWidget {
     foreground: foreground,
   );
 
+  Widget _extra(BuildContext context, DetailExtraBuilder builder) {
+    final Widget child = builder(
+      context,
+      foreground,
+      !extraCanFocus || extraFocused,
+    );
+    if (!extraCanFocus || extraFocused) return child;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        key: const ValueKey<String>('wallpaper-detail-extra-focus-target'),
+        behavior: HitTestBehavior.translucent,
+        onTap: onExtraFocus,
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final DetailExtraBuilder? extra = extraContentBuilder;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 12, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -382,6 +480,9 @@ class _DetailPanelContent extends StatelessWidget {
               onPressed: onClose,
               icon: Icon(Icons.close_rounded, color: foreground),
               tooltip: tr(AppI10n.close),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+              visualDensity: VisualDensity.compact,
             ),
           ),
           if (contentOnly && extra != null)
@@ -407,7 +508,7 @@ class _DetailPanelContent extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
-                        Expanded(child: extra(context, foreground)),
+                        Expanded(child: _extra(context, extra)),
                         const SizedBox(height: 16),
                         _actions(),
                       ],
@@ -416,7 +517,58 @@ class _DetailPanelContent extends StatelessWidget {
                 ],
               ),
             )
-          else ...<Widget>[
+          else if (extraFillsPanel && extra != null) ...<Widget>[
+            Expanded(
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  // Keep enough room for reconcile guidance and its tree affordance.
+                  const double reservedExtraHeight = 140;
+                  const double dividerHeight = 17;
+                  final double metaHeight = max(
+                    0,
+                    constraints.maxHeight - reservedExtraHeight - dividerHeight,
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      ClipRect(
+                        child: AnimatedSize(
+                          duration: focusDuration,
+                          curve: Curves.easeInOutCubic,
+                          alignment: Alignment.topCenter,
+                          child: extraFocused
+                              ? const SizedBox.shrink()
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: <Widget>[
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxHeight: metaHeight,
+                                      ),
+                                      child: SingleChildScrollView(
+                                        child: _meta(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Divider(
+                                      color: foreground.withValues(alpha: .25),
+                                      height: 1,
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      Expanded(child: _extra(context, extra)),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            _actions(),
+          ] else ...<Widget>[
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -430,7 +582,7 @@ class _DetailPanelContent extends StatelessWidget {
                         height: 1,
                       ),
                       const SizedBox(height: 14),
-                      extra(context, foreground),
+                      extra(context, foreground, false),
                     ],
                   ],
                 ),

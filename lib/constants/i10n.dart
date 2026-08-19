@@ -46,6 +46,10 @@ class AppI10n {
   static const String backupFolderLiveMyProjects =
       'backup.folder.liveMyProjects';
   static const String backupFolderBackupRoot = 'backup.folder.backupRoot';
+  static const String backupFolderBackupWorkshop =
+      'backup.folder.backupWorkshop';
+  static const String backupFolderBackupMyProjects =
+      'backup.folder.backupMyProjects';
   static const String backupRefresh = 'backup.refresh';
   static const String backupScanFailed = 'backup.scanFailed';
   static const String backupTilesFailed = 'backup.tilesFailed';
@@ -164,6 +168,59 @@ class AppI10n {
       'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
   static const String backupReconcileAbout = 'backup.reconcileAbout';
+  static const String backupReconcileDuplicateLiveTitle =
+      'backup.reconcileReason.duplicateLiveTitle';
+  static const String backupReconcileDuplicateLiveAbout =
+      'backup.reconcileReason.duplicateLiveAbout';
+  static const String backupReconcileConflictingBackupsTitle =
+      'backup.reconcileReason.conflictingBackupsTitle';
+  static const String backupReconcileConflictingBackupsAbout =
+      'backup.reconcileReason.conflictingBackupsAbout';
+  static const String backupReconcileComparisonUnavailableTitle =
+      'backup.reconcileReason.comparisonUnavailableTitle';
+  static const String backupReconcileComparisonUnavailableAbout =
+      'backup.reconcileReason.comparisonUnavailableAbout';
+  static const String backupTileUpdate = 'backup.tile.update';
+  static const String backupTileSync = 'backup.tile.sync';
+  static const String backupTileUpdateAbout = 'backup.tile.updateAbout';
+  static const String backupTileSyncAbout = 'backup.tile.syncAbout';
+  static const String backupTileDuplicateLive = 'backup.tile.duplicateLive';
+  static const String backupTileBackupDifferences =
+      'backup.tile.backupDifferences';
+  static const String backupTileBackupsConflict = 'backup.tile.backupsConflict';
+  static const String backupTileComparisonUnavailable =
+      'backup.tile.comparisonUnavailable';
+  static const String backupTileReconcile = 'backup.tile.reconcile';
+  static const String backupDetailDetectedCopies =
+      'backup.detail.detectedCopies';
+  static const String backupDetailWorkshopLive = 'backup.detail.workshopLive';
+  static const String backupDetailMyProjectsLive =
+      'backup.detail.myProjectsLive';
+  static const String backupDetailComparisonFailed =
+      'backup.detail.comparisonFailed';
+  static const String backupDetailRescanAdvice = 'backup.detail.rescanAdvice';
+  static const String backupDetailDetectedDifferences =
+      'backup.detail.detectedDifferences';
+  static const String backupDetailExpandDifferences =
+      'backup.detail.expandDifferences';
+  static const String backupDetailDifferenceUnavailable =
+      'backup.detail.differenceUnavailable';
+  static const String backupDetailDifferentSize = 'backup.detail.differentSize';
+  static const String backupDetailOnlyWorkshop = 'backup.detail.onlyWorkshop';
+  static const String backupDetailOnlyMyProjects =
+      'backup.detail.onlyMyProjects';
+  static const String backupDetailUpdateToLive = 'backup.detail.updateToLive';
+  static const String backupDetailSyncWillMove = 'backup.detail.syncWillMove';
+  static const String backupDetailSyncWillKeep = 'backup.detail.syncWillKeep';
+  static const String backupDetailSyncWillRemove =
+      'backup.detail.syncWillRemove';
+  static const String backupAboutSynced = 'backup.about.synced';
+  static const String backupAboutNotBackedUp = 'backup.about.notBackedUp';
+  static const String backupAboutVanished = 'backup.about.vanished';
+  static const String backupAboutUpdateAvailable =
+      'backup.about.updateAvailable';
+  static const String backupAboutUpdateDismissed =
+      'backup.about.updateDismissed';
   static const String backupStateSynced = 'backup.state.synced';
   static const String backupStateNotBackedUp = 'backup.state.notBackedUp';
   static const String backupStateVanished = 'backup.state.vanished';
@@ -188,6 +245,10 @@ class AppI10n {
   static const String backupActionRestore = 'backup.action.restore';
   static const String backupActionRecycle = 'backup.action.recycle';
   static const String backupActionRecycleAll = 'backup.action.recycleAll';
+  static const String backupActionBackUpAll = 'backup.action.backUpAll';
+  static const String backupActionUpdateAll = 'backup.action.updateAll';
+  static const String backupActionRestoreAll = 'backup.action.restoreAll';
+  static const String backupActionShowAgainAll = 'backup.action.showAgainAll';
   static const String backupActionShowAgain = 'backup.action.showAgain';
   static const String backupActionBackUpTitle = 'backup.action.backUpTitle';
   static const String backupActionUpdateTitle = 'backup.action.updateTitle';

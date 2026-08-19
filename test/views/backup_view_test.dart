@@ -31,9 +31,12 @@ import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/views/states/no_results.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
+import 'package:we_repkg/widgets/custom_input.dart';
 import 'package:we_repkg/widgets/folder_input.dart';
+import 'package:we_repkg/widgets/file_tree_panel.dart';
+import 'package:we_repkg/widgets/issue_note.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
-import 'package:we_repkg/widgets/selection_tint.dart';
+import 'package:we_repkg/widgets/tile_overlays.dart';
 
 class StubPicker extends FileSelectorPlatform {
   StubPicker(this.answer);
@@ -51,20 +54,25 @@ CardFace faceOf(String title) =>
 
 BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
+  Map<BackupCard, BackupUpdatePlan> updates =
+      const <BackupCard, BackupUpdatePlan>{},
+  Map<String, ({bool live, bool backup})>? presence,
   Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk =
       const <String, ({bool live, bool backup, WallpaperJunkKind kind})>{},
   List<ReconcileEntry> reconcile = const <ReconcileEntry>[],
   Set<BackupFolder> missing = const <BackupFolder>{},
 }) => (
   cards: cards,
-  updates: const <BackupCard, BackupUpdatePlan>{},
-  presence: <String, ({bool live, bool backup})>{
-    for (final MapEntry<BackupCard, BackupState> entry in cards.entries)
-      entry.key.id: (
-        live: entry.value != BackupState.vanished,
-        backup: entry.value != BackupState.notBackedUp,
-      ),
-  },
+  updates: updates,
+  presence:
+      presence ??
+      <String, ({bool live, bool backup})>{
+        for (final MapEntry<BackupCard, BackupState> entry in cards.entries)
+          entry.key.id: (
+            live: entry.value != BackupState.vanished,
+            backup: entry.value != BackupState.notBackedUp,
+          ),
+      },
   junk: junk,
   reconcile: reconcile,
   acfRead: true,
@@ -231,6 +239,42 @@ void main() {
       expect(find.text(AppI10n.backupReadingDetailsCount), findsNothing);
       expect(barValue(tester), isNull);
     });
+  });
+
+  testWidgets('read-only paths stay compact and scroll horizontally', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: ReadOnlyPathBox(
+              path:
+                  r'Backup Workshop\very\long\nested\wallpaper\path\1234567890',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byType(ReadOnlyPathBox)).height, 28);
+    final SelectableText pathText = tester.widget<SelectableText>(
+      find.descendant(
+        of: find.byType(ReadOnlyPathBox),
+        matching: find.byType(SelectableText),
+      ),
+    );
+    expect(pathText.style?.fontSize, 12);
+    final SingleChildScrollView scroller = tester.widget(
+      find.descendant(
+        of: find.byType(ReadOnlyPathBox),
+        matching: find.byType(SingleChildScrollView),
+      ),
+    );
+    expect(scroller.scrollDirection, Axis.horizontal);
+    expect(find.byType(Scrollbar), findsOneWidget);
   });
 
   // The segmented control keys its children from 1 while the enum indexes from
@@ -617,18 +661,32 @@ void main() {
         // scrolling, so global first/second widget positions are not stable.
         final Finder groupHeader = find.ancestor(
           of: issueNote,
-          matching: find.byType(SliverToBoxAdapter),
+          matching: find.byType(SliverPersistentHeader),
         );
         expect(groupHeader, findsOneWidget);
+        expect(
+          tester.widget<SliverPersistentHeader>(groupHeader).pinned,
+          isTrue,
+        );
+        expect(
+          find.ancestor(
+            of: groupHeader,
+            matching: find.byType(SliverMainAxisGroup),
+          ),
+          findsOneWidget,
+        );
 
+        final Finder actionHost = find.byKey(
+          ValueKey<String>('backup-junk-action-${kind.name}'),
+        );
         final Finder actionGlow = find.descendant(
-          of: groupHeader,
+          of: actionHost,
           matching: find.byKey(
             const ValueKey<String>('backup-all-action-glow'),
           ),
         );
         final Finder actionLabel = find.descendant(
-          of: groupHeader,
+          of: actionHost,
           matching: find.text(AppI10n.backupActionRecycleAll),
         );
         final Finder noteTextFinder = find.descendant(
@@ -650,8 +708,9 @@ void main() {
           lessThan(tester.getTopLeft(issueNote).dy),
         );
         expect(
-          tester.getBottomLeft(issueNote).dy,
-          lessThan(tester.getTopLeft(tileFinder).dy),
+          tester.getRect(junkGrid).overlaps(tester.getRect(issueNote)),
+          isTrue,
+          reason: 'the sticky header keeps its own callout visible',
         );
       }
 
@@ -712,15 +771,19 @@ void main() {
         final Finder junkGrid = find.byKey(
           const ValueKey<String>('backup-junk-grid'),
         );
-        final Finder issueNote = find.byKey(
+        final Finder issueNoteHost = find.byKey(
           const ValueKey<String>('backup-junk-note-empty'),
         );
+        final Finder issueNote = find.descendant(
+          of: issueNoteHost,
+          matching: find.byType(IssueNote),
+        );
         final Finder groupHeader = find.ancestor(
-          of: issueNote,
-          matching: find.byType(SliverToBoxAdapter),
+          of: issueNoteHost,
+          matching: find.byType(SliverPersistentHeader),
         );
         final Finder actionGlow = find.descendant(
-          of: groupHeader,
+          of: find.byKey(const ValueKey<String>('backup-junk-action-empty')),
           matching: find.byKey(
             const ValueKey<String>('backup-all-action-glow'),
           ),
@@ -736,6 +799,7 @@ void main() {
 
         expect(junkGrid, findsOneWidget);
         expect(groupHeader, findsOneWidget);
+        expect(issueNoteHost, findsOneWidget);
         expect(issueNote, findsOneWidget);
         expect(actionGlow, findsOneWidget);
         expect(actionMaterial, findsOneWidget);
@@ -787,7 +851,7 @@ void main() {
       },
     );
 
-    test('Empty/Junk labels stay compact in both translations', () {
+    test('Backup action labels stay compact in both translations', () {
       final Map<String, dynamic> english =
           jsonDecode(File('assets/translations/en-US.json').readAsStringSync())
               as Map<String, dynamic>;
@@ -796,12 +860,52 @@ void main() {
               as Map<String, dynamic>;
 
       expect(english['backup']['junk']['emptyTitle'], 'Empty Folders');
+      expect(english['backup']['state']['updateAvailable'], 'Update / Sync');
+      expect(english['backup']['action']['update'], 'Update / Sync');
+      expect(english['backup']['action']['showAgain'], 'Undismiss');
       expect(
         english['backup']['action']['recycleAll'],
         'Recycle Bin All ({count})',
       );
+      expect(english['backup']['action']['backUpAll'], 'Backup All ({count})');
+      expect(
+        english['backup']['action']['updateAll'],
+        'Update / Sync All ({count})',
+      );
+      expect(
+        english['backup']['action']['restoreAll'],
+        'Restore All ({count})',
+      );
+      expect(
+        english['backup']['action']['showAgainAll'],
+        'Undismiss All ({count})',
+      );
       expect(chinese['backup']['junk']['emptyTitle'], '空文件夹');
+      expect(chinese['backup']['state']['updateAvailable'], '更新 / 同步');
+      expect(chinese['backup']['action']['showAgain'], '取消忽略');
       expect(chinese['backup']['action']['recycleAll'], '全部移到回收站（{count}）');
+      expect(
+        english['backup']['reconcileReason']['duplicateLiveTitle'],
+        'Duplicate live copies',
+      );
+      expect(
+        english['backup']['reconcileReason']['conflictingBackupsTitle'],
+        'Conflicting backup copies',
+      );
+      expect(english['backup']['tile']['reconcile'], 'Reconcile');
+      expect(
+        english['backup']['detail']['syncWillMove'],
+        'Sync - Will move this wallpaper folder',
+      );
+      expect(
+        english['backup']['detail']['updateToLive'],
+        'Updates this backup to mirror the live wallpaper location.',
+      );
+      expect(
+        english['backup']['about']['vanished'],
+        'These wallpapers exist only in backup. No live copy is found in the libraries.',
+      );
+      expect(chinese['backup']['tile']['reconcile'], '需要处理');
     });
 
     testWidgets(
@@ -887,6 +991,29 @@ void main() {
             .evaluate()
             .isNotEmpty;
         final bool hasTree = treeFinder.evaluate().isNotEmpty;
+        final bool usesSharedGroupHeader =
+            hasTree &&
+            find
+                .descendant(
+                  of: treeFinder,
+                  matching: find.byType(FileTreeGroupHeader),
+                )
+                .evaluate()
+                .isNotEmpty;
+        final Finder rootHeader = find.descendant(
+          of: treeFinder,
+          matching: find.byType(FileTreeGroupHeader),
+        );
+        final Finder rootFolderIcon = find.descendant(
+          of: rootHeader,
+          matching: find.byIcon(Icons.folder_open_rounded),
+        );
+        final Color? rootFolderColour = rootFolderIcon.evaluate().isEmpty
+            ? null
+            : tester.widget<Icon>(rootFolderIcon.first).color;
+        final Color workshopColour = Theme.of(
+          tester.element(treeFinder),
+        ).status.note;
         final bool showedNestedFolder =
             hasTree && await waitFor(find.text('blobssm40'));
         final bool showedFile =
@@ -921,11 +1048,219 @@ void main() {
         expect(usedPlainAlert, isFalse);
         expect(hasExplanation, isTrue);
         expect(hasTree, isTrue);
+        expect(usesSharedGroupHeader, isTrue);
+        expect(rootFolderColour, workshopColour);
         expect(showedNestedFolder, isTrue);
         expect(showedFile, isTrue);
         expect(hasVerticalTreeScroll, isTrue);
         expect(hasHorizontalTreeScroll, isTrue);
         expect(treeScrollbarCount, 2);
+      },
+    );
+
+    testWidgets(
+      'reconcile details focus the file pane without resizing the dialog',
+      (tester) async {
+        final Directory folder = Directory.systemTemp.createTempSync(
+          'we_repkg_reconcile_detail',
+        );
+        addTearDown(() {
+          if (folder.existsSync()) folder.deleteSync(recursive: true);
+        });
+        File(
+          '${folder.path}${Platform.pathSeparator}placeholder.txt',
+        ).writeAsStringSync('different');
+
+        const ReconcileTile tile = (
+          entry: ReconcileEntry(
+            name: 'conflict',
+            reason: BackupReconcileReason.conflictingBackupCopies,
+            states: <WallpaperLibrary, BackupState>{
+              WallpaperLibrary.workshop: BackupState.synced,
+            },
+            backupWorkshop: true,
+            backupMyProjects: true,
+            backupDifference: BackupCopyDifference(
+              differentSize: <String>['project.json'],
+              onlyWorkshop: <String>['effects\\a.json'],
+              onlyMyProjects: <String>['materials\\b.json'],
+            ),
+          ),
+          face: null,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: Scaffold(
+                body: Center(
+                  child: ReconcileTileView(
+                    width: 180,
+                    tile: tile,
+                    folders: (live: folder.path, backup: null),
+                    onTap: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final Finder tileFinder = find.byType(ReconcileTileView);
+        await tester.tap(tileFinder);
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.tap(tileFinder);
+
+        Future<bool> waitFor(Finder finder) async {
+          for (int attempt = 0; attempt < 40; attempt++) {
+            if (finder.evaluate().isNotEmpty) return true;
+            await tester.runAsync(() async {
+              await Future<void>.delayed(const Duration(milliseconds: 25));
+            });
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          return finder.evaluate().isNotEmpty;
+        }
+
+        final Finder focusTarget = find.byKey(
+          const ValueKey<String>('wallpaper-detail-extra-focus-target'),
+        );
+        final Finder previewPane = find.byKey(
+          const ValueKey<String>('wallpaper-detail-preview-pane'),
+        );
+        final Finder panelPane = find.byKey(
+          const ValueKey<String>('wallpaper-detail-panel-pane'),
+        );
+        expect(await waitFor(focusTarget), isTrue);
+        final Finder expandPrompt = find.byKey(
+          const ValueKey<String>('backup-reconcile-expand-differences'),
+        );
+        expect(expandPrompt, findsOneWidget);
+        expect(
+          find.text(AppI10n.backupDetailExpandDifferences),
+          findsOneWidget,
+        );
+        expect(tester.getSize(expandPrompt).height, greaterThanOrEqualTo(48));
+        expect(
+          find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
+          findsNothing,
+        );
+
+        final double previewBefore = tester.getSize(previewPane).width;
+        final double panelBefore = tester.getSize(panelPane).width;
+        final double totalBefore = previewBefore + panelBefore;
+
+        await tester.tap(focusTarget);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 220));
+
+        final double previewFocused = tester.getSize(previewPane).width;
+        final double panelFocused = tester.getSize(panelPane).width;
+        expect(
+          find.byKey(
+            const ValueKey<String>('backup-reconcile-expand-differences'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
+          findsOneWidget,
+        );
+        expect(previewFocused, lessThan(previewBefore));
+        expect(previewFocused, lessThanOrEqualTo(100));
+        expect(panelFocused, greaterThan(panelBefore));
+        expect(previewFocused + panelFocused, closeTo(totalBefore, .5));
+
+        await tester.tap(previewPane);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 220));
+
+        expect(tester.getSize(previewPane).width, closeTo(previewBefore, .5));
+        expect(tester.getSize(panelPane).width, closeTo(panelBefore, .5));
+      },
+    );
+
+    testWidgets(
+      'small reconcile differences stay expanded without focus mode',
+      (tester) async {
+        final Directory folder = Directory.systemTemp.createTempSync(
+          'we_repkg_reconcile_small_detail',
+        );
+        addTearDown(() {
+          if (folder.existsSync()) folder.deleteSync(recursive: true);
+        });
+        File(
+          '${folder.path}${Platform.pathSeparator}placeholder.txt',
+        ).writeAsStringSync('different');
+
+        const ReconcileTile tile = (
+          entry: ReconcileEntry(
+            name: 'small-conflict',
+            reason: BackupReconcileReason.conflictingBackupCopies,
+            states: <WallpaperLibrary, BackupState>{
+              WallpaperLibrary.workshop: BackupState.synced,
+            },
+            backupWorkshop: true,
+            backupMyProjects: true,
+            backupDifference: BackupCopyDifference(
+              differentSize: <String>['project.json'],
+            ),
+          ),
+          face: null,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: Scaffold(
+                body: Center(
+                  child: ReconcileTileView(
+                    width: 180,
+                    tile: tile,
+                    folders: (live: folder.path, backup: null),
+                    onTap: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final Finder tileFinder = find.byType(ReconcileTileView);
+        await tester.tap(tileFinder);
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.tap(tileFinder);
+        for (int attempt = 0; attempt < 40; attempt++) {
+          if (find
+              .byKey(const ValueKey<String>('backup-reconcile-detail-scroll'))
+              .evaluate()
+              .isNotEmpty) {
+            break;
+          }
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 25));
+          });
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        expect(
+          find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>('backup-reconcile-expand-differences'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>('wallpaper-detail-extra-focus-target'),
+          ),
+          findsNothing,
+        );
       },
     );
 
@@ -1009,6 +1344,18 @@ void main() {
       }
 
       Set<String> selected() => container.read(backupSelectionProvider);
+
+      Offset emptyGridPoint(WidgetTester tester) {
+        final Rect grid = tester.getRect(find.byType(SelectionGrid));
+        final Rect lastTile = tester.getRect(find.byType(BackupTileView).last);
+        final Offset point = Offset(grid.left + 40, lastTile.bottom + 20);
+        expect(
+          grid.contains(point),
+          isTrue,
+          reason: 'the selection test needs empty grid space below the tiles',
+        );
+        return point;
+      }
 
       // Clicking a tile has to reach this grid's own selection, not the extract
       // tab's, or the two would tick each other's wallpapers.
@@ -1106,21 +1453,21 @@ void main() {
 
         // Below the four tiles, which sit along the top of the viewport, and
         // off to the left of the scroll-to-bottom zone.
-        await tester.tapAt(const Offset(120, 520));
+        await tester.tapAt(emptyGridPoint(tester));
         await tester.pump(kDoubleTapTimeout);
 
         expect(selected(), isEmpty);
       });
 
-      // Same button, same empty spot: whether the mouse twitched past the drag
-      // threshold used to decide whether the selection survived.
+      // Empty-space clearing must be the same whether the pointer stays a click
+      // or crosses the drag threshold.
       testWidgets('a drag over empty space clears the selection too', (
         tester,
       ) async {
         await pump(tester);
         await click(tester, 0);
 
-        await tester.dragFrom(const Offset(120, 520), const Offset(60, 40));
+        await tester.dragFrom(emptyGridPoint(tester), const Offset(60, 40));
         await tester.pump(kDoubleTapTimeout);
 
         expect(selected(), isEmpty);
@@ -1132,15 +1479,15 @@ void main() {
         await pump(tester);
         await click(tester, 3);
 
-        await tester.tapAt(const Offset(120, 520));
+        await tester.tapAt(emptyGridPoint(tester));
         await tester.pump(kDoubleTapTimeout);
         await click(tester, 1, modifier: LogicalKeyboardKey.shiftLeft);
 
         expect(selected(), {'workshop/a', 'workshop/b'});
       });
 
-      // The extract grid has always carried its tiles to their new cells when
-      // the results move. Sharing that means the backup grid does too.
+      // Backup shares the grid reflow behavior, so a sort change should animate
+      // existing tiles to their new cells rather than snapping them.
       testWidgets('a re-order slides the tiles rather than snapping them', (
         tester,
       ) async {
@@ -1273,7 +1620,7 @@ void main() {
         tiles = named(<String>['a', 'b', 'd']);
         container.invalidate(backupTilesProvider);
         container.invalidate(backupVisibleTilesProvider);
-        await tester.pump();
+        await settle(tester);
 
         expect(selected(), {'workshop/a'});
       });
@@ -1288,6 +1635,9 @@ void main() {
         WidgetTester tester, {
         List<BackupTile> tiles = const <BackupTile>[],
         List<ReconcileTile> reconcile = const <ReconcileTile>[],
+        Map<BackupCard, BackupUpdatePlan> updates =
+            const <BackupCard, BackupUpdatePlan>{},
+        Map<String, ({bool live, bool backup})>? presence,
         bool entrance = false,
       }) async {
         container = ProviderContainer(
@@ -1299,6 +1649,8 @@ void main() {
                   cards: <BackupCard, BackupState>{
                     for (final BackupTile tile in tiles) tile.card: tile.state,
                   },
+                  updates: updates,
+                  presence: presence,
                   reconcile: <ReconcileEntry>[
                     for (final ReconcileTile tile in reconcile) tile.entry,
                   ],
@@ -1345,7 +1697,7 @@ void main() {
         ),
       ];
 
-      ReconcileTile orphan() => (
+      ReconcileTile conflict() => (
         entry: const ReconcileEntry(
           name: 'muddled',
           reason: BackupReconcileReason.conflictingBackupCopies,
@@ -1353,7 +1705,26 @@ void main() {
             WallpaperLibrary.myProjects: BackupState.synced,
           },
           backupWorkshop: true,
-          backupMyProjects: false,
+          backupMyProjects: true,
+          backupDifference: BackupCopyDifference(
+            differentSize: <String>['project.json'],
+            onlyWorkshop: <String>['workshop-only.txt'],
+            onlyMyProjects: <String>['myprojects-only.txt'],
+          ),
+        ),
+        face: null,
+      );
+
+      ReconcileTile duplicateLive() => (
+        entry: const ReconcileEntry(
+          name: 'double-live',
+          reason: BackupReconcileReason.duplicateLiveCopies,
+          states: <WallpaperLibrary, BackupState>{
+            WallpaperLibrary.workshop: BackupState.synced,
+            WallpaperLibrary.myProjects: BackupState.synced,
+          },
+          backupWorkshop: true,
+          backupMyProjects: true,
         ),
         face: null,
       );
@@ -1725,10 +2096,15 @@ void main() {
 
         expect(find.byType(BackupTileView), findsOneWidget);
         expect(find.text('gone'), findsOneWidget);
+        expect(find.text(AppI10n.backupAboutVanished), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('backup-state-note-vanished')),
+          findsOneWidget,
+        );
       });
 
-      // Now that a pill cannot be switched off, one that holds nothing while it
-      // holds the grid used to stay lit and clickable and do nothing at all.
+      // A selected state with no remaining cards is display state, not an
+      // actionable pill; clicking its zero-count control must stay disabled.
       testWidgets('a pill holding nothing is not a live control', (
         tester,
       ) async {
@@ -1765,30 +2141,121 @@ void main() {
         expect(find.text('fresh'), findsOneWidget);
       });
 
-      // Not a filter beside the others: a question about a name rather than a
-      // state of a card, so it takes the grid over.
-      testWidgets('the reconcile pill swaps the grid over', (tester) async {
+      testWidgets('Update / Sync tiles show update, sync, or both', (
+        tester,
+      ) async {
+        const BackupCard updateCard = BackupCard(
+          WallpaperLibrary.workshop,
+          'content-update',
+        );
+        const BackupCard syncCard = BackupCard(
+          WallpaperLibrary.workshop,
+          'placement-sync',
+        );
+        const BackupCard bothCard = BackupCard(
+          WallpaperLibrary.myProjects,
+          'content-and-placement',
+        );
+        await pumpPills(
+          tester,
+          tiles: const <BackupTile>[
+            (card: updateCard, state: BackupState.updateAvailable, face: null),
+            (card: syncCard, state: BackupState.updateAvailable, face: null),
+            (card: bothCard, state: BackupState.updateAvailable, face: null),
+          ],
+          updates: <BackupCard, BackupUpdatePlan>{
+            updateCard: const BackupUpdatePlan(updateContent: true),
+            syncCard: const BackupUpdatePlan(
+              sync: BackupSyncPlan(
+                kind: BackupSyncKind.relocate,
+                from: WallpaperLibrary.myProjects,
+                to: WallpaperLibrary.workshop,
+              ),
+            ),
+            bothCard: const BackupUpdatePlan(
+              updateContent: true,
+              sync: BackupSyncPlan(
+                kind: BackupSyncKind.relocate,
+                from: WallpaperLibrary.workshop,
+                to: WallpaperLibrary.myProjects,
+              ),
+            ),
+          },
+        );
+
+        expect(find.byType(TileBadgeStrip), findsNWidgets(3));
+        expect(find.text(AppI10n.backupTileUpdate), findsNWidgets(2));
+        expect(find.text(AppI10n.backupTileSync), findsNWidgets(2));
+      });
+
+      // Reconcile groups stay separate even when the second group is off-screen.
+      testWidgets('the reconcile pill groups tiles by reason', (tester) async {
         await pumpPills(
           tester,
           tiles: three(),
-          reconcile: <ReconcileTile>[orphan()],
+          reconcile: <ReconcileTile>[conflict(), duplicateLive()],
         );
 
-        expect(
-          find.text(AppI10n.backupReconcileAbout),
-          findsNothing,
-          reason: 'it belongs to the reconcile grid, not to the tab',
+        await tapPill(tester, AppI10n.backupReconcile, 2);
+
+        final Finder reconcileGrid = find.byKey(
+          const ValueKey<String>('backup-reconcile-grid'),
         );
-
-        await tapPill(tester, AppI10n.backupReconcile, 1);
-
-        expect(find.byType(ReconcileTileView), findsOneWidget);
+        expect(reconcileGrid, findsOneWidget);
         expect(find.byType(BackupTileView), findsNothing);
+        expect(find.text('double-live'), findsOneWidget);
+        expect(
+          find.textContaining(AppI10n.backupReconcileDuplicateLiveTitle),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>('backup-reconcile-note-duplicateLiveCopies'),
+          ),
+          findsOneWidget,
+        );
+        final Finder duplicateHeader = find.ancestor(
+          of: find.byKey(
+            const ValueKey<String>('backup-reconcile-note-duplicateLiveCopies'),
+          ),
+          matching: find.byType(SliverPersistentHeader),
+        );
+        expect(duplicateHeader, findsOneWidget);
+        expect(
+          tester.widget<SliverPersistentHeader>(duplicateHeader).pinned,
+          isTrue,
+        );
+        expect(
+          find.ancestor(
+            of: duplicateHeader,
+            matching: find.byType(SliverMainAxisGroup),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.drag(reconcileGrid, const Offset(0, -600));
+        await settle(tester);
+
         expect(find.text('muddled'), findsOneWidget);
-        expect(arrivingTiles(), findsNothing);
-        // "Needs reconciling" is the one pill whose name does not say what it
-        // wants from the user, and the tab is where that has to be answered.
-        expect(find.text(AppI10n.backupReconcileAbout), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey<String>('reconcile/muddled')),
+            matching: find.byType(TileBadgeStrip),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining(AppI10n.backupReconcileConflictingBackupsTitle),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            const ValueKey<String>(
+              'backup-reconcile-note-conflictingBackupCopies',
+            ),
+          ),
+          findsOneWidget,
+        );
       });
 
       // They all read as off while it has the grid, so lighting one has to mean
@@ -1799,7 +2266,7 @@ void main() {
         await pumpPills(
           tester,
           tiles: three(),
-          reconcile: <ReconcileTile>[orphan()],
+          reconcile: <ReconcileTile>[conflict()],
         );
         await tapPill(tester, AppI10n.backupReconcile, 1);
 
@@ -1844,7 +2311,7 @@ void main() {
         await pumpPills(
           tester,
           tiles: three(),
-          reconcile: <ReconcileTile>[orphan()],
+          reconcile: <ReconcileTile>[conflict()],
         );
         await tapPill(tester, AppI10n.backupReconcile, 1);
 

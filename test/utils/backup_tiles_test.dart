@@ -223,7 +223,7 @@ void main() {
           WallpaperLibrary.myProjects: BackupState.synced,
         },
         backupWorkshop: true,
-        backupMyProjects: false,
+        backupMyProjects: true,
       ),
       face: face,
     );

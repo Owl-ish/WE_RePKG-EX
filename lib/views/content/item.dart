@@ -14,7 +14,7 @@ import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/hover_hint.dart';
 import 'package:we_repkg/widgets/image_view.dart';
-import 'package:we_repkg/widgets/selection_tint.dart';
+import 'package:we_repkg/widgets/tile_overlays.dart';
 import 'package:we_repkg/views/content/title.dart';
 
 class ImageItem extends ConsumerStatefulWidget {
