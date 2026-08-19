@@ -17,6 +17,7 @@ import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
 import 'package:we_repkg/views/backup/integrity_repair_action.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
+import 'package:we_repkg/widgets/file_tree_panel.dart';
 
 IntegrityFinding finding(
   IntegrityRoot root,
@@ -81,6 +82,21 @@ void main() {
     expect(find.text(AppI10n.integrityClean), findsOneWidget);
   });
 
+  testWidgets('findings use the shared file-tree styling', (tester) async {
+    await show(tester, (
+      findings: <IntegrityFinding>[
+        finding(IntegrityRoot.liveWorkshop, 'aaa', IntegrityVerdict.mediaOnly),
+      ],
+      scanned: const <IntegrityRoot, int>{IntegrityRoot.liveWorkshop: 1},
+      missing: const <IntegrityRoot>{},
+    ));
+
+    expect(find.byType(FileTreeSurface), findsOneWidget);
+    expect(find.byType(FileTreeGroupHeader), findsOneWidget);
+    expect(find.byType(FileTreeRow), findsOneWidget);
+    expect(find.byType(Scrollbar), findsOneWidget);
+  });
+
   testWidgets('a finding is named and sized', (tester) async {
     await show(tester, (
       findings: <IntegrityFinding>[
@@ -124,7 +140,7 @@ void main() {
       find.ancestor(of: find.text('aaa'), matching: find.byType(InkWell)),
       findsNothing,
     );
-    expect(find.byIcon(Icons.folder_open_rounded), findsOneWidget);
+    expect(find.byTooltip(AppI10n.integrityOpenFolder), findsOneWidget);
   });
 
   testWidgets('the summary explanation is as readable as the advice', (
@@ -187,8 +203,14 @@ void main() {
       missing: const <IntegrityRoot>{},
     ));
 
-    expect(find.text(AppI10n.integrityRootLiveWorkshop), findsOneWidget);
-    expect(find.text(AppI10n.integrityRootBackupWorkshop), findsOneWidget);
+    expect(
+      find.textContaining(AppI10n.integrityRootLiveWorkshop),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(AppI10n.integrityRootBackupWorkshop),
+      findsOneWidget,
+    );
     expect(find.text('bbb'), findsOneWidget);
   });
 
@@ -495,7 +517,7 @@ void main() {
     expect(find.text(AppI10n.integrityResolvedAdvice), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
     expect(find.byIcon(Icons.build_outlined), findsNothing);
-    expect(find.byIcon(Icons.folder_open_rounded), findsNothing);
+    expect(find.byTooltip(AppI10n.integrityOpenFolder), findsNothing);
   });
 
   testWidgets('group Resolve targets only its displayed library', (
@@ -611,7 +633,7 @@ void main() {
     final Finder advice = find.text(AppI10n.integrityAdviceMediaOnly);
     expect(advice, findsOneWidget);
     final Rect heading = tester.getRect(
-      find.text(AppI10n.integrityRootLiveWorkshop),
+      find.textContaining(AppI10n.integrityRootLiveWorkshop),
     );
     final Rect note = tester.getRect(advice);
     expect(note.bottom, lessThanOrEqualTo(heading.top));

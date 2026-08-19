@@ -13,6 +13,7 @@ import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/issue_note.dart';
+import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/widgets/scan_progress.dart';
 
 /// Every repair on the tab wears this and says "resolve". What it will do is
@@ -34,6 +35,13 @@ const Map<IntegrityRoot, String> _rootLabels = <IntegrityRoot, String>{
   IntegrityRoot.liveMyProjects: AppI10n.integrityRootLiveMyProjects,
   IntegrityRoot.backupWorkshop: AppI10n.integrityRootBackupWorkshop,
   IntegrityRoot.backupMyProjects: AppI10n.integrityRootBackupMyProjects,
+};
+
+FileTreeLibrary _fileTreeLibraryForRoot(IntegrityRoot root) => switch (root) {
+  IntegrityRoot.liveWorkshop || IntegrityRoot.backupWorkshop =>
+    FileTreeLibrary.workshop,
+  IntegrityRoot.liveMyProjects || IntegrityRoot.backupMyProjects =>
+    FileTreeLibrary.myProjects,
 };
 
 /// How one concern is drawn and what it tells the user to do about it.
@@ -441,7 +449,7 @@ class _MissingRoots extends StatelessWidget {
 }
 
 /// The one concern the pills have picked, grouped by library.
-class _Findings extends StatelessWidget {
+class _Findings extends StatefulWidget {
   const _Findings({
     super.key,
     required this.findings,
@@ -456,48 +464,65 @@ class _Findings extends StatelessWidget {
   final Map<IntegrityFinding, IntegrityResolution> resolutions;
 
   @override
+  State<_Findings> createState() => _FindingsState();
+}
+
+class _FindingsState extends State<_Findings> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final Map<IntegrityRoot, List<IntegrityFinding>> perRoot =
         <IntegrityRoot, List<IntegrityFinding>>{};
-    for (final IntegrityFinding finding in findings) {
+    for (final IntegrityFinding finding in widget.findings) {
       perRoot
           .putIfAbsent(finding.root, () => <IntegrityFinding>[])
           .add(finding);
     }
-    return ListView.builder(
-      itemCount: findings.length,
-      itemBuilder: (BuildContext context, int row) {
-        final int index = row;
-        final IntegrityFinding finding = findings[index];
-        final IntegrityFinding? previous = index == 0
-            ? null
-            : findings[index - 1];
-        final bool newGroup = previous == null || previous.root != finding.root;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            if (newGroup)
-              Padding(
-                padding: EdgeInsets.only(
-                  top: index == 0 ? 0 : LayoutNums.sectionGap,
-                  bottom: LayoutNums.smallGap,
+    final Color foreground = Theme.of(context).colorScheme.onSurface;
+    return FileTreeSurface(
+      foreground: foreground,
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true,
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          itemCount: widget.findings.length,
+          itemBuilder: (BuildContext context, int index) {
+            final IntegrityFinding finding = widget.findings[index];
+            final IntegrityFinding? previous = index == 0
+                ? null
+                : widget.findings[index - 1];
+            final bool newGroup =
+                previous == null || previous.root != finding.root;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (newGroup)
+                  _GroupHeader(
+                    root: finding.root,
+                    findings: perRoot[finding.root]!,
+                    look: widget.look,
+                    onRepair: widget.onRepair,
+                  ),
+                _FindingRow(
+                  finding: finding,
+                  look: widget.look,
+                  onRepair: widget.onRepair,
+                  resolution: widget.resolutions[finding],
                 ),
-                child: _GroupHeader(
-                  root: finding.root,
-                  findings: perRoot[finding.root]!,
-                  look: look,
-                  onRepair: onRepair,
-                ),
-              ),
-            _FindingRow(
-              finding: finding,
-              look: look,
-              onRepair: onRepair,
-              resolution: resolutions[finding],
-            ),
-          ],
-        );
-      },
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -518,34 +543,10 @@ class _GroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: LayoutNums.smallGap,
-      runSpacing: LayoutNums.tinyGap,
-      children: <Widget>[
-        Text(
-          tr(_rootLabels[root]!),
-          style: theme.meta.largeStyle.copyWith(fontWeight: FontWeight.w600),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: LayoutNums.smallGap,
-            vertical: LayoutNums.tinyGap,
-          ),
-          decoration: BoxDecoration(
-            color: look.colour.withValues(alpha: .1),
-            borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
-          ),
-          child: Text(
-            '${findings.length}',
-            style: theme.meta.captionStyle.copyWith(
-              color: look.colour,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        if (look.repair case final IntegrityRepair repair)
-          Builder(
+    final IntegrityRepair? repair = look.repair;
+    final Widget? action = repair == null
+        ? null
+        : Builder(
             builder: (BuildContext context) {
               final bool destructive = integrityRepairIsDestructive(repair);
               final ActionButtonTheme actions = theme.actionButtons;
@@ -576,8 +577,29 @@ class _GroupHeader extends StatelessWidget {
                 ),
               );
             },
+          );
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          FileTreeGroupHeader(
+            title: tr(_rootLabels[root]!),
+            count: findings.length,
+            foreground: theme.colorScheme.onSurface,
+            accent: fileTreeLibraryColour(
+              context,
+              _fileTreeLibraryForRoot(root),
+            ),
+            trailing: action,
           ),
-      ],
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: theme.colorScheme.onSurface.withValues(alpha: .12),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -595,109 +617,67 @@ class _FindingRow extends StatelessWidget {
   final IntegrityRepairHandler onRepair;
   final IntegrityResolution? resolution;
 
-  static const double _height = 58;
-  static const double _stripe = 4;
-
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: LayoutNums.compactGap),
-      child: Material(
-        color: theme.inputDecorationTheme.fillColor,
-        borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          height: _height,
-          child: Row(
-            children: <Widget>[
-              Container(
-                width: _stripe,
-                height: double.infinity,
-                color: look.colour,
+    return FileTreeRow(
+      depth: 1,
+      icon: Icons.folder_outlined,
+      iconColor: fileTreeLibraryColour(
+        context,
+        _fileTreeLibraryForRoot(finding.root),
+      ),
+      label: finding.name,
+      subtitle: finding.folder,
+      foreground: theme.colorScheme.onSurface,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          if (resolution == null)
+            if (finding.missing case final String missing) ...<Widget>[
+              Text(
+                tr(AppI10n.integrityMissingFile, args: <String>[missing]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.meta.captionStyle.copyWith(color: look.colour),
               ),
-              const SizedBox(width: LayoutNums.mediumGap),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Row(
-                      spacing: LayoutNums.smallGap,
-                      children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            finding.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.meta.mediumStyle.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        // Which file, since "missing files" on its own sends
-                        // the user into the folder to work it out.
-                        if (resolution == null)
-                          if (finding.missing case final String missing)
-                            Text(
-                              tr(
-                                AppI10n.integrityMissingFile,
-                                args: <String>[missing],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.meta.captionStyle.copyWith(
-                                color: look.colour,
-                              ),
-                            ),
-                        if (resolution case final IntegrityResolution value)
-                          Text(
-                            tr(_resolutionLabel(value)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.meta.captionStyle.copyWith(
-                              color: look.colour,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                      ],
-                    ),
-                    Text(
-                      finding.folder,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.meta.captionStyle,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: LayoutNums.contentGap),
-              // Zero means unsized, not empty: a root holding no loadable
-              // wallpaper is not walked. An empty folder has its own verdict.
-              if (finding.bytes > 0)
-                Text(formatSize(finding.bytes), style: theme.meta.captionStyle),
-              const SizedBox(width: LayoutNums.contentGap),
-              if (resolution == null)
-                if (look.repair case final IntegrityRepair repair)
-                  _ResolveButton(
-                    colour: look.colour,
-                    destructive: integrityRepairIsDestructive(repair),
-                    onPressed: () =>
-                        onRepair(context, repair, <IntegrityFinding>[finding]),
-                  ),
-              const SizedBox(width: LayoutNums.smallGap),
-              if (resolution == null)
-                AppIconButton(
-                  icon: Icons.folder_open_rounded,
-                  tooltip: tr(AppI10n.integrityOpenFolder),
-                  onPressed: () => browserFolder(finding.folder),
-                )
-              else
-                Icon(Icons.check_circle_outline_rounded, color: look.colour),
               const SizedBox(width: LayoutNums.smallGap),
             ],
-          ),
-        ),
+          if (resolution case final IntegrityResolution value) ...<Widget>[
+            Text(
+              tr(_resolutionLabel(value)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.meta.captionStyle.copyWith(
+                color: look.colour,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: LayoutNums.smallGap),
+          ],
+          if (finding.bytes > 0) ...<Widget>[
+            Text(formatSize(finding.bytes), style: theme.meta.captionStyle),
+            const SizedBox(width: LayoutNums.contentGap),
+          ],
+          if (resolution == null)
+            if (look.repair case final IntegrityRepair repair) ...<Widget>[
+              _ResolveButton(
+                colour: look.colour,
+                destructive: integrityRepairIsDestructive(repair),
+                onPressed: () =>
+                    onRepair(context, repair, <IntegrityFinding>[finding]),
+              ),
+              const SizedBox(width: LayoutNums.smallGap),
+            ],
+          if (resolution == null)
+            AppIconButton(
+              icon: Icons.folder_open_rounded,
+              tooltip: tr(AppI10n.integrityOpenFolder),
+              onPressed: () => browserFolder(finding.folder),
+            )
+          else
+            Icon(Icons.check_circle_outline_rounded, color: look.colour),
+        ],
       ),
     );
   }
