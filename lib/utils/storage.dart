@@ -6,12 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// The app's settings, in one indented JSON file the user can read.
-///
-/// `shared_preferences` writes one long line with no formatting option, and this
-/// file is opened by hand often enough to be worth owning. Its values seed the
-/// first run, so nothing is lost on the way over. The interface language is the
-/// exception: easy_localization keeps its own, so a `locale` here does nothing.
+/// Owns readable `settings.json` persistence and legacy SharedPreferences import.
 class StorageUtil {
   static final StorageUtil _instance = StorageUtil._();
   factory StorageUtil() => _instance;
@@ -20,11 +15,8 @@ class StorageUtil {
 
   static const String _file = 'settings.json';
   static const String _legacyFile = 'shared_preferences.json';
-
-  /// Both come from the exe's version resource, windows/runner/Runner.rc, which
-  /// is what Windows uses to pick the folder. The company was dropped, so the
-  /// old path has a level the new one does not.
   static const String _folder = 'WeRePKG-EX';
+  static const String _olderFolder = 'WeRePKG';
   static const String _oldCompany = 'com.ilgnefz';
 
   static const JsonEncoder _json = JsonEncoder.withIndent('  ');
@@ -32,17 +24,12 @@ class StorageUtil {
   static Map<String, Object> _values = <String, Object>{};
   static String? _filePath;
 
-  /// Where writes go when the settings folder could not be found, which is
-  /// where they went before this class owned a file. Without it a whole session
-  /// of changes would be dropped at exit with nothing said.
+  /// Where writes go when the settings folder could not be found
   static SharedPreferences? _fallback;
 
   /// Writes run one after another, so two settings changed at once cannot
   /// interleave into half a file.
   static Future<void> _writing = Future<void>.value();
-
-  /// Where the settings file is, for the settings page. Null off Windows and
-  /// under test, where writes stay in memory.
   static String? get filePath => _filePath;
 
   static Future init() async {
@@ -50,8 +37,6 @@ class StorageUtil {
     _values = await _load();
   }
 
-  /// [init] against a folder of the caller's choosing, since the real one comes
-  /// from a plugin that is not registered under test.
   @visibleForTesting
   static Future<void> initAt(String appData) async {
     _filePath = await moveSettingsFile(appData);
@@ -67,13 +52,13 @@ class StorageUtil {
 
   static Future<void> _findSettingsFile() async {
     try {
-      // path_provider, not %APPDATA%, because this has to land where
-      // shared_preferences wrote and that is what it asks. The two differ under
-      // a redirected profile.
+      // Let path_provider resolve the Windows support directory; its parent is
+      // the roaming app-data root used for legacy migration.
       final Directory support = await getApplicationSupportDirectory();
       _filePath = await moveSettingsFile(support.parent.path);
     } catch (e) {
-      // Not worth refusing to start over; the page just shows no path.
+      // Missing support-directory access must not block startup;
+      // SharedPreferences remains the fallback.
       debugPrint('Settings file location unavailable: $e');
     }
   }
@@ -112,6 +97,7 @@ class StorageUtil {
   /// Where a file that would not parse is kept, beside the one that replaces it.
   static const String _badSuffix = '.unreadable';
 
+  /// Preserves an unreadable file when possible without blocking startup.
   static Future<void> _setAside(String here) async {
     try {
       await File(here).rename('$here$_badSuffix');
@@ -120,24 +106,31 @@ class StorageUtil {
     }
   }
 
-  /// Brings the old settings file across, once, and says where the new one
-  /// lives. [appData] is a temp dir under test.
+  /// Copies a legacy SharedPreferences file into the current app folder once.
+  ///
+  /// Returns the `settings.json` path. [appData] is a temp directory under test.
   @visibleForTesting
   static Future<String> moveSettingsFile(String appData) async {
     final File now = File(path.join(appData, _folder, _legacyFile));
-    final File old = File(
-      path.join(appData, _oldCompany, _folder, _legacyFile),
-    );
+    final List<File> oldFiles = <File>[
+      File(path.join(appData, _oldCompany, _folder, _legacyFile)),
+      File(path.join(appData, _oldCompany, _olderFolder, _legacyFile)),
+    ];
 
-    // Copy, never move, never overwrite. The old file costs a few kilobytes and
-    // is the difference between an interrupted migration and a lost config.
-    if (!await now.exists() && await old.exists()) {
-      await now.parent.create(recursive: true);
-      // Stage then rename, atomic on NTFS. Copying straight to the destination
-      // leaves truncated JSON there if the process dies mid-write.
-      final File staged = File('${now.path}.part');
-      await old.copy(staged.path);
-      await staged.rename(now.path);
+    // Copy, never move or overwrite. Prefer the WeRePKG-EX legacy folder when
+    // both exist so a pre-rename config cannot replace newer settings. Keeping
+    // the source makes an interrupted migration recoverable.
+    if (!await now.exists()) {
+      for (final File old in oldFiles) {
+        if (!await old.exists()) continue;
+        await now.parent.create(recursive: true);
+        // Stage then rename, atomic on NTFS. Copying straight to the destination
+        // leaves truncated JSON there if the process dies mid-write.
+        final File staged = File('${now.path}.part');
+        await old.copy(staged.path);
+        await staged.rename(now.path);
+        break;
+      }
     }
     return path.join(appData, _folder, _file);
   }
@@ -173,6 +166,7 @@ class StorageUtil {
         await part.writeAsString(_json.convert(ordered), flush: true);
         await part.rename(here);
       } catch (e) {
+        // Keep in-memory settings usable even when persistence fails.
         debugPrint('Settings file not written: $e');
       }
     });

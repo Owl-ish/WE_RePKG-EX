@@ -33,6 +33,15 @@ void main() {
     ),
   );
 
+  File preRenameLegacy() => File(
+    path.join(
+      appData.path,
+      'com.ilgnefz',
+      'WeRePKG',
+      'shared_preferences.json',
+    ),
+  );
+
   void writeLegacy(String json) {
     legacy()
       ..parent.createSync(recursive: true)
@@ -49,6 +58,28 @@ void main() {
       expect(legacy().existsSync(), isTrue);
       // Staged under a temp name, then renamed. Nothing left beside it.
       expect(plugin().parent.listSync(), hasLength(1));
+    });
+
+    test('pre-rename WeRePKG settings also come across', () async {
+      preRenameLegacy()
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('{"flutter.toolPath":"C:/Old/RePKG.exe"}');
+
+      expect(await StorageUtil.moveSettingsFile(appData.path), settings().path);
+      expect(plugin().readAsStringSync(), contains('C:/Old/RePKG.exe'));
+      expect(preRenameLegacy().existsSync(), isTrue);
+    });
+
+    test('newer legacy folder wins over the pre-rename folder', () async {
+      writeLegacy('{"flutter.toolPath":"newer"}');
+      preRenameLegacy()
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('{"flutter.toolPath":"older"}');
+
+      await StorageUtil.moveSettingsFile(appData.path);
+
+      expect(plugin().readAsStringSync(), contains('newer'));
+      expect(plugin().readAsStringSync(), isNot(contains('older')));
     });
 
     test('a file already in place wins', () async {
@@ -177,8 +208,8 @@ void main() {
       expect(settings().readAsStringSync(), contains('new'));
     });
 
-    // Before this class owned a file the plugin still wrote one. Without the
-    // fallback a whole session of changes would go at exit with nothing said.
+    // When the JSON location is unavailable, the legacy store must remain a
+    // writable fallback for the whole session.
     test('with nowhere to write, settings still persist', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       await StorageUtil.initWithoutFile();
@@ -191,8 +222,8 @@ void main() {
       expect(prefs.getInt('sortType'), 1);
     });
 
-    // Hand-edited values reach an enum index at startup, where the old lookup
-    // threw before the app could draw anything.
+    // Invalid hand-edited types or enum positions must read as unset rather
+    // than aborting startup.
     test('a value of the wrong type or range reads as unset', () async {
       settings()
         ..parent.createSync(recursive: true)
