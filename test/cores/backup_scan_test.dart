@@ -28,8 +28,8 @@ void main() {
   Directory wallpaper(Directory lib, String id) =>
       Directory(p.join(lib.path, id))..createSync();
 
-  // AC 2. With no backup root the scan has nothing to look in, so every card
-  // falls out of the differ as not backed up rather than as an error.
+  // With no backup root the scan has nothing to compare, so live cards remain
+  // visible as not backed up rather than failing the scan.
   group('with no backup root', () {
     test('the library listing is empty', () async {
       expect(await listFolderNames(null), isEmpty);
@@ -83,8 +83,8 @@ void main() {
       expect(versions['alpha'], isNot(versions['beta']));
     });
 
-    // The accepted blind spot, pinned so it stays a decision. Making this
-    // recursive would cost a stat walk over every asset in the library.
+    // The lightweight MyProjects token intentionally watches top-level files
+    // only; recursive content coverage is handled by the backup comparison.
     test('an asset changed in a subfolder does not move the token', () async {
       final Directory lib = library('myprojects');
       final Directory folder = wallpaper(lib, 'alpha');
@@ -269,8 +269,8 @@ void main() {
       );
     });
 
-    // Every earlier test used one or two folders, so the batch arithmetic was
-    // never exercised. A dropped folder reads as backed up.
+    // Cross enough batch boundaries to prove every requested folder contributes
+    // a result; dropping one could falsely leave a card looking current.
     test('every folder survives the batching', () async {
       final Set<String> names = <String>{
         for (int i = 0; i < 60; i++) 'wallpaper-$i',
@@ -290,9 +290,8 @@ void main() {
     void project(Directory folder, String body) =>
         File(p.join(folder.path, 'project.json')).writeAsStringSync(body);
 
-    // Both libraries, because a rule that only ever runs on the Workshop arm is
-    // how the myprojects side has slipped through before. Each vanished card
-    // has to read from its own backup tree, not the other one.
+    // Exercise both libraries because each vanished card must read from its own
+    // backup tree rather than borrowing the other library's copy.
     test(
       'reads live folders, and the backup copy for a vanished card',
       () async {
@@ -514,6 +513,7 @@ void main() {
     }) => reconcileFolders(
       entry: ReconcileEntry(
         name: 'alpha',
+        reason: BackupReconcileReason.duplicateLiveCopies,
         states: <WallpaperLibrary, BackupState>{
           if (liveWorkshop) WallpaperLibrary.workshop: BackupState.synced,
           if (liveMyProjects)
@@ -773,7 +773,6 @@ void main() {
       return folder;
     }
 
-    // AC 2.
     test('with no root every live wallpaper is not backed up', () async {
       filled(liveWorkshop, '793602574');
       filled(liveMyProjects, 'alpha');
@@ -789,9 +788,54 @@ void main() {
       expect(result.reconcile, isEmpty);
     });
 
-    // Steam removes an unsubscribed wallpaper's files and leaves the folder,
-    // because Wallpaper Engine wrote the shader cache in it. Twenty-seven of
-    // these were sitting in the grid as blank cards offering to back up nothing.
+    test('stale wrong-side backup plans update and sync', () async {
+      filled(liveMyProjects, 'alpha', 'live payload');
+      filled(backupWorkshop(), 'alpha', 'old');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+      const BackupCard card = BackupCard(WallpaperLibrary.myProjects, 'alpha');
+
+      expect(result.cards[card], BackupState.updateAvailable);
+      expect(
+        result.updates[card],
+        const BackupUpdatePlan(
+          updateContent: true,
+          sync: BackupSyncPlan(
+            kind: BackupSyncKind.relocate,
+            from: WallpaperLibrary.workshop,
+            to: WallpaperLibrary.myProjects,
+          ),
+        ),
+      );
+    });
+
+    test('equivalent duplicate backups are sent to update/sync', () async {
+      filled(liveWorkshop, '793602574', 'same');
+      filled(backupWorkshop(), '793602574', 'same');
+      filled(backupMyProjects(), '793602574', 'same');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
+        BackupState.updateAvailable,
+      );
+      expect(result.reconcile, isEmpty);
+    });
+
+    test('different duplicate backups remain reconcile', () async {
+      filled(liveWorkshop, '793602574', 'same');
+      filled(backupWorkshop(), '793602574', 'same');
+      filled(backupMyProjects(), '793602574', 'different');
+
+      final BackupScan result = await scan(root: backupRoot.path);
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile, hasLength(1));
+    });
+
+    // Steam can leave shader-cache-only folders after removing an unsubscribed
+    // wallpaper; they are cleanup residue rather than wallpaper content.
     group('a folder Steam left behind', () {
       test('appears under Empty/Junk in either live library', () async {
         filled(liveWorkshop, '793602574');
@@ -816,8 +860,8 @@ void main() {
         );
       });
 
-      // The backup is the only copy left of what used to be there, so the card
-      // has to stay whatever the live folder holds today.
+      // A valid backup still protects the name even when the live side is only
+      // junk; cleanup classification must not erase the surviving backup card.
       test('keeps its card when the backup still holds it', () async {
         husk(liveWorkshop, '3776838872');
         filled(backupWorkshop(), '3776838872');
@@ -838,9 +882,8 @@ void main() {
         ));
       });
 
-      // The rule has to stay narrow. This folder is unloadable too, and one of
-      // the user's holds 8.7GB: dropping it would take a wallpaper they can
-      // still back up off the tab with nothing said.
+      // Keep junk detection narrow: meaningful nested content can still be
+      // recoverable even when the top level is not loadable as a wallpaper.
       test('a folder with content in a subfolder keeps its card', () async {
         final Directory nested = wallpaper(liveWorkshop, '3373795844');
         File(p.join(nested.path, '1110-5', 'clip.mp4'))
@@ -858,9 +901,8 @@ void main() {
         );
       });
 
-      // Its Workshop original is gone and the myprojects backup is all that is
-      // left, which is what vanished means. It used to reach reconcile instead,
-      // on the strength of a live folder holding nothing.
+      // The live Workshop folder is only junk, so the usable MyProjects backup
+      // is the sole remaining copy and therefore reads as Vanished.
       test('a myprojects backup of the same name reads as vanished', () async {
         husk(liveWorkshop, '3776838872');
         filled(backupMyProjects(), '3776838872');
@@ -932,7 +974,7 @@ void main() {
       );
     });
 
-    test('finds both backup libraries under the root', () async {
+    test('a missing Workshop ACF falls back to folder comparison', () async {
       filled(liveWorkshop, '793602574');
       filled(liveMyProjects, 'alpha');
       filled(backupWorkshop(), '793602574');
@@ -940,13 +982,19 @@ void main() {
 
       final BackupScan result = await scan(root: backupRoot.path);
 
-      expect(result.cards, hasLength(2));
-      expect(result.cards.values, everyElement(BackupState.synced));
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
+        BackupState.synced,
+      );
+      expect(
+        result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+        BackupState.synced,
+      );
+      expect(result.reconcile, isEmpty);
     });
 
-    // The first scan is about twelve seconds against a real library, nearly all
-    // of it walking both backup trees, so the tab has to be able to say how far
-    // along it is rather than spinning silently.
+    // Coverage comparisons can be long-running, so the scan must report both
+    // its phase and counted progress instead of leaving the UI silent.
     test('the scan reports what it is doing and how far it has got', () async {
       for (int i = 0; i < 30; i++) {
         filled(liveMyProjects, 'wallpaper-$i');
@@ -992,7 +1040,7 @@ void main() {
 
       expect(
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
-        BackupState.emptyBackup,
+        BackupState.notBackedUp,
       );
       expect(result.junk['myprojects/alpha'], (
         live: false,
@@ -1003,7 +1051,7 @@ void main() {
 
     // Wallpaper Engine rebuilds these, so a folder holding only them holds
     // nothing that counts as a backup.
-    test('a backup holding only rebuilt shaders is empty', () async {
+    test('a backup holding only rebuilt shaders is not backed up', () async {
       filled(liveMyProjects, 'alpha');
       final Directory folder = wallpaper(backupMyProjects(), 'alpha');
       Directory(
@@ -1017,7 +1065,7 @@ void main() {
 
       expect(
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
-        BackupState.emptyBackup,
+        BackupState.notBackedUp,
       );
       expect(
         result.junk['myprojects/alpha']?.kind,
@@ -1025,7 +1073,7 @@ void main() {
       );
     });
 
-    test('a backup holding only nested dxs files is Empty/Junk', () async {
+    test('a backup holding only nested dxs files is not backed up', () async {
       filled(liveMyProjects, 'alpha');
       final Directory folder = wallpaper(backupMyProjects(), 'alpha');
       File(p.join(folder.path, 'nested', 'cache.dxs'))
@@ -1036,13 +1084,58 @@ void main() {
 
       expect(
         result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
-        BackupState.emptyBackup,
+        BackupState.notBackedUp,
       );
       expect(
         result.junk['myprojects/alpha']?.kind,
         WallpaperJunkKind.shaderCacheOnly,
       );
     });
+
+    test(
+      'junk-only backup with no live copy is cleanup, not vanished',
+      () async {
+        wallpaper(backupMyProjects(), 'alpha');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+          BackupState.emptyBackup,
+        );
+        expect(result.reconcile, isEmpty);
+        expect(result.junk['myprojects/alpha'], (
+          live: false,
+          backup: true,
+          kind: WallpaperJunkKind.empty,
+        ));
+      },
+    );
+
+    test(
+      'valid backup stays synced while opposite junk stays cleanup',
+      () async {
+        filled(liveMyProjects, 'alpha');
+        filled(backupMyProjects(), 'alpha');
+        wallpaper(backupWorkshop(), 'alpha');
+
+        final BackupScan result = await scan(root: backupRoot.path);
+
+        expect(
+          result.cards[const BackupCard(WallpaperLibrary.myProjects, 'alpha')],
+          BackupState.synced,
+        );
+        expect(
+          result.cards[const BackupCard(WallpaperLibrary.workshop, 'alpha')],
+          BackupState.emptyBackup,
+        );
+        expect(result.junk['workshop/alpha'], (
+          live: false,
+          backup: true,
+          kind: WallpaperJunkKind.empty,
+        ));
+      },
+    );
 
     // The case the whole tab exists for: Steam removed a delisted item and only
     // the backup still has it.
@@ -1062,20 +1155,20 @@ void main() {
       expect(result.reconcile, isEmpty);
     });
 
-    // The unsubscribed packed original still sitting in the backup, with the
-    // extraction live in myprojects.
-    test('an orphan backup copy goes to reconcile, not the grid', () async {
+    // Equivalent copies in both backup trees are deterministic cleanup: the live
+    // library tells us which backup tree should remain.
+    test('equivalent duplicate backups go to update/sync', () async {
       filled(liveMyProjects, '793602574');
       filled(backupWorkshop(), '793602574');
       filled(backupMyProjects(), '793602574');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
-      expect(result.cards, isEmpty);
-      expect(result.reconcile.single.name, '793602574');
-      expect(result.reconcile.single.orphans, <WallpaperLibrary>{
-        WallpaperLibrary.workshop,
+      expect(result.cards, <BackupCard, BackupState>{
+        const BackupCard(WallpaperLibrary.myProjects, '793602574'):
+            BackupState.updateAvailable,
       });
+      expect(result.reconcile, isEmpty);
     });
 
     test('a republished workshop item reads as an update', () async {
@@ -1161,10 +1254,8 @@ void main() {
       );
     });
 
-    // Wallpaper Engine rebuilds these, so nothing copies them and nothing may
-    // compare them. Only the recursive myprojects walk ever reaches one; on a
-    // real library 1127 live folders held one against 214 backup folders, so
-    // counting them would call almost every myprojects backup stale.
+    // Wallpaper Engine rebuilds shader caches locally, so recursive MyProjects
+    // coverage must ignore them on both sides.
     test('rebuilt shaders do not make a backup look stale', () async {
       final Directory live = wallpaper(liveMyProjects, 'alpha');
       final Directory backup = wallpaper(backupMyProjects(), 'alpha');
@@ -1333,9 +1424,8 @@ void main() {
       );
     });
 
-    // Unset is the same failure as gone. This is the shape that produced 1296
-    // vanished against the real library on 2026-08-05: the live myprojects path
-    // reached the scan empty and every backup folder there read as lost.
+    // An unset live path is unavailable, not an empty library; treating it as
+    // empty would falsely classify every backup-only name as Vanished.
     test('an unset live path counts as missing', () async {
       final BackupScan result = await scanBackup(
         backupRoot: backupRoot.path,

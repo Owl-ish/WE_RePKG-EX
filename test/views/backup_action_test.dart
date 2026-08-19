@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/cores/backup.dart';
-import 'package:we_repkg/cores/backup_action.dart';
 import 'package:we_repkg/provider/backup.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
@@ -96,6 +95,7 @@ void main() {
     const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'demo');
     final BackupScan scan = (
       cards: <BackupCard, BackupState>{card: BackupState.notBackedUp},
+      updates: <BackupCard, BackupUpdatePlan>{},
       presence: <String, ({bool live, bool backup})>{
         card.id: (live: true, backup: false),
       },

@@ -218,6 +218,7 @@ void main() {
     ReconcileTile entryOf(String name, {CardFace? face}) => (
       entry: ReconcileEntry(
         name: name,
+        reason: BackupReconcileReason.conflictingBackupCopies,
         states: const <WallpaperLibrary, BackupState>{
           WallpaperLibrary.myProjects: BackupState.synced,
         },

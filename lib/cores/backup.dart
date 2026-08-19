@@ -43,6 +43,7 @@ typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
 
 typedef BackupScan = ({
   Map<BackupCard, BackupState> cards,
+  Map<BackupCard, BackupUpdatePlan> updates,
   Map<String, ({bool live, bool backup})> presence,
   Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk,
   List<ReconcileEntry> reconcile,
@@ -125,6 +126,19 @@ Future<BackupScan> scanBackup({
           null)
         name,
   };
+  final Set<String> duplicateBackupCandidates = _duplicateBackupCandidates(
+    liveWorkshop: liveWorkshop,
+    liveMyProjects: liveMyProjects,
+    backupWorkshop: backupWorkshop,
+    backupMyProjects: backupMyProjects,
+  );
+  final ({Set<String> workshop, Set<String> myProjects}) crossPlaced =
+      _crossPlacedCandidates(
+        liveWorkshop: liveWorkshop,
+        liveMyProjects: liveMyProjects,
+        backupWorkshop: backupWorkshop,
+        backupMyProjects: backupMyProjects,
+      );
 
   final Map<String, ({bool live, bool backup})> presence = _cardPresence(
     liveWorkshop,
@@ -134,7 +148,12 @@ Future<BackupScan> scanBackup({
   );
   // Report the work that actually dominates the wait: coverage comparisons.
   // Junk checks run beside it and usually stop at the first ordinary file.
-  final int compareTotal = workshopToCompare.length + sharedMyProjects.length;
+  final int compareTotal =
+      workshopToCompare.length +
+      sharedMyProjects.length +
+      duplicateBackupCandidates.length +
+      crossPlaced.workshop.length +
+      crossPlaced.myProjects.length;
   int compared = 0;
   void comparedBatch(int folders) {
     compared += folders;
@@ -158,10 +177,8 @@ Future<BackupScan> scanBackup({
   workshopStandingFuture = copyStandings(
     livePath: liveWorkshopPath,
     backupPath: backupWorkshopPath(backupRoot),
-    // A Workshop wallpaper is packed, so scene.pkg sits at the top level and
-    // moves whenever the author republishes. Measured on a real library, not
-    // one of 2192 folders held a file below the top level outside the
-    // rebuilt shader cache.
+    // Workshop wallpapers are packed, so matching-tree coverage only needs the
+    // top-level payload outside the rebuilt shader cache.
     recursive: false,
     shared: sharedWorkshop,
     compare: workshopToCompare,
@@ -171,11 +188,38 @@ Future<BackupScan> scanBackup({
       copyStandings(
         livePath: liveMyProjectsPath,
         backupPath: backupMyProjectsPath(backupRoot),
-        // A myprojects wallpaper is usually unpacked and its edits land in
-        // subfolders: the top level alone found 3 of 46 stale backups.
+        // MyProjects wallpapers are usually unpacked, so edits can land in
+        // subfolders and require recursive coverage.
         recursive: true,
         shared: sharedMyProjects,
         compare: sharedMyProjects,
+        onBatch: comparedBatch,
+      );
+  final Future<_BackupCopyComparisons> backupCopyComparisonsFuture =
+      _compareDuplicateBackups(
+        workshopPath: backupWorkshopPath(backupRoot),
+        myProjectsPath: backupMyProjectsPath(backupRoot),
+        workshopNames: backupWorkshop,
+        myProjectsNames: backupMyProjects,
+        candidates: duplicateBackupCandidates,
+        onBatch: comparedBatch,
+      );
+  final Future<Map<String, CopyStanding>> crossWorkshopStandingFuture =
+      copyStandings(
+        livePath: liveWorkshopPath,
+        backupPath: backupMyProjectsPath(backupRoot),
+        recursive: true,
+        shared: crossPlaced.workshop,
+        compare: crossPlaced.workshop,
+        onBatch: comparedBatch,
+      );
+  final Future<Map<String, CopyStanding>> crossMyProjectsStandingFuture =
+      copyStandings(
+        livePath: liveMyProjectsPath,
+        backupPath: backupWorkshopPath(backupRoot),
+        recursive: true,
+        shared: crossPlaced.myProjects,
+        compare: crossPlaced.myProjects,
         onBatch: comparedBatch,
       );
 
@@ -195,6 +239,9 @@ Future<BackupScan> scanBackup({
   final (
     Map<String, CopyStanding> workshopStanding,
     Map<String, CopyStanding> myProjectsStanding,
+    _BackupCopyComparisons backupCopyComparisons,
+    Map<String, CopyStanding> crossWorkshopStanding,
+    Map<String, CopyStanding> crossMyProjectsStanding,
     Map<String, WallpaperJunkKind> junkLiveWorkshop,
     Map<String, WallpaperJunkKind> junkLiveMyProjects,
     Map<String, WallpaperJunkKind> junkBackupWorkshop,
@@ -202,6 +249,9 @@ Future<BackupScan> scanBackup({
   ) = await (
     workshopStandingFuture,
     myProjectsStandingFuture,
+    backupCopyComparisonsFuture,
+    crossWorkshopStandingFuture,
+    crossMyProjectsStandingFuture,
     junkLiveWorkshopFuture,
     junkLiveMyProjectsFuture,
     junkBackupWorkshopFuture,
@@ -213,21 +263,56 @@ Future<BackupScan> scanBackup({
     total: compareTotal,
   ));
 
+  final Set<String> validLiveWorkshop = liveWorkshop.difference(
+    junkLiveWorkshop.keys.toSet(),
+  );
+  final Set<String> validLiveMyProjects = liveMyProjects.difference(
+    junkLiveMyProjects.keys.toSet(),
+  );
+  final Set<String> validBackupWorkshop = backupWorkshop.difference(
+    junkBackupWorkshop.keys.toSet(),
+  );
+  final Set<String> validBackupMyProjects = backupMyProjects.difference(
+    junkBackupMyProjects.keys.toSet(),
+  );
+
+  final Set<String> unavailableContentComparisons =
+      _unavailableContentComparisons(
+        liveWorkshop: validLiveWorkshop,
+        liveMyProjects: validLiveMyProjects,
+        backupWorkshop: validBackupWorkshop,
+        backupMyProjects: validBackupMyProjects,
+        workshopVersions: acf.byId,
+        workshopStanding: workshopStanding,
+        myProjectsStanding: myProjectsStanding,
+        records: byId,
+      );
+
   final BackupDiffResult diff = backupDiff(
-    liveWorkshop: liveWorkshop.difference(junkLiveWorkshop.keys.toSet()),
-    liveMyProjects: liveMyProjects.difference(junkLiveMyProjects.keys.toSet()),
-    backupWorkshop: backupWorkshop,
-    backupMyProjects: backupMyProjects,
+    liveWorkshop: validLiveWorkshop,
+    liveMyProjects: validLiveMyProjects,
+    backupWorkshop: validBackupWorkshop,
+    backupMyProjects: validBackupMyProjects,
     liveWorkshopVersions: acf.byId,
     liveMyProjectsVersions: myProjects.versions,
     workshopStanding: workshopStanding,
     myProjectsStanding: myProjectsStanding,
+    crossWorkshopStanding: crossWorkshopStanding,
+    crossMyProjectsStanding: crossMyProjectsStanding,
     records: records,
+    equivalentBackupCopies: backupCopyComparisons.equivalent,
+    unavailableBackupComparisons: backupCopyComparisons.unavailable,
+    backupCopyDifferences: backupCopyComparisons.differences,
+    unavailableContentComparisons: unavailableContentComparisons,
   );
   _addLiveJunkCards(diff, WallpaperLibrary.workshop, junkLiveWorkshop.keys);
   _addLiveJunkCards(diff, WallpaperLibrary.myProjects, junkLiveMyProjects.keys);
-  _markJunkCards(diff, WallpaperLibrary.workshop, junkBackupWorkshop.keys);
-  _markJunkCards(diff, WallpaperLibrary.myProjects, junkBackupMyProjects.keys);
+  _addBackupJunkCards(diff, WallpaperLibrary.workshop, junkBackupWorkshop.keys);
+  _addBackupJunkCards(
+    diff,
+    WallpaperLibrary.myProjects,
+    junkBackupMyProjects.keys,
+  );
   final Map<String, ({bool live, bool backup})> junkPresence = _cardPresence(
     junkLiveWorkshop.keys.toSet(),
     junkLiveMyProjects.keys.toSet(),
@@ -252,6 +337,7 @@ Future<BackupScan> scanBackup({
       };
   return (
     cards: diff.cards,
+    updates: diff.updates,
     presence: presence,
     junk: junk,
     reconcile: diff.reconcile,
@@ -296,9 +382,8 @@ Map<String, ({bool live, bool backup})> _cardPresence(
 /// A vanished card has no live folder left, so its picture can only come from
 /// the backup copy. A folder whose `project.json` is missing or unreadable
 /// comes back absent rather than dropping the card: that folder is exactly what
-/// the integrity check exists to point at, and hiding it here would be the one
-/// place the tab lies. Measured on a real library at 0.5s warm for 3419
-/// folders, against a scan that already takes ten seconds.
+/// the integrity check exists to point at, and hiding it here would make the
+/// card list disagree with the filesystem scan.
 Future<Map<BackupCard, CardFace>> readCardFaces({
   required String? backupRoot,
   required String? liveWorkshopPath,
@@ -611,6 +696,175 @@ Set<String> _lowered(Set<String> names) => <String>{
   for (final String name in names) name.toLowerCase(),
 };
 
+Set<String> _duplicateBackupCandidates({
+  required Set<String> liveWorkshop,
+  required Set<String> liveMyProjects,
+  required Set<String> backupWorkshop,
+  required Set<String> backupMyProjects,
+}) {
+  final Set<String> liveW = _lowered(liveWorkshop);
+  final Set<String> liveM = _lowered(liveMyProjects);
+  final Set<String> backupW = _lowered(backupWorkshop);
+  final Set<String> backupM = _lowered(backupMyProjects);
+  return <String>{
+    for (final String name in backupW.intersection(backupM))
+      if (liveW.contains(name) != liveM.contains(name)) name,
+  };
+}
+
+({Set<String> workshop, Set<String> myProjects}) _crossPlacedCandidates({
+  required Set<String> liveWorkshop,
+  required Set<String> liveMyProjects,
+  required Set<String> backupWorkshop,
+  required Set<String> backupMyProjects,
+}) {
+  final Set<String> liveW = _lowered(liveWorkshop);
+  final Set<String> liveM = _lowered(liveMyProjects);
+  final Set<String> backupW = _lowered(backupWorkshop);
+  final Set<String> backupM = _lowered(backupMyProjects);
+  return (
+    workshop: <String>{
+      for (final String name in liveW)
+        if (!liveM.contains(name) &&
+            !backupW.contains(name) &&
+            backupM.contains(name))
+          name,
+    },
+    myProjects: <String>{
+      for (final String name in liveM)
+        if (!liveW.contains(name) &&
+            !backupM.contains(name) &&
+            backupW.contains(name))
+          name,
+    },
+  );
+}
+
+Set<String> _unavailableContentComparisons({
+  required Set<String> liveWorkshop,
+  required Set<String> liveMyProjects,
+  required Set<String> backupWorkshop,
+  required Set<String> backupMyProjects,
+  required Map<String, String> workshopVersions,
+  required Map<String, CopyStanding> workshopStanding,
+  required Map<String, CopyStanding> myProjectsStanding,
+  required Map<String, BackupRecord> records,
+}) {
+  final Set<String> sharedWorkshop = _shared(liveWorkshop, backupWorkshop);
+  final Set<String> sharedMyProjects = _shared(
+    liveMyProjects,
+    backupMyProjects,
+  );
+  final Set<String> versionKeys = <String>{
+    for (final String name in workshopVersions.keys) name.toLowerCase(),
+  };
+  final Set<String> workshopCompared = <String>{
+    for (final String name in workshopStanding.keys) name.toLowerCase(),
+  };
+  final Set<String> myProjectsCompared = <String>{
+    for (final String name in myProjectsStanding.keys) name.toLowerCase(),
+  };
+
+  return <String>{
+    for (final String name in sharedWorkshop)
+      if (!(versionKeys.contains(name) &&
+              records['workshop/$name']?.backedUpVersion != null) &&
+          !workshopCompared.contains(name))
+        'workshop/$name',
+    for (final String name in sharedMyProjects)
+      if (!myProjectsCompared.contains(name)) 'myprojects/$name',
+  };
+}
+
+typedef _BackupCopyComparisons = ({
+  Set<String> equivalent,
+  Set<String> unavailable,
+  Map<String, BackupCopyDifference> differences,
+});
+
+enum _BackupCopyComparison { equivalent, different, unavailable }
+
+typedef _FolderDifference = ({
+  List<String> differentSize,
+  List<String> onlyFirst,
+  List<String> onlySecond,
+});
+
+typedef _FolderComparison = ({
+  _BackupCopyComparison result,
+  _FolderDifference? difference,
+});
+
+Future<_BackupCopyComparisons> _compareDuplicateBackups({
+  required String? workshopPath,
+  required String? myProjectsPath,
+  required Set<String> workshopNames,
+  required Set<String> myProjectsNames,
+  required Set<String> candidates,
+  void Function(int folders)? onBatch,
+}) async {
+  if (workshopPath == null || myProjectsPath == null || candidates.isEmpty) {
+    return (
+      equivalent: <String>{},
+      unavailable: <String>{},
+      differences: <String, BackupCopyDifference>{},
+    );
+  }
+  final Map<String, String> workshopByKey = <String, String>{
+    for (final String name in workshopNames) name.toLowerCase(): name,
+  };
+  final Map<String, String> myProjectsByKey = <String, String>{
+    for (final String name in myProjectsNames) name.toLowerCase(): name,
+  };
+  final List<String> wanted = candidates.toList();
+  final Set<String> equivalent = <String>{};
+  final Set<String> unavailable = <String>{};
+  final Map<String, BackupCopyDifference> differences =
+      <String, BackupCopyDifference>{};
+  const int batchSize = 8;
+  for (int i = 0; i < wanted.length; i += batchSize) {
+    final List<String> batch = wanted.skip(i).take(batchSize).toList();
+    final List<_FolderComparison> matches = await Future.wait(
+      batch.map((String key) async {
+        final String? workshopName = workshopByKey[key];
+        final String? myProjectsName = myProjectsByKey[key];
+        if (workshopName == null || myProjectsName == null) {
+          return (result: _BackupCopyComparison.unavailable, difference: null);
+        }
+        return _compareBackupFolders(
+          Directory(path.join(workshopPath, workshopName)),
+          Directory(path.join(myProjectsPath, myProjectsName)),
+        );
+      }),
+    );
+    for (int j = 0; j < batch.length; j++) {
+      final _FolderComparison match = matches[j];
+      switch (match.result) {
+        case _BackupCopyComparison.equivalent:
+          equivalent.add(batch[j]);
+          break;
+        case _BackupCopyComparison.unavailable:
+          unavailable.add(batch[j]);
+          break;
+        case _BackupCopyComparison.different:
+          final _FolderDifference difference = match.difference!;
+          differences[batch[j]] = BackupCopyDifference(
+            differentSize: difference.differentSize,
+            onlyWorkshop: difference.onlyFirst,
+            onlyMyProjects: difference.onlySecond,
+          );
+          break;
+      }
+    }
+    onBatch?.call(batch.length);
+  }
+  return (
+    equivalent: equivalent,
+    unavailable: unavailable,
+    differences: differences,
+  );
+}
+
 Future<Set<BackupFolder>> _missingFolders(
   String? liveWorkshopPath,
   String? liveMyProjectsPath,
@@ -707,24 +961,27 @@ void _addLiveJunkCards(
   for (final String name in names) {
     final BackupCard card = BackupCard(library, name);
     final BackupCard? existing = _cardWithId(diff.cards, card.id);
-    if (existing != null) diff.cards.remove(existing);
+    if (existing != null) {
+      diff.cards.remove(existing);
+      diff.updates.remove(existing);
+    }
     diff.cards[card] = BackupState.emptyBackup;
   }
 }
 
-void _markJunkCards(
+void _addBackupJunkCards(
   BackupDiffResult diff,
   WallpaperLibrary library,
   Iterable<String> names,
 ) {
+  final Set<String> reconciling = <String>{
+    for (final ReconcileEntry entry in diff.reconcile) entry.name.toLowerCase(),
+  };
   for (final String name in names) {
+    if (reconciling.contains(name.toLowerCase())) continue;
     final BackupCard card = BackupCard(library, name);
-    // Reconciliation owns ambiguous same-name folders until the user decides
-    // which copy is which; maintenance must not silently answer that question.
-    final BackupCard? existing = _cardWithId(diff.cards, card.id);
-    if (existing != null) {
-      diff.cards[existing] = BackupState.emptyBackup;
-    }
+    if (_cardWithId(diff.cards, card.id) != null) continue;
+    diff.cards[card] = BackupState.emptyBackup;
   }
 }
 
@@ -852,11 +1109,93 @@ Future<CopyStanding?> _copyStanding({
   }
 }
 
+/// Whether two backup folders hold the same meaningful files.
+Future<_FolderComparison> _compareBackupFolders(
+  Directory first,
+  Directory second,
+) async {
+  final (
+    Map<String, ({String display, int size})>? firstFiles,
+    Map<String, ({String display, int size})>? secondFiles,
+  ) = await (
+    _backupFileManifest(first),
+    _backupFileManifest(second),
+  ).wait;
+  if (firstFiles == null || secondFiles == null) {
+    return (result: _BackupCopyComparison.unavailable, difference: null);
+  }
+
+  final List<String> differentSize = <String>[];
+  final List<String> onlyFirst = <String>[];
+  final List<String> onlySecond = <String>[];
+  final Set<String> keys = <String>{...firstFiles.keys, ...secondFiles.keys};
+  for (final String key in keys) {
+    final firstFile = firstFiles[key];
+    final secondFile = secondFiles[key];
+    if (firstFile == null) {
+      onlySecond.add(secondFile!.display);
+    } else if (secondFile == null) {
+      onlyFirst.add(firstFile.display);
+    } else if (firstFile.size != secondFile.size) {
+      differentSize.add(firstFile.display);
+    }
+  }
+  void sortPaths(List<String> paths) => paths.sort(
+    (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+  );
+  sortPaths(differentSize);
+  sortPaths(onlyFirst);
+  sortPaths(onlySecond);
+
+  final _FolderDifference difference = (
+    differentSize: differentSize,
+    onlyFirst: onlyFirst,
+    onlySecond: onlySecond,
+  );
+  final bool same =
+      differentSize.isEmpty && onlyFirst.isEmpty && onlySecond.isEmpty;
+  return (
+    result: same
+        ? _BackupCopyComparison.equivalent
+        : _BackupCopyComparison.different,
+    difference: same ? null : difference,
+  );
+}
+
+Future<Map<String, ({String display, int size})>?> _backupFileManifest(
+  Directory folder,
+) async {
+  try {
+    if (!await folder.exists()) return null;
+    final Map<String, ({String display, int size})> files =
+        <String, ({String display, int size})>{};
+    await for (final FileSystemEntity entity in folder.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      final String relative = path.relative(entity.path, from: folder.path);
+      if (isRebuiltShaderPath(relative)) continue;
+      final FileStat stat = await entity.stat();
+      if (stat.type != FileSystemEntityType.file) return null;
+      final String key = relative.toLowerCase().replaceAll('/', r'\');
+      files[key] = (display: relative, size: stat.size);
+    }
+    return files;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+/// Whether two backup folders hold the same meaningful files.
+Future<bool> backupFoldersEquivalent(Directory first, Directory second) async =>
+    (await _compareBackupFolders(first, second)).result ==
+    _BackupCopyComparison.equivalent;
+
 /// Where each backup folder stands against its live counterpart.
 ///
 /// Only [compare] is opened. Empty/junk detection belongs to the dedicated junk
-/// pass, so a Workshop wallpaper with a saved baseline no longer gets walked a
-/// second time merely to rediscover the same maintenance state.
+/// pass, so saved Workshop baselines do not trigger redundant coverage walks.
 Future<Map<String, CopyStanding>> copyStandings({
   required String? livePath,
   required String? backupPath,
@@ -929,10 +1268,8 @@ Future<void> writeBackupRecords(
     };
     if (fields.isNotEmpty) encoded[id] = fields;
   }
-  // Written beside itself and renamed over, the way copyFileReplacing does it.
-  // A plain write truncates first, so a run killed mid-write would leave a
-  // short file that readBackupRecords parses as no records at all, silently
-  // discarding every baseline and every dismissal.
+  // Write beside the live file and rename into place. A direct write truncates
+  // first, so process failure could discard every baseline and dismissal.
   final File file = File(path.join(backupRoot, backupRecordsName));
   final File part = File('${file.path}$backupRecordsPartSuffix');
   await part.writeAsString(_records.convert(encoded), flush: true);

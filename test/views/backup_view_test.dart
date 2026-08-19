@@ -57,6 +57,7 @@ BackupScan scanOf({
   Set<BackupFolder> missing = const <BackupFolder>{},
 }) => (
   cards: cards,
+  updates: const <BackupCard, BackupUpdatePlan>{},
   presence: <String, ({bool live, bool backup})>{
     for (final MapEntry<BackupCard, BackupState> entry in cards.entries)
       entry.key.id: (
@@ -1347,6 +1348,7 @@ void main() {
       ReconcileTile orphan() => (
         entry: const ReconcileEntry(
           name: 'muddled',
+          reason: BackupReconcileReason.conflictingBackupCopies,
           states: <WallpaperLibrary, BackupState>{
             WallpaperLibrary.myProjects: BackupState.synced,
           },
@@ -1952,6 +1954,7 @@ void main() {
           reconcile: const <ReconcileEntry>[
             ReconcileEntry(
               name: '793602574',
+              reason: BackupReconcileReason.conflictingBackupCopies,
               states: <WallpaperLibrary, BackupState>{
                 WallpaperLibrary.myProjects: BackupState.synced,
               },

@@ -86,6 +86,84 @@ void main() {
     },
   );
 
+  test('update syncs a misplaced backup into the live library tree', () async {
+    final Directory liveWorkshop = Directory(
+      path.join(temporary.path, 'live-workshop'),
+    )..createSync();
+    final Directory liveMyProjects = Directory(
+      path.join(temporary.path, 'live-myprojects'),
+    )..createSync();
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
+    File(path.join(live.path, 'scene.json')).writeAsStringSync('current');
+    final Directory misplaced = Directory(
+      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(misplaced.path, 'scene.json')).writeAsStringSync('old');
+
+    final result = await backUpWallpaper(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: liveWorkshop.path,
+      liveMyProjectsPath: liveMyProjects.path,
+      acfPath: null,
+      trashFolder: (String claimed) async {
+        await Directory(claimed).delete(recursive: true);
+        return null;
+      },
+    );
+
+    final Directory aligned = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    );
+    expect(result, (changed: true, error: null));
+    expect(misplaced.existsSync(), isFalse);
+    expect(
+      File(path.join(aligned.path, 'scene.json')).readAsStringSync(),
+      'current',
+    );
+  });
+
+  test('update refuses conflicting duplicate backups', () async {
+    final Directory liveWorkshop = Directory(
+      path.join(temporary.path, 'live-workshop'),
+    )..createSync();
+    final Directory liveMyProjects = Directory(
+      path.join(temporary.path, 'live-myprojects'),
+    )..createSync();
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
+    final Directory own = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(own.path, 'scene.json')).writeAsStringSync('one');
+    final Directory other = Directory(
+      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(other.path, 'scene.json')).writeAsStringSync('different');
+
+    final result = await backUpWallpaper(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: liveWorkshop.path,
+      liveMyProjectsPath: liveMyProjects.path,
+      acfPath: null,
+      trashFolder: (String claimed) async {
+        fail('conflicting backups must not be recycled');
+      },
+    );
+
+    expect(result.changed, isFalse);
+    expect(result.error, isNotNull);
+    expect(other.existsSync(), isTrue);
+  });
+
   test('show update again clears only the dismissal', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
       ..createSync();

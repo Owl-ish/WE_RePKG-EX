@@ -11,26 +11,21 @@ import 'package:we_repkg/utils/file_copy.dart';
 import 'package:we_repkg/utils/windows_file_transaction.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 
-enum BackupAction { backUp, update, restore, recycleJunk, showUpdateAgain }
-
 typedef BackupActionResult = ({bool changed, String? error});
 typedef BackupTrash = Future<String?> Function(String folder);
 
-BackupAction? actionForBackupState(BackupState state) => switch (state) {
-  BackupState.notBackedUp => BackupAction.backUp,
-  BackupState.vanished => BackupAction.restore,
-  BackupState.emptyBackup => BackupAction.recycleJunk,
-  BackupState.updateAvailable => BackupAction.update,
-  BackupState.updateDismissed => BackupAction.showUpdateAgain,
-  BackupState.synced => null,
-};
-
+/// Copies a live wallpaper into its matching backup library.
+///
+/// A source that changes during the copy is not recorded as a clean baseline.
+/// Any opposite-library backup is recycled only after the matching copy exists
+/// and the source version is still stable.
 Future<BackupActionResult> backUpWallpaper({
   required BackupCard card,
   required String? backupRoot,
   required String? liveWorkshopPath,
   required String? liveMyProjectsPath,
   required String? acfPath,
+  BackupTrash? trashFolder,
 }) async {
   final String? liveRoot = switch (card.library) {
     WallpaperLibrary.workshop => liveWorkshopPath,
@@ -40,17 +35,47 @@ Future<BackupActionResult> backUpWallpaper({
     WallpaperLibrary.workshop => backupWorkshopPath(backupRoot),
     WallpaperLibrary.myProjects => backupMyProjectsPath(backupRoot),
   };
-  if (backupRoot == null || liveRoot == null || backupLibrary == null) {
+  final String? otherLiveRoot = switch (card.library) {
+    WallpaperLibrary.workshop => liveMyProjectsPath,
+    WallpaperLibrary.myProjects => liveWorkshopPath,
+  };
+  final String? otherBackupLibrary = switch (card.library) {
+    WallpaperLibrary.workshop => backupMyProjectsPath(backupRoot),
+    WallpaperLibrary.myProjects => backupWorkshopPath(backupRoot),
+  };
+  if (backupRoot == null ||
+      liveRoot == null ||
+      backupLibrary == null ||
+      otherBackupLibrary == null) {
     return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
   }
   final Directory source = Directory(path.join(liveRoot, card.name));
   final Directory destination = Directory(path.join(backupLibrary, card.name));
+  final Directory otherBackup = Directory(
+    path.join(otherBackupLibrary, card.name),
+  );
+  final Directory? otherLive = otherLiveRoot == null
+      ? null
+      : Directory(path.join(otherLiveRoot, card.name));
   try {
     if (!await source.exists()) {
       return (changed: false, error: tr(AppI10n.backupActionSourceMissing));
     }
     if (_inside(destination.path, source.path)) {
       return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+    }
+    final bool destinationExisted = await destination.exists();
+    final bool otherBackupExisted = await otherBackup.exists();
+    if (otherBackupExisted && otherLive == null) {
+      return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+    }
+    if (otherBackupExisted && await otherLive!.exists()) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    if (destinationExisted &&
+        otherBackupExisted &&
+        !await backupFoldersEquivalent(destination, otherBackup)) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
     final String? before = await liveBackupVersion(
       card,
@@ -73,13 +98,31 @@ Future<BackupActionResult> backUpWallpaper({
     records[card.id] = BackupRecord(
       backedUpVersion: version ?? previous.backedUpVersion,
     );
+
+    // The matching copy and stable source are established before any
+    // opposite-library backup is recycled.
+    String? syncError;
+    if (otherBackupExisted) {
+      syncError = await _recycleSyncedBackup(
+        target: otherBackup,
+        trashFolder: trashFolder,
+      );
+      if (syncError == null) {
+        final WallpaperLibrary otherLibrary = switch (card.library) {
+          WallpaperLibrary.workshop => WallpaperLibrary.myProjects,
+          WallpaperLibrary.myProjects => WallpaperLibrary.workshop,
+        };
+        records.remove(BackupCard(otherLibrary, card.name).id);
+      }
+    }
     await writeBackupRecords(backupRoot, records);
-    return (changed: true, error: null);
+    return (changed: true, error: syncError);
   } catch (error) {
     return (changed: false, error: '$error');
   }
 }
 
+/// Clears only the dismissed update marker, preserving the backup baseline.
 Future<BackupActionResult> showBackupUpdateAgain({
   required BackupCard card,
   required String? backupRoot,
@@ -103,6 +146,7 @@ Future<BackupActionResult> showBackupUpdateAgain({
   }
 }
 
+/// Recycles disposable live or backup remnants after rechecking each target.
 Future<BackupActionResult> recycleBackupJunk({
   required BackupCard card,
   required String? backupRoot,
@@ -176,8 +220,42 @@ Future<BackupActionResult> recycleBackupJunk({
   return (changed: changed, error: errors.isEmpty ? null : errors.join('\n'));
 }
 
+/// Claims a redundant backup before sending it to the Recycle Bin.
+///
+/// If trash cannot be confirmed, the claim is restored so Sync does not leave
+/// the filesystem in a half-cleaned state.
+Future<String?> _recycleSyncedBackup({
+  required Directory target,
+  BackupTrash? trashFolder,
+}) async {
+  if (!await target.exists()) return null;
+  final Directory wrapper = await target.parent.createTemp(
+    WallpaperFiles.emptyBackupStagePrefix,
+  );
+  final Directory claimed = Directory(
+    path.join(wrapper.path, path.basename(target.path)),
+  );
+  try {
+    publishWithoutReplacing(target, claimed.path);
+    final BackupTrash trash =
+        trashFolder ?? (String folder) => deleteToTrash(filePath: folder);
+    final String? error = await trash(claimed.path);
+    if (await claimed.exists()) {
+      await _restoreClaim(claimed, target.path);
+      return error ?? tr(AppI10n.backupActionTrashUnconfirmed);
+    }
+    return error;
+  } catch (error) {
+    if (await claimed.exists()) await _restoreClaim(claimed, target.path);
+    return '$error';
+  } finally {
+    await _deleteEmptyDirectory(wrapper);
+  }
+}
+
 typedef _JunkCheck = Future<bool> Function(Directory folder);
 
+/// Rechecks junk before and after claiming it so concurrent changes fail safe.
 Future<BackupActionResult> _recycleCheckedFolder({
   required Directory target,
   required String library,
@@ -223,6 +301,10 @@ Future<bool> _isShaderCacheFolder(Directory folder) async =>
         WallpaperDirectories.shaderCache.toLowerCase() &&
     await folder.exists();
 
+/// Restores one vanished wallpaper into MyProjects through a staging folder.
+///
+/// Same-name cards share one restore target. Source choice prefers an unpacked
+/// MyProjects backup, then Workshop, then any remaining MyProjects copy.
 Future<BackupActionResult> restoreVanishedWallpaper({
   required List<BackupCard> cards,
   required String? backupRoot,
@@ -267,6 +349,7 @@ Future<BackupActionResult> restoreVanishedWallpaper({
   }
 }
 
+/// Chooses the restore copy most likely to preserve editable project data.
 Future<Directory?> _preferredRestoreSource(
   List<({BackupCard card, Directory folder})> sources,
 ) async {
@@ -287,6 +370,11 @@ Future<Directory?> _preferredRestoreSource(
   return sources.isEmpty ? null : sources.first.folder;
 }
 
+/// Copies meaningful files without deleting residue already in the destination.
+///
+/// Rebuilt shaders are skipped, links are rejected, and unchanged files are
+/// left in place. Copied files keep the source modification time so reruns can
+/// skip them safely.
 Future<void> _copyFolderIncrementally(
   Directory source,
   Directory destination,
@@ -320,6 +408,7 @@ Future<bool> _sameFile(File source, File destination) async {
       sourceStat.modified == destinationStat.modified;
 }
 
+/// Restores a claimed folder only while its original destination is still free.
 Future<void> _restoreClaim(Directory claimed, String destination) async {
   if (await FileSystemEntity.type(destination, followLinks: false) ==
       FileSystemEntityType.notFound) {
@@ -327,12 +416,14 @@ Future<void> _restoreClaim(Directory claimed, String destination) async {
   }
 }
 
+/// Best-effort staging cleanup; failure must not change the action result.
 Future<void> _deleteEmptyDirectory(Directory directory) async {
   try {
     if (await directory.exists()) await directory.delete();
   } catch (_) {}
 }
 
+/// Case-insensitive containment check for Windows paths, including equality.
 bool _inside(String candidate, String parent) {
   final String child = path.absolute(path.normalize(candidate)).toLowerCase();
   final String root = path.absolute(path.normalize(parent)).toLowerCase();

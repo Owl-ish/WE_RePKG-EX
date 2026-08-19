@@ -1,7 +1,6 @@
-/// Which library a wallpaper folder sits in.
-///
-/// The key is what the records file uses, so it stays lowercase rather than
-/// following the Dart constant.
+import 'package:flutter/foundation.dart';
+
+// Stored in backup records. Keep these keys lowercase and stable for compatibility.
 enum WallpaperLibrary {
   workshop('workshop'),
   myProjects('myprojects');
@@ -40,24 +39,74 @@ class BackupCard {
   String toString() => '${library.key}/$name';
 }
 
-/// Where a wallpaper stands between the live libraries and the backup.
 enum BackupState {
-  /// Backed up and current, or backed up at a version nothing can compare.
   synced,
   notBackedUp,
-
-  /// In the backup and in neither live library. Steam removes a delisted
-  /// wallpaper without saying so, which is the case this whole tab exists for.
   vanished,
   updateAvailable,
   updateDismissed,
-
-  /// The backup library holds a folder for this wallpaper and there is nothing
-  /// in it. A cancelled copy leaves exactly this, so it is kept apart from
-  /// [notBackedUp]: one has never been backed up, the other looks backed up
-  /// until you open it.
   emptyBackup,
 }
+
+// Each normal pill exposes at most one safe action.
+enum BackupAction { backUp, update, restore, recycleJunk, showUpdateAgain }
+
+// Update refreshes content. Sync fixes which backup library owns the copy.
+enum BackupUpdateKind { update, sync }
+
+enum BackupSyncKind { relocate, removeDuplicate }
+
+/// Structural correction for a protected backup that is misplaced or duplicated.
+class BackupSyncPlan {
+  const BackupSyncPlan({
+    required this.kind,
+    required this.from,
+    required this.to,
+  });
+
+  final BackupSyncKind kind;
+  final WallpaperLibrary from;
+  final WallpaperLibrary to;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BackupSyncPlan &&
+      other.kind == kind &&
+      other.from == from &&
+      other.to == to;
+
+  @override
+  int get hashCode => Object.hash(kind, from, to);
+}
+
+/// Work represented by Update Available: refresh content, normalize placement,
+/// or both.
+class BackupUpdatePlan {
+  const BackupUpdatePlan({this.updateContent = false, this.sync});
+
+  final bool updateContent;
+  final BackupSyncPlan? sync;
+
+  bool get needsSync => sync != null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BackupUpdatePlan &&
+      other.updateContent == updateContent &&
+      other.sync == sync;
+
+  @override
+  int get hashCode => Object.hash(updateContent, sync);
+}
+
+BackupAction? actionForBackupState(BackupState state) => switch (state) {
+  BackupState.notBackedUp => BackupAction.backUp,
+  BackupState.vanished => BackupAction.restore,
+  BackupState.emptyBackup => BackupAction.recycleJunk,
+  BackupState.updateAvailable => BackupAction.update,
+  BackupState.updateDismissed => BackupAction.showUpdateAgain,
+  BackupState.synced => null,
+};
 
 /// What a card draws with, plus the three fields the tab filters and orders on.
 ///
@@ -129,20 +178,56 @@ BackupState worstBackupState(Map<BackupState, int> counts) =>
       orElse: () => BackupState.notBackedUp,
     );
 
-/// A folder name whose backup layout does not mirror its live layout.
-///
-/// The four flags are what the card's presence matrix draws. Binning the
-/// leftover and backing up the unprotected copy are two decisions about one
-/// wallpaper, so a name gets one entry rather than one per mismatch.
+/// Why a wallpaper cannot be resolved safely without user intent.
+enum BackupReconcileReason {
+  duplicateLiveCopies,
+  conflictingBackupCopies,
+  comparisonUnavailable,
+}
+
+/// What differs between the two backup copies for one wallpaper.
+class BackupCopyDifference {
+  const BackupCopyDifference({
+    this.differentSize = const <String>[],
+    this.onlyWorkshop = const <String>[],
+    this.onlyMyProjects = const <String>[],
+  });
+
+  final List<String> differentSize;
+  final List<String> onlyWorkshop;
+  final List<String> onlyMyProjects;
+
+  int get total =>
+      differentSize.length + onlyWorkshop.length + onlyMyProjects.length;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BackupCopyDifference &&
+      listEquals(other.differentSize, differentSize) &&
+      listEquals(other.onlyWorkshop, onlyWorkshop) &&
+      listEquals(other.onlyMyProjects, onlyMyProjects);
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(differentSize),
+    Object.hashAll(onlyWorkshop),
+    Object.hashAll(onlyMyProjects),
+  );
+}
+
+/// A wallpaper whose copies cannot be mapped safely by the automatic rules.
 class ReconcileEntry {
   const ReconcileEntry({
     required this.name,
+    required this.reason,
     required this.states,
     required this.backupWorkshop,
     required this.backupMyProjects,
+    this.backupDifference,
   });
 
   final String name;
+  final BackupReconcileReason reason;
 
   /// What each live copy would read as an ordinary card, one entry per live
   /// library. Carried here so a wallpaper waiting to be reconciled still shows
@@ -151,22 +236,25 @@ class ReconcileEntry {
 
   final bool backupWorkshop;
   final bool backupMyProjects;
+  final BackupCopyDifference? backupDifference;
 
   bool get liveWorkshop => states.containsKey(WallpaperLibrary.workshop);
   bool get liveMyProjects => states.containsKey(WallpaperLibrary.myProjects);
 
-  /// Backup copies with no live counterpart, which is what put the name here.
+  /// Backup libraries that hold this name without a same-library live copy.
   ///
-  /// This names the shape for the card's reason ribbon. It is not the set the
-  /// keep checkboxes drive: every backup folder present gets one, orphan or
-  /// not, or a card listing two backup copies would leave one unremovable.
+  /// This is diagnostic structure information for Reconcile. It does not imply
+  /// that the backup is unprotected, removable, or eligible for an automatic
+  /// cleanup action.
   Set<WallpaperLibrary> get orphans => <WallpaperLibrary>{
     if (backupWorkshop && !liveWorkshop) WallpaperLibrary.workshop,
     if (backupMyProjects && !liveMyProjects) WallpaperLibrary.myProjects,
   };
 
-  /// Live copies their own backup library does not hold, which is what gates
-  /// the card's Back up action.
+  /// Live libraries whose Reconcile state is still Not backed up.
+  ///
+  /// The Reconcile tile uses this only to surface the Not backed up badge;
+  /// Reconcile itself remains diagnostic and exposes no automatic backup action.
   Set<WallpaperLibrary> get needsBackup => <WallpaperLibrary>{
     for (final MapEntry<WallpaperLibrary, BackupState> entry in states.entries)
       if (entry.value == BackupState.notBackedUp) entry.key,
@@ -178,8 +266,10 @@ class ReconcileEntry {
   bool operator ==(Object other) =>
       other is ReconcileEntry &&
       other.name == name &&
+      other.reason == reason &&
       other.backupWorkshop == backupWorkshop &&
       other.backupMyProjects == backupMyProjects &&
+      other.backupDifference == backupDifference &&
       other.states[WallpaperLibrary.workshop] ==
           states[WallpaperLibrary.workshop] &&
       other.states[WallpaperLibrary.myProjects] ==
@@ -188,8 +278,10 @@ class ReconcileEntry {
   @override
   int get hashCode => Object.hash(
     name,
+    reason,
     backupWorkshop,
     backupMyProjects,
+    backupDifference,
     states[WallpaperLibrary.workshop],
     states[WallpaperLibrary.myProjects],
   );
@@ -246,11 +338,8 @@ String? folderVersion(Iterable<FileStamp> topLevelFiles) {
 /// A file under a wallpaper folder, by its path relative to that folder.
 typedef FileEntry = ({String path, int size});
 
-/// Wallpaper Engine rebuilds these for itself, so nothing copies them and
-/// nothing may compare them. On a real library 1127 live myprojects folders
-/// held one against 214 backup folders, so counting them would call almost
-/// every myprojects backup stale. Lowercase, matching what [_relative] folds
-/// its paths to.
+/// Wallpaper Engine rebuilds this cache, so backup operations and comparisons
+/// ignore it. Lowercase matches the normalized relative paths used below.
 const String rebuiltShaderDir = r'shaders\blobssm40\';
 
 /// How a backup folder stands against the live wallpaper it mirrors.
@@ -313,21 +402,99 @@ CopyStanding compareCopy({
 
 typedef BackupDiffResult = ({
   Map<BackupCard, BackupState> cards,
+  Map<BackupCard, BackupUpdatePlan> updates,
   List<ReconcileEntry> reconcile,
 });
 
+enum BackupRuleKind { absent, vanished, ordinary, structureSync, reconcile }
+
+typedef BackupRuleDecision = ({
+  BackupRuleKind kind,
+  BackupReconcileReason? reconcileReason,
+});
+
+/// One source of truth for how folder presence affects a wallpaper.
+BackupRuleDecision backupRule({
+  required bool liveWorkshop,
+  required bool liveMyProjects,
+  required bool backupWorkshop,
+  required bool backupMyProjects,
+  bool backupCopiesEquivalent = false,
+  bool backupComparisonUnavailable = false,
+  bool contentComparisonUnavailable = false,
+}) {
+  final int liveCount = (liveWorkshop ? 1 : 0) + (liveMyProjects ? 1 : 0);
+  final int backupCount = (backupWorkshop ? 1 : 0) + (backupMyProjects ? 1 : 0);
+
+  // No live or backup copy means there is nothing to show.
+  if (liveCount == 0 && backupCount == 0) {
+    return (kind: BackupRuleKind.absent, reconcileReason: null);
+  }
+
+  //====================
+  // Vanished Rules
+  //====================
+  // No live copy exists in either live library.
+  // At least one valid backup exists in either backup library.
+  if (liveCount == 0) {
+    return (kind: BackupRuleKind.vanished, reconcileReason: null);
+  }
+
+  final bool ownBackup = liveWorkshop ? backupWorkshop : backupMyProjects;
+  final bool otherBackup = liveWorkshop ? backupMyProjects : backupWorkshop;
+
+  //====================
+  // Reconcile Rules
+  //====================
+  // Two live copies make the authoritative source ambiguous.
+  // Different backup copies need a user decision before either is replaced.
+  // Failed required comparisons stay unknown instead of being guessed Synced.
+  if (liveCount > 1) {
+    return (
+      kind: BackupRuleKind.reconcile,
+      reconcileReason: BackupReconcileReason.duplicateLiveCopies,
+    );
+  }
+  if (ownBackup && otherBackup) {
+    if (backupComparisonUnavailable) {
+      return (
+        kind: BackupRuleKind.reconcile,
+        reconcileReason: BackupReconcileReason.comparisonUnavailable,
+      );
+    }
+    if (!backupCopiesEquivalent) {
+      return (
+        kind: BackupRuleKind.reconcile,
+        reconcileReason: BackupReconcileReason.conflictingBackupCopies,
+      );
+    }
+  }
+  if (ownBackup && !otherBackup && contentComparisonUnavailable) {
+    return (
+      kind: BackupRuleKind.reconcile,
+      reconcileReason: BackupReconcileReason.comparisonUnavailable,
+    );
+  }
+
+  //====================
+  // Update / Sync Rules
+  //====================
+  // A usable backup exists, but its top-level library placement is wrong.
+  // Equivalent copies in both backup libraries are also safe structure cleanup.
+  // Placement problems cannot be hidden by dismissing a content update.
+  if (otherBackup) {
+    return (kind: BackupRuleKind.structureSync, reconcileReason: null);
+  }
+
+  return (kind: BackupRuleKind.ordinary, reconcileReason: null);
+}
+
 /// Every folder name sorted into a grid card or a reconcile entry.
 ///
-/// Three tiers, and the order is the point. Live in neither library is vanished
-/// and nothing may demote it, because a Workshop item Steam delisted without
-/// saying so is the whole reason for the tab. A name live in both libraries is
-/// always a reconcile decision, even with no backup at all. A backup placement
-/// mismatch also reconciles. Everything else is an ordinary card.
-///
-/// Backup protection is wallpaper-level, not library-level: if either backup
-/// library holds the name, the live wallpaper is backed up. The library split
-/// still matters for update/version reporting and for deciding which folders a
-/// reconcile entry offers to keep or remove.
+/// Backup protection is wallpaper-level: either backup tree protects the live
+/// wallpaper. A lone opposite-tree backup needs structure sync. Duplicate live
+/// copies reconcile. Dual backups reconcile when different or uncomparable;
+/// equivalent copies use Update / Sync.
 BackupDiffResult backupDiff({
   required Set<String> liveWorkshop,
   required Set<String> liveMyProjects,
@@ -337,7 +504,16 @@ BackupDiffResult backupDiff({
   required Map<String, String> liveMyProjectsVersions,
   required Map<String, CopyStanding> workshopStanding,
   required Map<String, CopyStanding> myProjectsStanding,
+  Map<String, CopyStanding> crossWorkshopStanding =
+      const <String, CopyStanding>{},
+  Map<String, CopyStanding> crossMyProjectsStanding =
+      const <String, CopyStanding>{},
   required Map<String, BackupRecord> records,
+  Set<String> equivalentBackupCopies = const <String>{},
+  Set<String> unavailableBackupComparisons = const <String>{},
+  Map<String, BackupCopyDifference> backupCopyDifferences =
+      const <String, BackupCopyDifference>{},
+  Set<String> unavailableContentComparisons = const <String>{},
 }) {
   final Map<String, String> liveW = _namesByKey(liveWorkshop);
   final Map<String, String> liveM = _namesByKey(liveMyProjects);
@@ -348,9 +524,29 @@ BackupDiffResult backupDiff({
   final Map<String, String> versionsM = _keyed(liveMyProjectsVersions);
   final Map<String, CopyStanding> standingW = _keyed(workshopStanding);
   final Map<String, CopyStanding> standingM = _keyed(myProjectsStanding);
+  final Map<String, CopyStanding> crossStandingW = _keyed(
+    crossWorkshopStanding,
+  );
+  final Map<String, CopyStanding> crossStandingM = _keyed(
+    crossMyProjectsStanding,
+  );
   final Map<String, BackupRecord> byId = _keyed(records);
+  final Set<String> equivalent = <String>{
+    for (final String name in equivalentBackupCopies) name.toLowerCase(),
+  };
+  final Set<String> backupUnavailable = <String>{
+    for (final String name in unavailableBackupComparisons) name.toLowerCase(),
+  };
+  final Map<String, BackupCopyDifference> differences = _keyed(
+    backupCopyDifferences,
+  );
+  final Set<String> contentUnavailable = <String>{
+    for (final String id in unavailableContentComparisons) id.toLowerCase(),
+  };
 
   final Map<BackupCard, BackupState> cards = <BackupCard, BackupState>{};
+  final Map<BackupCard, BackupUpdatePlan> updates =
+      <BackupCard, BackupUpdatePlan>{};
   final List<ReconcileEntry> reconcile = <ReconcileEntry>[];
 
   final Set<String> keys = <String>{
@@ -366,7 +562,24 @@ BackupDiffResult backupDiff({
     final String? bw = backupW[key];
     final String? bm = backupM[key];
 
-    if (lw == null && lm == null) {
+    final String? liveId = lw != null
+        ? BackupCard(WallpaperLibrary.workshop, lw).id
+        : lm != null
+        ? BackupCard(WallpaperLibrary.myProjects, lm).id
+        : null;
+    final BackupRuleDecision decision = backupRule(
+      liveWorkshop: lw != null,
+      liveMyProjects: lm != null,
+      backupWorkshop: bw != null,
+      backupMyProjects: bm != null,
+      backupCopiesEquivalent: equivalent.contains(key),
+      backupComparisonUnavailable: backupUnavailable.contains(key),
+      contentComparisonUnavailable:
+          liveId != null && contentUnavailable.contains(liveId),
+    );
+    final BackupRuleKind rule = decision.kind;
+    if (rule == BackupRuleKind.absent) continue;
+    if (rule == BackupRuleKind.vanished) {
       if (bw != null) {
         cards[BackupCard(WallpaperLibrary.workshop, bw)] = BackupState.vanished;
       }
@@ -388,56 +601,69 @@ BackupDiffResult backupDiff({
     final Map<WallpaperLibrary, BackupState> states =
         <WallpaperLibrary, BackupState>{};
     if (workshopCard != null) {
-      states[WallpaperLibrary.workshop] = bw == null && coveredAnywhere
-          ? BackupState.synced
-          : _cardState(
-              library: WallpaperLibrary.workshop,
-              covered: coveredAnywhere,
-              liveVersion: versionsW[key],
-              standing: standingW[key],
-              record: byId[workshopCard.id],
-            );
+      states[WallpaperLibrary.workshop] = _cardState(
+        library: WallpaperLibrary.workshop,
+        covered: coveredAnywhere,
+        liveVersion: versionsW[key],
+        standing: bw != null ? standingW[key] : crossStandingW[key],
+        record: byId[workshopCard.id],
+      );
     }
     if (myProjectsCard != null) {
-      states[WallpaperLibrary.myProjects] = bm == null && coveredAnywhere
-          ? BackupState.synced
-          : _cardState(
-              library: WallpaperLibrary.myProjects,
-              covered: coveredAnywhere,
-              liveVersion: versionsM[key],
-              standing: standingM[key],
-              record: byId[myProjectsCard.id],
-            );
+      states[WallpaperLibrary.myProjects] = _cardState(
+        library: WallpaperLibrary.myProjects,
+        covered: coveredAnywhere,
+        liveVersion: versionsM[key],
+        standing: bm != null ? standingM[key] : crossStandingM[key],
+        record: byId[myProjectsCard.id],
+      );
     }
 
-    final bool duplicateLive = lw != null && lm != null;
-    final bool placementMismatch =
-        (bw != null && lw == null) || (bm != null && lm == null);
-    if (duplicateLive || placementMismatch) {
-      // Tier 1 returned already, so one of the two live names is non-null. A
-      // duplicate live name is itself the ambiguity: Steam may have restored a
-      // Workshop copy beside an edited MyProjects copy without the user seeing
-      // it happen.
+    if (rule == BackupRuleKind.reconcile) {
       reconcile.add(
         ReconcileEntry(
           name: lw ?? lm!,
+          reason: decision.reconcileReason!,
           states: states,
           backupWorkshop: bw != null,
           backupMyProjects: bm != null,
+          backupDifference: differences[key],
         ),
       );
       continue;
     }
 
-    if (workshopCard != null) {
-      cards[workshopCard] = states[WallpaperLibrary.workshop]!;
+    final BackupCard liveCard = workshopCard ?? myProjectsCard!;
+    final BackupState contentState = states[liveCard.library]!;
+    if (rule == BackupRuleKind.structureSync) {
+      final WallpaperLibrary other =
+          liveCard.library == WallpaperLibrary.workshop
+          ? WallpaperLibrary.myProjects
+          : WallpaperLibrary.workshop;
+      final bool ownBackup = liveCard.library == WallpaperLibrary.workshop
+          ? bw != null
+          : bm != null;
+      updates[liveCard] = BackupUpdatePlan(
+        updateContent: contentState == BackupState.updateAvailable,
+        sync: BackupSyncPlan(
+          kind: ownBackup
+              ? BackupSyncKind.removeDuplicate
+              : BackupSyncKind.relocate,
+          from: other,
+          to: liveCard.library,
+        ),
+      );
+      cards[liveCard] = BackupState.updateAvailable;
+      continue;
     }
-    if (myProjectsCard != null) {
-      cards[myProjectsCard] = states[WallpaperLibrary.myProjects]!;
+
+    cards[liveCard] = contentState;
+    if (contentState == BackupState.updateAvailable) {
+      updates[liveCard] = const BackupUpdatePlan(updateContent: true);
     }
   }
 
-  return (cards: cards, reconcile: reconcile);
+  return (cards: cards, updates: updates, reconcile: reconcile);
 }
 
 /// One library's names under a lowercased key, since Windows sees `A` and `a`
@@ -451,21 +677,7 @@ Map<String, V> _keyed<V>(Map<String, V> byName) => <String, V>{
     entry.key.toLowerCase(): entry.value,
 };
 
-/// State of one grid card. The two libraries answer "is the backup stale?"
-/// differently, because only one of them has a version to ask Steam for.
-///
-/// myprojects compares the two folders directly and keeps no baseline. Its
-/// version is already a fingerprint, so a recorded one would add nothing and
-/// would go stale the moment anything touched the backup outside this app.
-///
-/// Workshop uses the version recorded by an explicit backup. Steam's manifest
-/// names the live version only; when no record exists, the two folders are
-/// compared directly without writing anything during the scan.
-///
-/// A Workshop folder with no manifest was dropped in by hand and will never
-/// gain one, so it is left alone rather than nagging forever with no version to
-/// dismiss. The caller's banner covers the other reason a manifest is missing,
-/// which is an unreadable ACF.
+// Content staleness is calculated only after presence rules have decided the pill.
 BackupState _cardState({
   required WallpaperLibrary library,
   required bool covered,
@@ -473,18 +685,45 @@ BackupState _cardState({
   required CopyStanding? standing,
   required BackupRecord? record,
 }) {
+  //====================
+  // Not Backed Up Rules
+  //====================
+  // A live copy exists.
+  // No usable backup exists in either backup library.
   if (!covered) return BackupState.notBackedUp;
-  // Before anything else, including the Workshop baseline: a folder with
-  // nothing in it is not a backup, whatever a record says about it.
+
+  //====================
+  // Empty / Junk Rules
+  //====================
+  // A backup folder exists, but contains nothing worth protecting.
+  // Rebuilt shader cache does not count as wallpaper content.
+  // This stays separate because the folder can misleadingly look backed up.
   if (standing == CopyStanding.empty) {
     return BackupState.emptyBackup;
   }
 
   final String? dismissed = record?.dismissedVersion;
-  BackupState behind() => liveVersion != null && liveVersion == dismissed
-      ? BackupState.updateDismissed
-      : BackupState.updateAvailable;
 
+  BackupState behind() {
+    //====================
+    // Update Dismissed Rules
+    //====================
+    // A real content update exists and matches the version the user dismissed.
+    // Only the content update is hidden; placement problems still use Update / Sync.
+    if (liveVersion != null && liveVersion == dismissed) {
+      return BackupState.updateDismissed;
+    }
+
+    // A real content difference uses the Update / Sync pill too.
+    return BackupState.updateAvailable;
+  }
+
+  //====================
+  // Synced Rules
+  //====================
+  // A usable backup exists and covers the live wallpaper.
+  // No unresolved content update or placement problem remains.
+  // Required comparisons are filtered into Reconcile before this point.
   if (library == WallpaperLibrary.myProjects) {
     return standing == CopyStanding.behind ? behind() : BackupState.synced;
   }
@@ -498,8 +737,6 @@ BackupState _cardState({
   return switch (standing) {
     CopyStanding.covers => BackupState.synced,
     CopyStanding.behind => behind(),
-    // Nothing was compared, so there is nothing to record and nothing to
-    // report. Leaving it alone beats guessing in either direction.
     _ => BackupState.synced,
   };
 }

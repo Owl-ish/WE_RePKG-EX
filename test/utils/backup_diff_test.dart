@@ -15,7 +15,12 @@ void main() {
     Map<String, String> liveMyProjectsVersions = const <String, String>{},
     Map<String, CopyStanding> workshopStanding = nothingCompared,
     Map<String, CopyStanding> myProjectsStanding = nothingCompared,
+    Map<String, CopyStanding> crossWorkshopStanding = nothingCompared,
+    Map<String, CopyStanding> crossMyProjectsStanding = nothingCompared,
     Map<String, BackupRecord> records = const <String, BackupRecord>{},
+    Set<String> equivalentBackupCopies = const <String>{},
+    Set<String> unavailableBackupComparisons = const <String>{},
+    Set<String> unavailableContentComparisons = const <String>{},
   }) => backupDiff(
     liveWorkshop: liveWorkshop,
     liveMyProjects: liveMyProjects,
@@ -25,7 +30,12 @@ void main() {
     liveMyProjectsVersions: liveMyProjectsVersions,
     workshopStanding: workshopStanding,
     myProjectsStanding: myProjectsStanding,
+    crossWorkshopStanding: crossWorkshopStanding,
+    crossMyProjectsStanding: crossMyProjectsStanding,
     records: records,
+    equivalentBackupCopies: equivalentBackupCopies,
+    unavailableBackupComparisons: unavailableBackupComparisons,
+    unavailableContentComparisons: unavailableContentComparisons,
   );
 
   Map<BackupCard, BackupState> cards({
@@ -37,7 +47,12 @@ void main() {
     Map<String, String> liveMyProjectsVersions = const <String, String>{},
     Map<String, CopyStanding> workshopStanding = nothingCompared,
     Map<String, CopyStanding> myProjectsStanding = nothingCompared,
+    Map<String, CopyStanding> crossWorkshopStanding = nothingCompared,
+    Map<String, CopyStanding> crossMyProjectsStanding = nothingCompared,
     Map<String, BackupRecord> records = const <String, BackupRecord>{},
+    Set<String> equivalentBackupCopies = const <String>{},
+    Set<String> unavailableBackupComparisons = const <String>{},
+    Set<String> unavailableContentComparisons = const <String>{},
   }) => diff(
     liveWorkshop: liveWorkshop,
     liveMyProjects: liveMyProjects,
@@ -47,7 +62,12 @@ void main() {
     liveMyProjectsVersions: liveMyProjectsVersions,
     workshopStanding: workshopStanding,
     myProjectsStanding: myProjectsStanding,
+    crossWorkshopStanding: crossWorkshopStanding,
+    crossMyProjectsStanding: crossMyProjectsStanding,
     records: records,
+    equivalentBackupCopies: equivalentBackupCopies,
+    unavailableBackupComparisons: unavailableBackupComparisons,
+    unavailableContentComparisons: unavailableContentComparisons,
   ).cards;
 
   /// Named per test, so a card that must not be compared cannot pick one up by
@@ -131,9 +151,9 @@ void main() {
     });
 
     test('-- LM BW --', () {
-      expectReconcile(shape(false, true, true, false), <WallpaperLibrary>{
-        WallpaperLibrary.workshop,
-      }, <WallpaperLibrary>{});
+      expectCards(shape(false, true, true, false), <BackupCard, BackupState>{
+        myProjects(n): BackupState.updateAvailable,
+      });
     });
 
     test('-- LM BW BM', () {
@@ -149,9 +169,9 @@ void main() {
     });
 
     test('LW -- -- BM', () {
-      expectReconcile(shape(true, false, false, true), <WallpaperLibrary>{
-        WallpaperLibrary.myProjects,
-      }, <WallpaperLibrary>{});
+      expectCards(shape(true, false, false, true), <BackupCard, BackupState>{
+        workshop(n): BackupState.updateAvailable,
+      });
     });
 
     test('LW -- BW --', () {
@@ -261,27 +281,202 @@ void main() {
     });
   });
 
+  group('central backup rules', () {
+    test('duplicate live copies name their reconcile reason', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: true,
+        liveMyProjects: true,
+        backupWorkshop: false,
+        backupMyProjects: true,
+      );
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.duplicateLiveCopies,
+      );
+    });
+
+    test('different duplicate backups name their reconcile reason', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: true,
+        liveMyProjects: false,
+        backupWorkshop: true,
+        backupMyProjects: true,
+      );
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.conflictingBackupCopies,
+      );
+    });
+
+    test('equivalent duplicate backups are deterministic structure sync', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: true,
+        liveMyProjects: false,
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupCopiesEquivalent: true,
+      );
+      expect(decision.kind, BackupRuleKind.structureSync);
+      expect(decision.reconcileReason, isNull);
+    });
+
+    test('an unavailable duplicate-backup comparison stays ambiguous', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: true,
+        liveMyProjects: false,
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupComparisonUnavailable: true,
+      );
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.comparisonUnavailable,
+      );
+    });
+
+    test('an unavailable required content comparison stays ambiguous', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: false,
+        liveMyProjects: true,
+        backupWorkshop: false,
+        backupMyProjects: true,
+        contentComparisonUnavailable: true,
+      );
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.comparisonUnavailable,
+      );
+    });
+
+    test('wrong placement does not require a content comparison', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: false,
+        liveMyProjects: true,
+        backupWorkshop: true,
+        backupMyProjects: false,
+        contentComparisonUnavailable: true,
+      );
+      expect(decision.kind, BackupRuleKind.structureSync);
+      expect(decision.reconcileReason, isNull);
+    });
+  });
+
   group('tier 2, reconcile', () {
-    // A backup in either library protects the name, while the placement
-    // mismatch remains a reconcile decision.
-    test('a backup Workshop copy protects a name live only in myprojects', () {
+    // Backup protection is pooled across both backup trees. A lone copy under
+    // the opposite tree is protected but structurally out of sync, so it
+    // belongs to Update / Sync rather than Reconcile.
+    test('an opposite-tree backup is update/sync, not reconcile', () {
       final BackupDiffResult result = diff(
         liveMyProjects: const <String>{'793602574'},
         backupWorkshop: const <String>{'793602574'},
       );
 
-      expect(result.cards, isEmpty);
-      expect(result.reconcile, <ReconcileEntry>[
-        const ReconcileEntry(
-          name: '793602574',
-          states: <WallpaperLibrary, BackupState>{
-            WallpaperLibrary.myProjects: BackupState.synced,
-          },
-          backupWorkshop: true,
-          backupMyProjects: false,
+      expect(result.cards, <BackupCard, BackupState>{
+        myProjects('793602574'): BackupState.updateAvailable,
+      });
+      expect(result.reconcile, isEmpty);
+    });
+
+    test('wrong placement can require both update and sync', () {
+      const BackupCard card = BackupCard(WallpaperLibrary.myProjects, 'alpha');
+      final BackupDiffResult result = diff(
+        liveMyProjects: const <String>{'alpha'},
+        backupWorkshop: const <String>{'alpha'},
+        crossMyProjectsStanding: standing('alpha', CopyStanding.behind),
+      );
+
+      expect(
+        result.updates[card],
+        const BackupUpdatePlan(
+          updateContent: true,
+          sync: BackupSyncPlan(
+            kind: BackupSyncKind.relocate,
+            from: WallpaperLibrary.workshop,
+            to: WallpaperLibrary.myProjects,
+          ),
         ),
-      ]);
-      expect(result.reconcile.single.needsBackup, isEmpty);
+      );
+    });
+
+    test('current wrong-side backup is sync only', () {
+      const BackupCard card = BackupCard(WallpaperLibrary.myProjects, 'alpha');
+      final BackupDiffResult result = diff(
+        liveMyProjects: const <String>{'alpha'},
+        backupWorkshop: const <String>{'alpha'},
+        crossMyProjectsStanding: standing('alpha', CopyStanding.covers),
+      );
+
+      expect(
+        result.updates[card],
+        const BackupUpdatePlan(
+          sync: BackupSyncPlan(
+            kind: BackupSyncKind.relocate,
+            from: WallpaperLibrary.workshop,
+            to: WallpaperLibrary.myProjects,
+          ),
+        ),
+      );
+    });
+
+    test('equivalent duplicate backups are structure sync, not reconcile', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
+        equivalentBackupCopies: const <String>{'793602574'},
+      );
+
+      expect(result.cards, <BackupCard, BackupState>{
+        workshop('793602574'): BackupState.updateAvailable,
+      });
+      expect(result.reconcile, isEmpty);
+    });
+
+    test('different duplicate backups still require reconcile', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        backupWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
+      );
+
+      expect(result.cards, isEmpty);
+      expect(result.reconcile, hasLength(1));
+    });
+
+    test(
+      'an unavailable duplicate-backup comparison names the uncertainty',
+      () {
+        final BackupDiffResult result = diff(
+          liveWorkshop: const <String>{'793602574'},
+          backupWorkshop: const <String>{'793602574'},
+          backupMyProjects: const <String>{'793602574'},
+          unavailableBackupComparisons: const <String>{'793602574'},
+        );
+
+        expect(result.cards, isEmpty);
+        expect(
+          result.reconcile.single.reason,
+          BackupReconcileReason.comparisonUnavailable,
+        );
+      },
+    );
+
+    test('an unavailable myprojects comparison never reads as synced', () {
+      final BackupDiffResult result = diff(
+        liveMyProjects: const <String>{'alpha'},
+        backupMyProjects: const <String>{'alpha'},
+        unavailableContentComparisons: const <String>{'myprojects/alpha'},
+      );
+
+      expect(result.cards, isEmpty);
+      expect(
+        result.reconcile.single.reason,
+        BackupReconcileReason.comparisonUnavailable,
+      );
     });
 
     // The unpacked extraction whose live copy was deleted.
@@ -295,6 +490,7 @@ void main() {
         <ReconcileEntry>[
           const ReconcileEntry(
             name: '793602574',
+            reason: BackupReconcileReason.conflictingBackupCopies,
             states: <WallpaperLibrary, BackupState>{
               WallpaperLibrary.workshop: BackupState.synced,
             },
@@ -326,23 +522,20 @@ void main() {
       );
     });
 
-    // The placement mismatch is one wallpaper-level decision, and the
-    // opposite-library backup still protects the live copy.
-    test('a placement mismatch is one protected reconcile entry', () {
-      final List<ReconcileEntry> entries = diff(
-        liveMyProjects: const <String>{'793602574'},
-        backupWorkshop: const <String>{'793602574'},
-      ).reconcile;
+    test('wrong backup structure does not read as synced', () {
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{'793602574'},
+        backupMyProjects: const <String>{'793602574'},
+      );
 
-      expect(entries, hasLength(1));
-      expect(entries.single.orphans, <WallpaperLibrary>{
-        WallpaperLibrary.workshop,
+      expect(result.cards, <BackupCard, BackupState>{
+        workshop('793602574'): BackupState.updateAvailable,
       });
-      expect(entries.single.needsBackup, isEmpty);
+      expect(result.reconcile, isEmpty);
     });
 
-    // AC 18: a reconcile name is out of the grid entirely, so it cannot show up
-    // twice offering unrelated actions.
+    // Reconcile owns the ambiguous name exclusively, so the normal grid cannot
+    // expose a second action for the same wallpaper.
     test('a reconciling name produces no card', () {
       expect(
         cards(
@@ -364,6 +557,7 @@ void main() {
       expect(result.reconcile, <ReconcileEntry>[
         const ReconcileEntry(
           name: '793602574',
+          reason: BackupReconcileReason.duplicateLiveCopies,
           states: <WallpaperLibrary, BackupState>{
             WallpaperLibrary.workshop: BackupState.notBackedUp,
             WallpaperLibrary.myProjects: BackupState.notBackedUp,
@@ -394,12 +588,12 @@ void main() {
       expect(result.reconcile.single.needsBackup, isEmpty);
     });
 
-    test('an entry takes the live spelling', () {
+    test('an opposite-tree card keeps the live spelling', () {
       expect(
         diff(
           liveMyProjects: const <String>{'Cool Wallpaper'},
           backupWorkshop: const <String>{'cool wallpaper'},
-        ).reconcile.single.name,
+        ).cards.keys.single.name,
         'Cool Wallpaper',
       );
     });
@@ -954,15 +1148,14 @@ void main() {
       );
     });
 
-    // The whole reason this is not folderVersion: copying rewrites every
-    // timestamp, and a real backup differed from live on nothing else. There is
-    // no timestamp in the input at all, which is the strongest form of this.
+    // Coverage deliberately ignores timestamps because copying may rewrite them;
+    // relative path and size are the meaningful comparison here.
     test('a copy made at another time still covers', () {
       expect(compareCopy(live: project, backup: project), CopyStanding.covers);
     });
 
-    // Wallpaper Engine rebuilds these locally, so live grows them and a backup
-    // never holds them. Counting them called 1984 of 2162 real backups stale.
+    // Wallpaper Engine rebuilds shader caches locally, so their absence from a
+    // backup must not make otherwise covered content look stale.
     test('rebuilt shaders on the live side do not make it behind', () {
       expect(
         compareCopy(

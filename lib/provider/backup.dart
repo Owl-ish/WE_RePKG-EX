@@ -13,9 +13,8 @@ part 'backup.g.dart';
 
 /// How far the running scan has got, for the tab to show while it waits.
 ///
-/// A notifier rather than provider state: the count moves every few folders,
-/// and rebuilding the tab that often to redraw one line of text would be worse
-/// than the silence it replaces. Only the line itself listens.
+/// A notifier rather than provider state because the count moves every few
+/// folders; only the progress line needs those rebuilds.
 @Riverpod(keepAlive: true)
 ValueNotifier<BackupScanProgress?> backupScanProgress(Ref ref) {
   final ValueNotifier<BackupScanProgress?> progress =
@@ -26,10 +25,9 @@ ValueNotifier<BackupScanProgress?> backupScanProgress(Ref ref) {
 
 /// The whole comparison, run when the backup tab first asks for it.
 ///
-/// Kept alive because leaving the tab unmounts the view and rescanning both
-/// libraries is seconds of disk work. Watching the four paths is what refreshes
-/// it when one of them changes; anything that writes to the backup invalidates
-/// it by hand.
+/// Kept alive so remounting the tab does not repeat the filesystem scan. The
+/// four watched paths refresh it when configuration changes; backup mutations
+/// invalidate it explicitly.
 @Riverpod(keepAlive: true)
 Future<BackupScan> backupScan(Ref ref) async {
   final String? backupRoot = ref.watch(backupRootProvider);
@@ -54,9 +52,8 @@ Future<BackupScan> backupScan(Ref ref) async {
 
 /// The scan's cards in grid order, each with the title and preview to draw.
 ///
-/// Kept apart from the scan so that reading a few thousand `project.json` files
-/// cannot delay the counts, and so an unreadable one costs a picture rather
-/// than a card.
+/// Kept apart from the scan so face reads cannot delay the counts, and so an
+/// unreadable `project.json` costs a picture rather than a card.
 @Riverpod(keepAlive: true)
 Future<List<BackupTile>> backupTiles(Ref ref) async {
   final BackupScan scan = await ref.watch(backupScanProvider.future);
@@ -92,8 +89,8 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
 
 /// The names waiting to be reconciled, each with the title and preview to draw.
 ///
-/// Apart from [backupTiles]: a few hundred folders against several thousand,
-/// and they only ever show behind their own pill.
+/// Apart from [backupTiles] because Reconcile has its own names and only renders
+/// behind its own pill.
 @Riverpod(keepAlive: true)
 Future<List<ReconcileTile>> backupReconcileTiles(Ref ref) async {
   final BackupScan scan = await ref.watch(backupScanProvider.future);
@@ -190,8 +187,8 @@ class BackupSortOrder extends _$BackupSortOrder {
 
   void update(BackupSortType type) async {
     state = type;
-    // Keep the old stored values: 1 was name and 2 was date. Old state (0)
-    // naturally migrates to name when read above.
+    // Preserve persisted values 1 = name and 2 = date for compatibility; any
+    // other stored value falls back to name when read above.
     await StorageUtil.setInt(
       AppKeys.backupSortType,
       type == BackupSortType.date ? 2 : 1,
@@ -210,8 +207,8 @@ class BackupSortAscending extends _$BackupSortAscending {
   }
 }
 
-/// The cards the grid draws. Apart from [backupTiles] so that typing re-filters
-/// a list in memory rather than re-reading a few thousand folders.
+/// The cards the grid draws. Apart from [backupTiles] so typing only re-filters
+/// the in-memory list instead of repeating face reads.
 @Riverpod(keepAlive: true)
 AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
   return ref
@@ -284,10 +281,31 @@ class BackupSelection extends _$BackupSelection {
       AsyncValue<Set<String>> next,
     ) {
       if (next case AsyncData<Set<String>>(:final Set<String> value)) {
-        retain(value);
+        _queueRetain(value);
       }
     });
+    ref.onDispose(() {
+      _pendingVisibleIds = null;
+      _retainScheduled = false;
+    });
     return const <String>{};
+  }
+
+  Set<String>? _pendingVisibleIds;
+  bool _retainScheduled = false;
+
+  void _queueRetain(Set<String> ids) {
+    _pendingVisibleIds = ids;
+    if (_retainScheduled) return;
+    _retainScheduled = true;
+    // The visible-list provider can rebuild while Flutter is building a tile.
+    // Prune selection in a microtask instead of mutating it mid-build.
+    Future<void>.microtask(() {
+      _retainScheduled = false;
+      final Set<String>? visible = _pendingVisibleIds;
+      _pendingVisibleIds = null;
+      if (visible != null) retain(visible);
+    });
   }
 
   /// Which tile a shift range reaches back to. The id, not the position:
