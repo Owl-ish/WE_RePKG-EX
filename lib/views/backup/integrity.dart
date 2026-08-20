@@ -38,10 +38,10 @@ const Map<IntegrityRoot, String> _rootLabels = <IntegrityRoot, String>{
 };
 
 FileTreeLibrary _fileTreeLibraryForRoot(IntegrityRoot root) => switch (root) {
-  IntegrityRoot.liveWorkshop || IntegrityRoot.backupWorkshop =>
-    FileTreeLibrary.workshop,
-  IntegrityRoot.liveMyProjects || IntegrityRoot.backupMyProjects =>
-    FileTreeLibrary.myProjects,
+  IntegrityRoot.liveWorkshop ||
+  IntegrityRoot.backupWorkshop => FileTreeLibrary.workshop,
+  IntegrityRoot.liveMyProjects ||
+  IntegrityRoot.backupMyProjects => FileTreeLibrary.myProjects,
 };
 
 /// How one concern is drawn and what it tells the user to do about it.
