@@ -17,6 +17,60 @@ import 'package:we_repkg/widgets/smooth_wheel_scroll.dart';
 /// own against the same cells.
 typedef GridGeometry = ({int columns, double tile, double spacing});
 
+/// One grouped stretch of [SelectionGrid]. The grid still owns scrolling and
+/// tile layout; callers only supply optional section chrome around a flat slice
+/// of the item list.
+class SelectionGridSection {
+  const SelectionGridSection({
+    required this.itemCount,
+    this.beforeHeader,
+    this.beforeHeaderExtent,
+    this.header,
+    this.headerExtent,
+    this.headerPinned = false,
+    this.gridPadding = const EdgeInsets.only(
+      top: LayoutNums.contentGap,
+      bottom: LayoutNums.sectionGap,
+    ),
+  }) : assert(beforeHeader == null || beforeHeaderExtent != null),
+       assert(header == null || headerExtent != null);
+
+  final int itemCount;
+  final Widget? beforeHeader;
+  final double? beforeHeaderExtent;
+  final Widget? header;
+  final double? headerExtent;
+  final bool headerPinned;
+  final EdgeInsets gridPadding;
+}
+
+class _SelectionGridHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _SelectionGridHeaderDelegate({
+    required this.extent,
+    required this.child,
+  });
+
+  final double extent;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => RepaintBoundary(child: child);
+
+  @override
+  bool shouldRebuild(covariant _SelectionGridHeaderDelegate oldDelegate) =>
+      oldDelegate.extent != extent || oldDelegate.child != child;
+}
+
 /// One-shot replay latch shared by tabs that use the grid entrance. A request
 /// survives loading, but once a grid takes it, ordinary rebuilds cannot replay
 /// it.
@@ -45,10 +99,9 @@ class GridEntranceReplay {
   void discard() => _owed = false;
 }
 
-/// One diagonal of the shared grid entrance: when it runs, and where its tiles
-/// come from. Kept public inside the app so grouped grids can use the exact same
-/// entrance as [SelectionGrid].
-typedef GridEntranceWave = ({
+/// One diagonal of the shared grid entrance: when it runs and where its tiles
+/// come from.
+typedef _GridEntranceWave = ({
   CurvedAnimation t,
   Animation<double> scale,
   Animation<Offset> position,
@@ -58,11 +111,11 @@ typedef GridEntranceWave = ({
 const Duration gridEntranceDuration = Duration(milliseconds: 900);
 
 /// Number of diagonals staggered across one entrance.
-const int gridEntranceWaveCount = 12;
+const int _gridEntranceWaveCount = 12;
 
 /// Builds the diagonal wave animations shared by regular and grouped grids.
-List<GridEntranceWave> buildGridEntranceWaves(Animation<double> parent) =>
-    List<GridEntranceWave>.generate(gridEntranceWaveCount, (int wave) {
+List<_GridEntranceWave> _buildGridEntranceWaves(Animation<double> parent) =>
+    List<_GridEntranceWave>.generate(_gridEntranceWaveCount, (int wave) {
       final double start = (wave * .06).clamp(0, .66);
       final CurvedAnimation t = CurvedAnimation(
         parent: parent,
@@ -110,18 +163,18 @@ List<GridEntranceWave> buildGridEntranceWaves(Animation<double> parent) =>
     });
 
 /// Wraps one tile in its diagonal of the shared entrance.
-Widget gridEntranceTile({
+Widget _gridEntranceTile({
   required bool done,
-  required List<GridEntranceWave> waves,
+  required List<_GridEntranceWave> waves,
   required int index,
   required int columns,
   required Widget child,
 }) {
   if (done) return child;
-  final GridEntranceWave wave =
+  final _GridEntranceWave wave =
       waves[((index ~/ columns) + (index % columns)).clamp(
         0,
-        gridEntranceWaveCount - 1,
+        _gridEntranceWaveCount - 1,
       )];
   return FadeTransition(
     opacity: wave.t,
@@ -155,6 +208,7 @@ class SelectionGrid extends StatefulWidget {
     this.entranceToken = 0,
     this.entranceOnMount = true,
     this.reflowIdentity,
+    this.sections = const <SelectionGridSection>[],
   });
 
   /// Names this grid's stored scroll position, and labels its controller.
@@ -195,6 +249,12 @@ class SelectionGrid extends StatefulWidget {
   /// Changing this accepts the new ids immediately instead of animating them from
   /// the previous list. Search and sort can keep the same identity and still reflow.
   final Object? reflowIdentity;
+
+  /// Optional grouped presentation. [itemCount], [idAt], and [itemBuilder]
+  /// still describe one flat list; sections only partition that list visually.
+  /// Grouped mode intentionally keeps the current Backup behavior of click/
+  /// ctrl/shift selection without adding marquee selection across headers.
+  final List<SelectionGridSection> sections;
 
   @override
   State<SelectionGrid> createState() => _SelectionGridState();
@@ -273,7 +333,7 @@ class _SelectionGridState extends State<SelectionGrid>
   static const int _reflowMaxRows = 3;
 
   /// One per diagonal, built once and shared with grouped grids elsewhere.
-  late final List<GridEntranceWave> _entranceWaves = buildGridEntranceWaves(
+  late final List<_GridEntranceWave> _entranceWaves = _buildGridEntranceWaves(
     _entrance,
   );
 
@@ -315,6 +375,12 @@ class _SelectionGridState extends State<SelectionGrid>
     }
     if (widget.reflowIdentity != old.reflowIdentity) {
       _finishEntrance();
+      _acceptListWithoutReflow();
+      return;
+    }
+    // Section headers change the main-axis geometry, so grouped lists do not
+    // pretend their flat indexes describe a reflow path through those headers.
+    if (widget.sections.isNotEmpty || old.sections.isNotEmpty) {
       _acceptListWithoutReflow();
       return;
     }
@@ -378,7 +444,7 @@ class _SelectionGridState extends State<SelectionGrid>
 
   @override
   void dispose() {
-    for (final GridEntranceWave wave in _entranceWaves) {
+    for (final _GridEntranceWave wave in _entranceWaves) {
       wave.t.dispose();
     }
     _entrance.dispose();
@@ -446,7 +512,7 @@ class _SelectionGridState extends State<SelectionGrid>
   );
 
   /// A tile arriving: past its resting place, then back to it.
-  Widget _arriving(int index, int columns, Widget tile) => gridEntranceTile(
+  Widget _arriving(int index, int columns, Widget tile) => _gridEntranceTile(
     done: _entranceDone,
     waves: _entranceWaves,
     index: index,
@@ -489,14 +555,18 @@ class _SelectionGridState extends State<SelectionGrid>
     final Rect box = Rect.fromPoints(from, _toGrid(_dragPointer));
     _marquee.value = box;
 
-    final Set<String> ids = coveredTiles(
-      box,
-      origin: widget.padding.topLeft,
-      columns: _columns,
-      tile: _tileExtent,
-      spacing: _spacing,
-      count: widget.itemCount,
-    ).map(widget.idAt).toSet();
+    final Set<String> ids = <String>{
+      for (final section in _sectionGrids())
+        for (final int localIndex in coveredTiles(
+          box,
+          origin: section.origin,
+          columns: _columns,
+          tile: _tileExtent,
+          spacing: _spacing,
+          count: section.count,
+        ))
+          widget.idAt(section.start + localIndex),
+    };
     if (_dragIds != null && setEquals(ids, _dragIds)) return;
     _dragIds = ids;
     _dragWanted = _dragBaseline.isEmpty
@@ -527,13 +597,15 @@ class _SelectionGridState extends State<SelectionGrid>
     // miss, not an instruction to put everything down.
     if (isCtrlPressed || isShiftPressed) return;
     if (at == null ||
-        hitsTile(
-          at,
-          origin: widget.padding.topLeft,
-          columns: _columns,
-          tile: _tileExtent,
-          spacing: _spacing,
-          count: widget.itemCount,
+        _sectionGrids().any(
+          (section) => hitsTile(
+            at,
+            origin: section.origin,
+            columns: _columns,
+            tile: _tileExtent,
+            spacing: _spacing,
+            count: section.count,
+          ),
         )) {
       return;
     }
@@ -579,6 +651,120 @@ class _SelectionGridState extends State<SelectionGrid>
     _marquee.value = null;
   }
 
+  List<SelectionGridSection> _sections() => widget.sections.isNotEmpty
+      ? widget.sections
+      : <SelectionGridSection>[
+          SelectionGridSection(
+            itemCount: widget.itemCount,
+            gridPadding: widget.padding,
+          ),
+        ];
+
+  double _gridHeight(int itemCount) {
+    if (itemCount == 0) return 0;
+    final int rows = (itemCount + _columns - 1) ~/ _columns;
+    return rows * _tileExtent + (rows - 1) * _spacing;
+  }
+
+  Iterable<({int start, int count, Offset origin})> _sectionGrids() sync* {
+    int start = 0;
+    double top = 0;
+    for (final SelectionGridSection section in _sections()) {
+      if (section.beforeHeader != null) top += section.beforeHeaderExtent!;
+      if (section.header != null) top += section.headerExtent!;
+      final Offset origin = Offset(
+        section.gridPadding.left,
+        top + section.gridPadding.top,
+      );
+      yield (start: start, count: section.itemCount, origin: origin);
+      start += section.itemCount;
+      top =
+          origin.dy +
+          _gridHeight(section.itemCount) +
+          section.gridPadding.bottom;
+    }
+  }
+
+  Widget _scrollView(int columnCount, GridGeometry geometry) {
+    final bool grouped = widget.sections.isNotEmpty;
+    final List<SelectionGridSection> sections = _sections();
+    int start = 0;
+    final List<Widget> groups = <Widget>[];
+    for (final SelectionGridSection section in sections) {
+      final int sectionStart = start;
+      start += section.itemCount;
+      groups.add(
+        SliverMainAxisGroup(
+          slivers: <Widget>[
+            if (section.beforeHeader case final Widget beforeHeader)
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: section.beforeHeaderExtent,
+                  child: beforeHeader,
+                ),
+              ),
+            if (section.header case final Widget header)
+              if (section.headerPinned && section.headerExtent != null)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _SelectionGridHeaderDelegate(
+                    extent: section.headerExtent!,
+                    child: header,
+                  ),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: SizedBox(height: section.headerExtent, child: header),
+                ),
+            SliverPadding(
+              padding: section.gridPadding,
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  crossAxisSpacing: _spacing,
+                  mainAxisSpacing: _spacing,
+                  maxCrossAxisExtent: _maxExtent,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (BuildContext context, int localIndex) {
+                    final int index = sectionStart + localIndex;
+                    Widget child = widget.itemBuilder(context, index, geometry);
+                    if (!grouped) {
+                      child = _reflowed(
+                        child,
+                        widget.idAt(index),
+                        index,
+                        geometry,
+                      );
+                    }
+                    return _arriving(
+                      grouped ? localIndex : index,
+                      columnCount,
+                      child,
+                    );
+                  },
+                  childCount: section.itemCount,
+                  addAutomaticKeepAlives: false,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (start != widget.itemCount) {
+      throw FlutterError(
+        'SelectionGrid sections contain $start items, '
+        'but itemCount is ${widget.itemCount}.',
+      );
+    }
+    return CustomScrollView(
+      key: PageStorageKey<String>(widget.id),
+      controller: _scrollController,
+      scrollCacheExtent: const ScrollCacheExtent.pixels(500),
+      slivers: groups,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -604,6 +790,8 @@ class _SelectionGridState extends State<SelectionGrid>
           tile: tile,
           spacing: _spacing,
         );
+
+        final Widget scrollView = _scrollView(columnCount, geometry);
 
         return Stack(
           children: [
@@ -638,30 +826,7 @@ class _SelectionGridState extends State<SelectionGrid>
               },
               onPanEnd: (_) => _endDrag(),
               onPanCancel: _endDrag,
-              child: GridView.builder(
-                key: PageStorageKey<String>(widget.id),
-                controller: _scrollController,
-                itemCount: widget.itemCount,
-                padding: widget.padding,
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  crossAxisSpacing: _spacing,
-                  mainAxisSpacing: _spacing,
-                  maxCrossAxisExtent: _maxExtent,
-                ),
-                scrollCacheExtent: const ScrollCacheExtent.pixels(500),
-                // No tile keeps itself alive, so the wrapper is pure overhead.
-                addAutomaticKeepAlives: false,
-                itemBuilder: (context, index) => _arriving(
-                  index,
-                  columnCount,
-                  _reflowed(
-                    widget.itemBuilder(context, index, geometry),
-                    widget.idAt(index),
-                    index,
-                    geometry,
-                  ),
-                ),
-              ),
+              child: scrollView,
             ),
             // Watches the scroll position too, or a wheel scroll mid-drag
             // leaves the rectangle stuck to the viewport.

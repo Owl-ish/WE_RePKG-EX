@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -414,9 +412,8 @@ class _Loaded extends ConsumerWidget {
                   nags: state != BackupState.synced,
                   onPressed: () => pills.show(state),
                 ),
-              // Red, unlike the grey badge a reconcile tile wears: on the tile
-              // it names a question, here it is the one count the tab cannot
-              // answer for at all.
+              // Reconcile is red because it is the one count the tab cannot
+              // answer automatically.
               CountPill(
                 colour: Theme.of(context).status.bad,
                 label: tr(AppI10n.backupReconcile),
@@ -493,6 +490,9 @@ class _BackupIssueNote extends StatelessWidget {
   );
 }
 
+const double _backupIssueHeaderHeight = 60;
+const double _backupJunkActionExtent = 50;
+
 class _BackupIssueHeader extends StatelessWidget {
   const _BackupIssueHeader({
     required this.noteKey,
@@ -515,40 +515,6 @@ class _BackupIssueHeader extends StatelessWidget {
     ),
   );
 }
-
-class _PinnedBackupIssueHeader extends SliverPersistentHeaderDelegate {
-  const _PinnedBackupIssueHeader({required this.noteKey, required this.child});
-
-  static const double height = 60;
-
-  final Key noteKey;
-  final Widget child;
-
-  @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => _BackupIssueHeader(noteKey: noteKey, pinned: true, child: child);
-
-  @override
-  bool shouldRebuild(covariant _PinnedBackupIssueHeader oldDelegate) =>
-      oldDelegate.noteKey != noteKey || oldDelegate.child != child;
-}
-
-SliverPersistentHeader _stickyBackupIssueHeader({
-  required Key noteKey,
-  required Widget child,
-}) => SliverPersistentHeader(
-  pinned: true,
-  delegate: _PinnedBackupIssueHeader(noteKey: noteKey, child: child),
-);
 
 class _GlowingActionButton extends StatelessWidget {
   const _GlowingActionButton({
@@ -633,54 +599,8 @@ class _Grid extends ConsumerStatefulWidget {
   ConsumerState<_Grid> createState() => _GridState();
 }
 
-class _GridState extends ConsumerState<_Grid>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _junkEntrance;
-  late final List<GridEntranceWave> _junkEntranceWaves;
-  bool _junkEntranceDone = true;
-  int _junkEntranceRun = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _junkEntrance =
-        AnimationController(vsync: this, duration: gridEntranceDuration)
-          ..addStatusListener((AnimationStatus status) {
-            if (status == AnimationStatus.completed && mounted) {
-              setState(() => _junkEntranceDone = true);
-            }
-          });
-    _junkEntranceWaves = buildGridEntranceWaves(_junkEntrance);
-  }
-
+class _GridState extends ConsumerState<_Grid> {
   bool _takeEntrance() => widget.entrance.take();
-
-  void _startJunkEntrance() {
-    final int run = ++_junkEntranceRun;
-    _junkEntrance
-      ..stop()
-      ..value = 0;
-    _junkEntranceDone = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && run == _junkEntranceRun) _junkEntrance.forward();
-    });
-  }
-
-  void _finishJunkEntrance() {
-    _junkEntranceRun++;
-    _junkEntrance.stop();
-    if (_junkEntranceDone || !mounted) return;
-    setState(() => _junkEntranceDone = true);
-  }
-
-  @override
-  void dispose() {
-    for (final GridEntranceWave wave in _junkEntranceWaves) {
-      wave.t.dispose();
-    }
-    _junkEntrance.dispose();
-    super.dispose();
-  }
 
   /// Ctrl toggles, shift reaches back to the last click, a plain click takes
   /// this one alone. The same three the extract grid offers.
@@ -715,6 +635,43 @@ class _GridState extends ConsumerState<_Grid>
     });
   }
 
+  Widget _selectionGrid(
+    WidgetRef ref,
+    BuildContext context, {
+    required String id,
+    required List<String> ids,
+    required Object reflowIdentity,
+    required Widget Function(
+      BuildContext context,
+      int index,
+      GridGeometry geometry,
+    )
+    itemBuilder,
+    EdgeInsets padding = const EdgeInsets.only(top: LayoutNums.contentGap),
+    List<SelectionGridSection> sections = const <SelectionGridSection>[],
+    int? entranceToken,
+    bool? entranceOnMount,
+  }) {
+    return SelectionGrid(
+      key: ValueKey<String>(id),
+      id: id,
+      itemCount: ids.length,
+      idAt: (int index) => ids[index],
+      currentSelection: () => ref.read(backupSelectionProvider),
+      onSelectionChanged: (Set<String> selected) {
+        if (context.mounted) {
+          ref.read(backupSelectionProvider.notifier).setExactly(selected);
+        }
+      },
+      padding: padding,
+      entranceToken: entranceToken ?? widget.entrance.token,
+      entranceOnMount: entranceOnMount ?? _takeEntrance(),
+      reflowIdentity: reflowIdentity,
+      sections: sections,
+      itemBuilder: itemBuilder,
+    );
+  }
+
   /// One grid for both lists: a tile is a picture and an id whichever it draws.
   ///
   /// [id] names the scroll position, so the cards keep theirs while a trip
@@ -739,24 +696,12 @@ class _GridState extends ConsumerState<_Grid>
       AsyncData<List<T>>(:final List<T> value) => Builder(
         builder: (BuildContext context) {
           final List<String> ids = value.map(idOf).toList();
-          final bool entranceOnMount = _takeEntrance();
-          return SelectionGrid(
-            key: ValueKey<String>(id),
+          return _selectionGrid(
+            ref,
+            context,
             id: id,
-            // The tab is already inset either side, so only the gap under the
-            // pills is this grid's to add.
-            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
-            entranceToken: widget.entrance.token,
-            entranceOnMount: entranceOnMount,
+            ids: ids,
             reflowIdentity: reflowIdentity,
-            itemCount: value.length,
-            idAt: (int index) => ids[index],
-            currentSelection: () => ref.read(backupSelectionProvider),
-            onSelectionChanged: (Set<String> selected) {
-              if (context.mounted) {
-                ref.read(backupSelectionProvider.notifier).setExactly(selected);
-              }
-            },
             itemBuilder:
                 (BuildContext context, int index, GridGeometry geometry) =>
                     build(
@@ -812,10 +757,6 @@ class _GridState extends ConsumerState<_Grid>
         Builder(
           builder: (BuildContext context) {
             widget.entrance.discard();
-            final List<String> ids = <String>[
-              for (final ReconcileTile tile in value)
-                reconcileTileId(tile.entry.name),
-            ];
             final Map<BackupReconcileReason, List<ReconcileTile>> groups =
                 <BackupReconcileReason, List<ReconcileTile>>{
                   for (final BackupReconcileReason reason
@@ -825,84 +766,72 @@ class _GridState extends ConsumerState<_Grid>
             for (final ReconcileTile tile in value) {
               groups[tile.entry.reason]!.add(tile);
             }
+            final List<ReconcileTile> grouped = <ReconcileTile>[
+              for (final BackupReconcileReason reason
+                  in BackupReconcileReason.values)
+                ...groups[reason]!,
+            ];
+            final List<String> ids = <String>[
+              for (final ReconcileTile tile in grouped)
+                reconcileTileId(tile.entry.name),
+            ];
 
-            return CustomScrollView(
-              key: const ValueKey<String>('backup-reconcile-grid'),
-              slivers: <Widget>[
+            return _selectionGrid(
+              ref,
+              context,
+              id: 'backup-reconcile-grid',
+              ids: ids,
+              padding: EdgeInsets.zero,
+              entranceToken: 0,
+              entranceOnMount: false,
+              reflowIdentity: const ValueKey<String>('reconcile-groups'),
+              sections: <SelectionGridSection>[
                 for (final BackupReconcileReason reason
                     in BackupReconcileReason.values)
                   if (groups[reason]!.isNotEmpty)
-                    SliverMainAxisGroup(
-                      slivers: <Widget>[
-                        _stickyBackupIssueHeader(
-                          noteKey: ValueKey<String>(
-                            'backup-reconcile-note-${reason.name}',
-                          ),
-                          child: Text.rich(
-                            TextSpan(
-                              children: <InlineSpan>[
-                                TextSpan(
-                                  text:
-                                      '${tr(_reconcileText(reason).title)} - ',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: tr(_reconcileText(reason).about),
-                                ),
-                              ],
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    SelectionGridSection(
+                      itemCount: groups[reason]!.length,
+                      headerPinned: true,
+                      headerExtent: _backupIssueHeaderHeight,
+                      header: _BackupIssueHeader(
+                        noteKey: ValueKey<String>(
+                          'backup-reconcile-note-${reason.name}',
                         ),
-                        SliverPadding(
-                          padding: const EdgeInsets.only(
-                            top: LayoutNums.contentGap,
-                            bottom: LayoutNums.sectionGap,
-                          ),
-                          sliver: SliverGrid(
-                            gridDelegate:
-                                const SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: 180,
-                                  mainAxisSpacing: 8,
-                                  crossAxisSpacing: 8,
-                                  childAspectRatio: 1,
+                        pinned: true,
+                        child: Text.rich(
+                          TextSpan(
+                            children: <InlineSpan>[
+                              TextSpan(
+                                text: '${tr(_reconcileText(reason).title)} - ',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
                                 ),
-                            delegate: SliverChildBuilderDelegate((
-                              BuildContext context,
-                              int index,
-                            ) {
-                              final ReconcileTile tile = groups[reason]![index];
-                              final String id = reconcileTileId(
-                                tile.entry.name,
-                              );
-                              final int flatIndex = ids.indexOf(id);
-                              return LayoutBuilder(
-                                builder:
-                                    (
-                                      BuildContext context,
-                                      BoxConstraints box,
-                                    ) => ReconcileTileView(
-                                      key: ValueKey<String>(id),
-                                      width: box.maxWidth,
-                                      tile: tile,
-                                      folders: reconcileFolders(
-                                        entry: tile.entry,
-                                        backupRoot: backupRoot,
-                                        liveWorkshopPath: workshop,
-                                        liveMyProjectsPath: myProjects,
-                                      ),
-                                      onTap: () => _click(ref, ids, flatIndex),
-                                    ),
-                              );
-                            }, childCount: groups[reason]!.length),
+                              ),
+                              TextSpan(text: tr(_reconcileText(reason).about)),
+                            ],
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
+                      ),
                     ),
               ],
+              itemBuilder:
+                  (BuildContext context, int index, GridGeometry geometry) {
+                    final ReconcileTile tile = grouped[index];
+                    return ReconcileTileView(
+                      key: ValueKey<String>(ids[index]),
+                      width: geometry.tile,
+                      tile: tile,
+                      folders: reconcileFolders(
+                        entry: tile.entry,
+                        backupRoot: backupRoot,
+                        liveWorkshopPath: workshop,
+                        liveMyProjectsPath: myProjects,
+                      ),
+                      onTap: () => _click(ref, ids, index),
+                    );
+                  },
             );
           },
         ),
@@ -949,10 +878,6 @@ class _GridState extends ConsumerState<_Grid>
         ),
       AsyncData<List<BackupTile>>(:final List<BackupTile> value) => Builder(
         builder: (BuildContext context) {
-          if (_takeEntrance()) _startJunkEntrance();
-          final List<String> ids = <String>[
-            for (final BackupTile tile in value) tile.card.id,
-          ];
           final Map<WallpaperJunkKind, List<BackupTile>> groups =
               <WallpaperJunkKind, List<BackupTile>>{
                 for (final WallpaperJunkKind kind in WallpaperJunkKind.values)
@@ -962,144 +887,115 @@ class _GridState extends ConsumerState<_Grid>
             groups[scan.junk[tile.card.id]?.kind ?? WallpaperJunkKind.empty]!
                 .add(tile);
           }
-          return CustomScrollView(
-            key: const ValueKey<String>('backup-junk-grid'),
-            slivers: <Widget>[
+          final List<BackupTile> grouped = <BackupTile>[
+            for (final WallpaperJunkKind kind in WallpaperJunkKind.values)
+              ...groups[kind]!,
+          ];
+          final List<String> ids = <String>[
+            for (final BackupTile tile in grouped) tile.card.id,
+          ];
+
+          return _selectionGrid(
+            ref,
+            context,
+            id: 'backup-junk-grid',
+            ids: ids,
+            padding: EdgeInsets.zero,
+            reflowIdentity: BackupState.emptyBackup,
+            sections: <SelectionGridSection>[
               for (final WallpaperJunkKind kind in WallpaperJunkKind.values)
                 if (groups[kind]!.isNotEmpty)
-                  SliverMainAxisGroup(
-                    slivers: <Widget>[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            top: LayoutNums.contentGap,
-                            bottom: LayoutNums.smallGap,
-                          ),
-                          child: Align(
-                            key: ValueKey<String>(
-                              'backup-junk-action-${kind.name}',
-                            ),
-                            alignment: Alignment.centerRight,
-                            child: _GlowingActionButton(
-                              label: tr(
-                                AppI10n.backupActionRecycleAll,
-                                namedArgs: <String, String>{
-                                  'count': '${groups[kind]!.length}',
-                                },
-                              ),
-                              icon: backupActionIcon(BackupAction.recycleJunk),
-                              colour: backupStateLook(
-                                context,
-                                BackupState.emptyBackup,
-                              ).colour,
-                              destructive: backupActionIsDestructive(
-                                BackupAction.recycleJunk,
-                              ),
-                              onPressed: () => applyBackupAction(
-                                context,
-                                BackupAction.recycleJunk,
-                                <BackupCard>[
-                                  for (final BackupTile tile in groups[kind]!)
-                                    tile.card,
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                  SelectionGridSection(
+                    itemCount: groups[kind]!.length,
+                    beforeHeaderExtent: _backupJunkActionExtent,
+                    beforeHeader: Padding(
+                      padding: const EdgeInsets.only(
+                        top: LayoutNums.contentGap,
+                        bottom: LayoutNums.smallGap,
                       ),
-                      _stickyBackupIssueHeader(
-                        noteKey: ValueKey<String>(
-                          'backup-junk-note-${kind.name}',
+                      child: Align(
+                        key: ValueKey<String>(
+                          'backup-junk-action-${kind.name}',
                         ),
-                        child: Text.rich(
-                          TextSpan(
-                            children: <InlineSpan>[
-                              TextSpan(
-                                text: '${tr(_junkText(kind).title)} - ',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              TextSpan(text: tr(_junkText(kind).about)),
+                        alignment: Alignment.centerRight,
+                        child: _GlowingActionButton(
+                          label: tr(
+                            AppI10n.backupActionRecycleAll,
+                            namedArgs: <String, String>{
+                              'count': '${groups[kind]!.length}',
+                            },
+                          ),
+                          icon: backupActionIcon(BackupAction.recycleJunk),
+                          colour: backupStateLook(
+                            context,
+                            BackupState.emptyBackup,
+                          ).colour,
+                          destructive: backupActionIsDestructive(
+                            BackupAction.recycleJunk,
+                          ),
+                          onPressed: () => applyBackupAction(
+                            context,
+                            BackupAction.recycleJunk,
+                            <BackupCard>[
+                              for (final BackupTile tile in groups[kind]!)
+                                tile.card,
                             ],
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      SliverPadding(
-                        padding: const EdgeInsets.only(
-                          top: LayoutNums.contentGap,
-                          bottom: LayoutNums.sectionGap,
-                        ),
-                        sliver: SliverLayoutBuilder(
-                          builder: (BuildContext context, constraints) {
-                            final int columns = max(
-                              1,
-                              (constraints.crossAxisExtent / (180 + 8)).ceil(),
-                            );
-                            return SliverGrid(
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: 180,
-                                    mainAxisSpacing: 8,
-                                    crossAxisSpacing: 8,
-                                    childAspectRatio: 1,
-                                  ),
-                              delegate: SliverChildBuilderDelegate((
-                                BuildContext context,
-                                int index,
-                              ) {
-                                final BackupTile tile = groups[kind]![index];
-                                final int flatIndex = ids.indexOf(tile.card.id);
-                                return LayoutBuilder(
-                                  builder:
-                                      (
-                                        BuildContext context,
-                                        BoxConstraints box,
-                                      ) => gridEntranceTile(
-                                        done: _junkEntranceDone,
-                                        waves: _junkEntranceWaves,
-                                        index: index,
-                                        columns: columns,
-                                        child: BackupTileView(
-                                          key: ValueKey<String>(tile.card.id),
-                                          width: box.maxWidth,
-                                          tile: tile,
-                                          junkKind: kind,
-                                          folders: cardFolders(
-                                            library: tile.card.library,
-                                            name: tile.card.name,
-                                            liveExists:
-                                                scan.junk[tile.card.id]?.live ??
-                                                false,
-                                            backupExists:
-                                                scan
-                                                    .junk[tile.card.id]
-                                                    ?.backup ??
-                                                false,
-                                            backupRoot: backupRoot,
-                                            liveWorkshopPath: workshop,
-                                            liveMyProjectsPath: myProjects,
-                                          ),
-                                          onTap: () =>
-                                              _click(ref, ids, flatIndex),
-                                          onAction: () => applyBackupAction(
-                                            context,
-                                            BackupAction.recycleJunk,
-                                            <BackupCard>[tile.card],
-                                          ),
-                                        ),
-                                      ),
-                                );
-                              }, childCount: groups[kind]!.length),
-                            );
-                          },
-                        ),
+                    ),
+                    headerPinned: true,
+                    headerExtent: _backupIssueHeaderHeight,
+                    header: _BackupIssueHeader(
+                      noteKey: ValueKey<String>(
+                        'backup-junk-note-${kind.name}',
                       ),
-                    ],
+                      pinned: true,
+                      child: Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              text: '${tr(_junkText(kind).title)} - ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(text: tr(_junkText(kind).about)),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
             ],
+            itemBuilder:
+                (BuildContext context, int index, GridGeometry geometry) {
+                  final BackupTile tile = grouped[index];
+                  final WallpaperJunkKind kind =
+                      scan.junk[tile.card.id]?.kind ?? WallpaperJunkKind.empty;
+                  return BackupTileView(
+                    key: ValueKey<String>(tile.card.id),
+                    width: geometry.tile,
+                    tile: tile,
+                    junkKind: kind,
+                    folders: cardFolders(
+                      library: tile.card.library,
+                      name: tile.card.name,
+                      liveExists: scan.junk[tile.card.id]?.live ?? false,
+                      backupExists: scan.junk[tile.card.id]?.backup ?? false,
+                      backupRoot: backupRoot,
+                      liveWorkshopPath: workshop,
+                      liveMyProjectsPath: myProjects,
+                    ),
+                    onTap: () => _click(ref, ids, index),
+                    onAction: () => applyBackupAction(
+                      context,
+                      BackupAction.recycleJunk,
+                      <BackupCard>[tile.card],
+                    ),
+                  );
+                },
           );
         },
       ),
@@ -1118,22 +1014,17 @@ class _GridState extends ConsumerState<_Grid>
     final BackupScan scan = ref.watch(backupScanProvider).requireValue;
     final Map<String, ({bool live, bool backup})> presence = scan.presence;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
-    ref.listen<BackupShown>(backupStateFilterProvider, (previous, next) {
-      if (previous != next && !_junkEntranceDone) _finishJunkEntrance();
-    });
-
+    late final Widget grid;
     if (shown.reconcile) {
-      return _reconcileGrid(
+      grid = _reconcileGrid(
         ref,
         ref.watch(backupVisibleReconcileTilesProvider),
         backupRoot: backupRoot,
         workshop: workshop,
         myProjects: myProjects,
       );
-    }
-
-    if (shown.state == BackupState.emptyBackup) {
-      return _junkGrid(
+    } else if (shown.state == BackupState.emptyBackup) {
+      grid = _junkGrid(
         context,
         ref,
         ref.watch(backupVisibleTilesProvider),
@@ -1142,43 +1033,44 @@ class _GridState extends ConsumerState<_Grid>
         workshop: workshop,
         myProjects: myProjects,
       );
-    }
-
-    return _grid<BackupTile>(
-      ref,
-      ref.watch(backupVisibleTilesProvider),
-      id: 'backup-grid',
-      reflowIdentity: shown.state,
-      waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
-      idOf: (BackupTile tile) => tile.card.id,
-      build: (BackupTile tile, double width, VoidCallback onTap) =>
-          BackupTileView(
-            key: ValueKey<String>(tile.card.id),
-            width: width,
-            tile: tile,
-            updatePlan: scan.updates[tile.card],
-            folders: cardFolders(
-              library: tile.card.library,
-              name: tile.card.name,
-              liveExists: tile.state == BackupState.emptyBackup
-                  ? scan.junk[tile.card.id]?.live ?? false
-                  : presence[tile.card.id]?.live ?? false,
-              backupExists: tile.state == BackupState.emptyBackup
-                  ? scan.junk[tile.card.id]?.backup ?? false
-                  : presence[tile.card.id]?.backup ?? false,
-              backupRoot: backupRoot,
-              liveWorkshopPath: workshop,
-              liveMyProjectsPath: myProjects,
+    } else {
+      grid = _grid<BackupTile>(
+        ref,
+        ref.watch(backupVisibleTilesProvider),
+        id: 'backup-grid',
+        reflowIdentity: shown.state,
+        waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
+        idOf: (BackupTile tile) => tile.card.id,
+        build: (BackupTile tile, double width, VoidCallback onTap) =>
+            BackupTileView(
+              key: ValueKey<String>(tile.card.id),
+              width: width,
+              tile: tile,
+              updatePlan: scan.updates[tile.card],
+              folders: cardFolders(
+                library: tile.card.library,
+                name: tile.card.name,
+                liveExists: tile.state == BackupState.emptyBackup
+                    ? scan.junk[tile.card.id]?.live ?? false
+                    : presence[tile.card.id]?.live ?? false,
+                backupExists: tile.state == BackupState.emptyBackup
+                    ? scan.junk[tile.card.id]?.backup ?? false
+                    : presence[tile.card.id]?.backup ?? false,
+                backupRoot: backupRoot,
+                liveWorkshopPath: workshop,
+                liveMyProjectsPath: myProjects,
+              ),
+              onTap: onTap,
+              onAction: actionForBackupState(tile.state) == null
+                  ? null
+                  : () => applyBackupAction(
+                      context,
+                      actionForBackupState(tile.state)!,
+                      <BackupCard>[tile.card],
+                    ),
             ),
-            onTap: onTap,
-            onAction: actionForBackupState(tile.state) == null
-                ? null
-                : () => applyBackupAction(
-                    context,
-                    actionForBackupState(tile.state)!,
-                    <BackupCard>[tile.card],
-                  ),
-          ),
-    );
+      );
+    }
+    return grid;
   }
 }
