@@ -1,5 +1,8 @@
 import 'package:bot_toast/bot_toast.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +17,7 @@ import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/backup/backup.dart';
 import 'package:we_repkg/views/backup/backup_action.dart';
+import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
 
 void main() {
@@ -133,6 +137,14 @@ void main() {
     );
     await tester.pump();
 
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(BackupTileView)));
+    await tester.pump(const Duration(milliseconds: 200));
+    addTearDown(mouse.removePointer);
+
     final Finder action = find.byKey(
       const ValueKey<String>('backup-all-action-glow'),
     );
@@ -146,6 +158,29 @@ void main() {
       greaterThan(tester.getCenter(find.byType(CountPill).first).dy),
     );
     expect(find.byTooltip(AppI10n.backupActionBackUp), findsOneWidget);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pump(const Duration(milliseconds: 200));
+    final SemanticsHandle semantics = tester.ensureSemantics();
+    final SemanticsData tileSemantics = tester
+        .getSemantics(find.byType(BackupTileView))
+        .getSemanticsData();
+    expect(tileSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(tileSemantics.customSemanticsActionIds, isNotEmpty);
+
+    final Finder tileFocus = find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is Focus &&
+          widget.focusNode?.debugLabel == 'backup-tile-${card.id}',
+    );
+    tester.widget<Focus>(tileFocus).focusNode!.requestFocus();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byTooltip(AppI10n.backupActionBackUp), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(container.read(backupSelectionProvider), contains(card.id));
+    semantics.dispose();
   });
   testWidgets('BackupActionGlow animates the halo independently of its child', (
     tester,

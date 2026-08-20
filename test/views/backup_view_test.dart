@@ -121,6 +121,94 @@ void main() {
 
   // A rescan puts the whole tab back to waiting, and a bare spinner there says
   // nothing about a job that takes ten seconds.
+  testWidgets('overflowing tile badges animate only while hovered', (
+    tester,
+  ) async {
+    const String label = 'Comparison unavailable';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 64,
+              child: TileBadgeStrip(
+                badges: <TileBadgeData>[
+                  TileBadgeData(text: label, colour: Colors.red),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final Finder strip = find.byType(TileBadgeStrip);
+    expect(
+      find.descendant(of: strip, matching: find.byType(AnimatedBuilder)),
+      findsNothing,
+      reason:
+          'overflowing badges should stay idle during ordinary grid scrolling',
+    );
+
+    final Finder hoverRegion = find
+        .ancestor(of: find.text(label), matching: find.byType(MouseRegion))
+        .first;
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(hoverRegion));
+    await tester.pump();
+
+    expect(
+      find.descendant(of: strip, matching: find.byType(AnimatedBuilder)),
+      findsOneWidget,
+    );
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'hovering an overflowing badge must keep finite layout bounds',
+    );
+
+    await mouse.moveTo(const Offset(0, 0));
+    await tester.pump();
+    expect(
+      find.descendant(of: strip, matching: find.byType(AnimatedBuilder)),
+      findsNothing,
+      reason: 'leaving the badge should stop its scrolling animation',
+    );
+    await mouse.removePointer();
+  });
+
+  testWidgets('tile badges respect accessibility text scaling', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 64,
+            child: TileBadgeStrip(
+              badges: <TileBadgeData>[
+                TileBadgeData(
+                  text: 'Comparison unavailable',
+                  colour: Colors.red,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byType(TileBadgeStrip)).height, greaterThan(18));
+    expect(tester.takeException(), isNull);
+  });
+
   group('while it is working', () {
     Future<void> waiting(
       WidgetTester tester,
@@ -506,6 +594,19 @@ void main() {
         );
         await settle(tester);
 
+        expect(
+          find.byKey(const ValueKey<String>('backup-tile-action-glow')),
+          findsNothing,
+          reason: 'tile actions stay unmounted until hover or keyboard focus',
+        );
+        final TestGesture mouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await mouse.addPointer(location: Offset.zero);
+        await mouse.moveTo(tester.getCenter(find.byType(BackupTileView)));
+        await tester.pump(const Duration(milliseconds: 200));
+        addTearDown(mouse.removePointer);
+
         final Finder bulkGlow = find.byKey(
           const ValueKey<String>('backup-all-action-glow'),
         );
@@ -561,6 +662,12 @@ void main() {
         );
         expect(button.color, isNotNull);
         expect(tile.colour, button.color);
+
+        await mouse.moveTo(Offset.zero);
+        await tester.pump(const Duration(milliseconds: 70));
+        expect(tileGlow, findsOneWidget, reason: 'the action should fade out');
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tileGlow, findsNothing);
       },
     );
 
@@ -642,6 +749,11 @@ void main() {
         const ValueKey<String>('backup-junk-grid'),
       );
       expect(junkGrid, findsOneWidget);
+      expect(
+        tester.widget<SelectionGrid>(junkGrid).sections,
+        hasLength(2),
+        reason: 'Empty/Junk should use the shared grouped grid engine',
+      );
 
       void expectMountedGroup({
         required WallpaperJunkKind kind,
@@ -2202,8 +2314,15 @@ void main() {
           const ValueKey<String>('backup-reconcile-grid'),
         );
         expect(reconcileGrid, findsOneWidget);
+        expect(
+          tester.widget<SelectionGrid>(reconcileGrid).sections,
+          hasLength(2),
+          reason: 'Reconcile should use the shared grouped grid engine',
+        );
         expect(find.byType(BackupTileView), findsNothing);
         expect(find.text('double-live'), findsOneWidget);
+        expect(find.text(AppI10n.backupTileReconcile), findsNothing);
+        expect(find.text(AppI10n.backupTileDuplicateLive), findsOneWidget);
         expect(
           find.textContaining(AppI10n.backupReconcileDuplicateLiveTitle),
           findsOneWidget,

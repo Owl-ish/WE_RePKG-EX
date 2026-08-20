@@ -73,8 +73,8 @@ class TileBadgeData {
 
 /// Fits multiple tile badges into one row without sacrificing short labels first.
 ///
-/// Long badges are compressed toward a scrolling minimum; text only auto-scrolls
-/// when its badge still cannot show the full label.
+/// Long badges are compressed toward a scrolling minimum. Overflowing text stays
+/// still during ordinary grid movement and scrolls only while that badge is hovered.
 class TileBadgeStrip extends StatelessWidget {
   const TileBadgeStrip({super.key, required this.badges});
 
@@ -89,9 +89,12 @@ class TileBadgeStrip extends StatelessWidget {
     if (badges.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final List<double> natural = <double>[
+        final measures = <({double width, double height})>[
           for (final TileBadgeData badge in badges)
-            _TileBadge.measureWidth(context, badge.text),
+            _TileBadge.measure(context, badge.text),
+        ];
+        final List<double> natural = <double>[
+          for (final measure in measures) measure.width,
         ];
         final List<double> widths = List<double>.from(natural);
         if (constraints.maxWidth.isFinite) {
@@ -141,7 +144,12 @@ class TileBadgeStrip extends StatelessWidget {
             for (int i = 0; i < badges.length; i++)
               SizedBox(
                 width: widths[i],
-                child: _TileBadge(data: badges[i], naturalWidth: natural[i]),
+                child: _TileBadge(
+                  data: badges[i],
+                  naturalWidth: natural[i],
+                  allocatedWidth: widths[i],
+                  lineHeight: measures[i].height,
+                ),
               ),
           ],
         );
@@ -151,124 +159,198 @@ class TileBadgeStrip extends StatelessWidget {
 }
 
 class _TileBadge extends StatelessWidget {
-  const _TileBadge({required this.data, required this.naturalWidth});
+  const _TileBadge({
+    required this.data,
+    required this.naturalWidth,
+    required this.allocatedWidth,
+    required this.lineHeight,
+  });
 
   final TileBadgeData data;
   final double naturalWidth;
+  final double allocatedWidth;
+  final double lineHeight;
 
   static const TextStyle _style = TextStyle(
     color: Colors.white,
     fontSize: 11,
     fontFamily: 'Microsoft YaHei',
   );
+  static final Map<
+    (String, TextDirection, double, Locale?),
+    ({double width, double height})
+  >
+  _measureCache =
+      <
+        (String, TextDirection, double, Locale?),
+        ({double width, double height})
+      >{};
 
-  static double measureWidth(BuildContext context, String text) {
-    final TextPainter painter = TextPainter(
-      text: TextSpan(text: text, style: _style),
-      maxLines: 1,
-      textDirection: Directionality.of(context),
-    )..layout();
-    return painter.width + 12;
+  static ({double width, double height}) measure(
+    BuildContext context,
+    String text,
+  ) {
+    final TextDirection direction = Directionality.of(context);
+    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final Locale? locale = Localizations.maybeLocaleOf(context);
+    final double scaledFontSize = scaler.scale(_style.fontSize!);
+    return _measureCache.putIfAbsent(
+      (text, direction, scaledFontSize, locale),
+      () {
+        final TextPainter painter = TextPainter(
+          text: TextSpan(text: text, style: _style),
+          maxLines: 1,
+          textDirection: direction,
+          textScaler: scaler,
+          locale: locale,
+        )..layout();
+        return (width: painter.width + 12, height: painter.height);
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final double viewport = math.max(0, allocatedWidth - 12);
+    final double textWidth = math.max(0, naturalWidth - 12);
+    final bool overflows = textWidth > viewport + .5;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: data.colour,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final double viewport = math.max(0, constraints.maxWidth);
-          final double textWidth = math.max(0, naturalWidth - 12);
-          if (textWidth <= viewport + .5) {
-            return Text(
+      child: overflows
+          ? _HoverScrollText(
+              text: data.text,
+              style: _style,
+              viewportWidth: viewport,
+              textWidth: textWidth,
+              lineHeight: lineHeight,
+            )
+          : Text(
               data.text,
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.visible,
               style: _style,
-            );
-          }
-          return _AutoScrollText(
-            text: data.text,
-            style: _style,
-            viewportWidth: viewport,
-            textWidth: textWidth,
-          );
-        },
-      ),
+            ),
     );
   }
 }
 
-/// Scrolls an overlong badge label back and forth with pauses at both edges.
-class _AutoScrollText extends StatefulWidget {
-  const _AutoScrollText({
+/// Keeps an overflowing badge label still until the pointer asks to inspect it.
+class _HoverScrollText extends StatefulWidget {
+  const _HoverScrollText({
     required this.text,
     required this.style,
     required this.viewportWidth,
     required this.textWidth,
+    required this.lineHeight,
   });
 
   final String text;
   final TextStyle style;
   final double viewportWidth;
   final double textWidth;
+  final double lineHeight;
 
   @override
-  State<_AutoScrollText> createState() => _AutoScrollTextState();
+  State<_HoverScrollText> createState() => _HoverScrollTextState();
 }
 
-class _AutoScrollTextState extends State<_AutoScrollText>
+class _HoverScrollTextState extends State<_HoverScrollText>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 5),
-  );
-  late final Animation<double> _position =
-      TweenSequence<double>(<TweenSequenceItem<double>>[
-        TweenSequenceItem<double>(tween: ConstantTween<double>(0), weight: 18),
-        TweenSequenceItem<double>(
-          tween: Tween<double>(begin: 0, end: 1),
-          weight: 32,
-        ),
-        TweenSequenceItem<double>(tween: ConstantTween<double>(1), weight: 18),
-        TweenSequenceItem<double>(
-          tween: Tween<double>(begin: 1, end: 0),
-          weight: 32,
-        ),
-      ]).animate(_controller);
-  double _configuredOverflow = -1;
+  AnimationController? _controller;
+  Animation<double>? _position;
+  bool _hovered = false;
 
-  void _configure(double overflow) {
-    if ((_configuredOverflow - overflow).abs() < .5) return;
-    _configuredOverflow = overflow;
-    // Configure after layout so a width change does not mutate the animation
-    // controller while this widget is building.
+  void _start() {
+    if (_hovered) return;
+    _hovered = true;
+    final double overflow = math.max(
+      0,
+      widget.textWidth - widget.viewportWidth,
+    );
+    if (overflow <= 0) return;
+
+    final AnimationController controller = _controller ??= AnimationController(
+      vsync: this,
+    );
+    _position ??= TweenSequence<double>(<TweenSequenceItem<double>>[
+      TweenSequenceItem<double>(tween: ConstantTween<double>(0), weight: 18),
+      TweenSequenceItem<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        weight: 32,
+      ),
+      TweenSequenceItem<double>(tween: ConstantTween<double>(1), weight: 18),
+      TweenSequenceItem<double>(
+        tween: Tween<double>(begin: 1, end: 0),
+        weight: 32,
+      ),
+    ]).animate(controller);
+
+    // More overflow gets more travel time so the label does not speed up.
+    final int travel = math.max(2200, (overflow / 24 * 1000).round());
+    controller
+      ..duration = Duration(milliseconds: travel + 1600)
+      ..repeat();
+    setState(() {});
+  }
+
+  void _stop() {
+    if (!_hovered) return;
+    _hovered = false;
+    _controller
+      ?..stop()
+      ..value = 0;
+    setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant _HoverScrollText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_hovered ||
+        (oldWidget.viewportWidth - widget.viewportWidth).abs() < .5 &&
+            (oldWidget.textWidth - widget.textWidth).abs() < .5) {
+      return;
+    }
+    _controller
+      ?..stop()
+      ..value = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (overflow <= 0) {
-        _controller
-          ..stop()
-          ..value = 0;
-        return;
-      }
-      // More overflow gets more travel time so the label does not speed up.
-      final int travel = math.max(2200, (overflow / 24 * 1000).round());
-      _controller
-        ..duration = Duration(milliseconds: travel + 1600)
-        ..repeat();
+      _hovered = false;
+      _start();
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
+
+  Widget _label() => Text(
+    widget.text,
+    maxLines: 1,
+    softWrap: false,
+    overflow: TextOverflow.visible,
+    style: widget.style,
+  );
+
+  Widget _positionedLabel(double left, Widget child) => Stack(
+    clipBehavior: Clip.hardEdge,
+    children: <Widget>[
+      Positioned(
+        left: left,
+        top: 0,
+        width: widget.textWidth,
+        height: widget.lineHeight,
+        child: Align(alignment: Alignment.centerLeft, child: child),
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -276,41 +358,23 @@ class _AutoScrollTextState extends State<_AutoScrollText>
       0,
       widget.textWidth - widget.viewportWidth,
     );
-    final TextPainter painter = TextPainter(
-      text: TextSpan(text: widget.text, style: widget.style),
-      maxLines: 1,
-      textDirection: Directionality.of(context),
-    )..layout();
-    final double lineHeight = painter.height;
-    _configure(overflow);
-    return ClipRect(
-      child: SizedBox(
-        width: widget.viewportWidth,
-        height: lineHeight,
-        child: AnimatedBuilder(
-          animation: _position,
-          builder: (BuildContext context, Widget? child) => OverflowBox(
-            alignment: Alignment.centerLeft,
-            minWidth: widget.textWidth,
-            maxWidth: widget.textWidth,
-            minHeight: lineHeight,
-            maxHeight: lineHeight,
-            child: Transform.translate(
-              offset: Offset(-overflow * _position.value, 0),
-              child: child,
-            ),
-          ),
-          child: SizedBox(
-            width: widget.textWidth,
-            height: lineHeight,
-            child: Text(
-              widget.text,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.visible,
-              style: widget.style,
-            ),
-          ),
+    final Animation<double>? position = _position;
+    return Focus(
+      onFocusChange: (bool focused) => focused ? _start() : _stop(),
+      child: MouseRegion(
+        onEnter: (_) => _start(),
+        onExit: (_) => _stop(),
+        child: SizedBox(
+          width: widget.viewportWidth,
+          height: widget.lineHeight,
+          child: !_hovered || position == null
+              ? _positionedLabel(0, _label())
+              : AnimatedBuilder(
+                  animation: position,
+                  builder: (BuildContext context, Widget? child) =>
+                      _positionedLabel(-overflow * position.value, child!),
+                  child: _label(),
+                ),
         ),
       ),
     );

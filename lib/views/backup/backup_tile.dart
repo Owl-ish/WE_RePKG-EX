@@ -1,6 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
@@ -139,10 +141,6 @@ class ReconcileTileView extends StatelessWidget {
       reconcileEntry: tile.entry,
       badges: <TileBadgeData>[
         TileBadgeData(
-          colour: _reconcileColour,
-          text: tr(AppI10n.backupTileReconcile),
-        ),
-        TileBadgeData(
           colour: Theme.of(context).status.bad,
           text: _reconcileBadgeText(tile.entry),
         ),
@@ -155,9 +153,6 @@ class ReconcileTileView extends StatelessWidget {
     );
   }
 }
-
-/// Grey rather than a state colour: a name here is a question, not a verdict.
-const Color _reconcileColour = Color(0xFF455A64);
 
 /// The picture, the title strip, the badges and the selection tint, plus the
 /// three things a click can mean. Shared, so the two tiles cannot drift apart.
@@ -205,7 +200,97 @@ class _TileFrame extends ConsumerStatefulWidget {
 }
 
 class _TileFrameState extends ConsumerState<_TileFrame> {
+  static const Duration _actionFadeIn = Duration(milliseconds: 180);
+  static const Duration _actionFadeOut = Duration(milliseconds: 140);
+
   final DoubleClickGuard _clicks = DoubleClickGuard();
+  late final FocusNode _tileFocusNode;
+  ScrollPosition? _actionScrollPosition;
+  bool _hovered = false;
+  bool _focused = false;
+  bool _scrolling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tileFocusNode = FocusNode(debugLabel: 'backup-tile-${widget.id}');
+  }
+
+  bool get _actionInterested =>
+      widget.action != null &&
+      widget.onAction != null &&
+      (_hovered || _focused);
+
+  bool get _actionVisible => _actionInterested && !_scrolling;
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    _updateActionInterest(() => _hovered = hovered);
+  }
+
+  void _setFocused(bool focused) {
+    if (_focused == focused) return;
+    _updateActionInterest(() => _focused = focused);
+  }
+
+  void _updateActionInterest(VoidCallback update) {
+    final bool wasVisible = _actionVisible;
+    update();
+    _syncActionScroll();
+    if (wasVisible != _actionVisible && mounted) setState(() {});
+  }
+
+  void _syncActionScroll() {
+    final ScrollPosition? next = _actionInterested
+        ? Scrollable.maybeOf(context)?.position
+        : null;
+    if (!identical(next, _actionScrollPosition)) {
+      _actionScrollPosition?.isScrollingNotifier.removeListener(
+        _onActionScrollChanged,
+      );
+      _actionScrollPosition = next;
+      _actionScrollPosition?.isScrollingNotifier.addListener(
+        _onActionScrollChanged,
+      );
+    }
+    _scrolling = _actionScrollPosition?.isScrollingNotifier.value ?? false;
+  }
+
+  void _onActionScrollChanged() {
+    final bool scrolling =
+        _actionScrollPosition?.isScrollingNotifier.value ?? false;
+    if (_scrolling == scrolling || !mounted) return;
+    final bool wasVisible = _actionVisible;
+    _scrolling = scrolling;
+    if (wasVisible != _actionVisible) setState(() {});
+  }
+
+  KeyEventResult _onTileKeyEvent(FocusNode node, KeyEvent event) {
+    if (!node.hasPrimaryFocus || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  void didUpdateWidget(covariant _TileFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncActionScroll();
+  }
+
+  @override
+  void dispose() {
+    _actionScrollPosition?.isScrollingNotifier.removeListener(
+      _onActionScrollChanged,
+    );
+    _tileFocusNode.dispose();
+    super.dispose();
+  }
 
   /// This tile's rectangle on screen, so the detail dialog can grow out of it.
   Rect? _tileRect() {
@@ -303,114 +388,156 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     );
   }
 
+  Widget _actionButton(
+    BuildContext context,
+    BackupAction action,
+    VoidCallback onAction,
+  ) {
+    final bool destructive = backupActionIsDestructive(action);
+    final ActionButtonTheme colors = Theme.of(context).actionButtons;
+    final Color glowColour = destructive
+        ? colors.destructiveForeground
+        : colors.primaryForeground;
+    final Widget button = destructive
+        ? AppActionIconButton.destructive(
+            icon: backupActionIcon(action),
+            tooltip: widget.actionLabelOverride ?? backupActionLabel(action),
+            onPressed: onAction,
+            width: 34,
+            height: 34,
+            iconSize: 18,
+          )
+        : AppActionIconButton(
+            icon: backupActionIcon(action),
+            tooltip: widget.actionLabelOverride ?? backupActionLabel(action),
+            onPressed: onAction,
+            width: 34,
+            height: 34,
+            iconSize: 18,
+          );
+    return RepaintBoundary(
+      child: BackupActionGlow(
+        colour: glowColour,
+        enabled: true,
+        borderRadius: BorderRadius.circular(999),
+        glowKey: const ValueKey<String>('backup-tile-action-glow'),
+        scale: .7,
+        child: button,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // select, so selecting elsewhere in the grid does not rebuild this tile.
     final bool checked = ref.watch(
       backupSelectionProvider.select((ids) => ids.contains(widget.id)),
     );
-    return Listener(
-      onPointerDown: _onPointerDown,
-      child: InkWell(
-        overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
-        splashFactory: NoSplash.splashFactory,
-        onDoubleTap: _openDetails,
-        onSecondaryTapDown: (TapDownDetails details) => showBackupMenu(
-          context,
-          details,
-          onDetails: _openDetails,
-          liveFolder: widget.folders.live,
-          backupFolder: widget.folders.backup,
-          actionLabel: widget.action == null
-              ? null
-              : widget.actionLabelOverride ?? backupActionLabel(widget.action!),
-          onAction: widget.onAction,
-        ),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Container(
-            width: widget.width,
-            decoration: BoxDecoration(
-              // The shadow has to know the radius too, or it keeps painting
-              // square corners behind the rounded tile.
-              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black54,
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                ),
-              ],
+    final bool revealAction = _actionVisible;
+    Map<CustomSemanticsAction, VoidCallback>? semanticActions;
+    if (!revealAction && widget.action != null && widget.onAction != null) {
+      semanticActions = <CustomSemanticsAction, VoidCallback>{
+        CustomSemanticsAction(
+          label:
+              widget.actionLabelOverride ?? backupActionLabel(widget.action!),
+        ): widget.onAction!,
+      };
+    }
+    return Semantics(
+      button: true,
+      onTap: widget.onTap,
+      customSemanticsActions: semanticActions,
+      child: Focus(
+        focusNode: _tileFocusNode,
+        onKeyEvent: _onTileKeyEvent,
+        onFocusChange: _setFocused,
+        child: Listener(
+          onPointerDown: _onPointerDown,
+          child: InkWell(
+            canRequestFocus: false,
+            overlayColor: const WidgetStatePropertyAll<Color>(
+              Colors.transparent,
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-              clipBehavior: Clip.hardEdge,
-              child: Stack(
-                children: [
-                  ImageView(
-                    size: widget.width,
-                    previews: widget.face?.preview ?? '',
-                  ),
-                  // The folder name when there is no readable project.json,
-                  // which is the case the integrity tab exists to point at.
-                  ImageTitle(title: widget.face?.title ?? widget.name),
-                  Positioned(
-                    left: 4,
-                    right: 4,
-                    top: 4,
-                    child: TileBadgeStrip(badges: widget.badges),
-                  ),
-                  if (widget.action case final BackupAction action)
-                    if (widget.onAction case final VoidCallback onAction)
-                      Positioned(
-                        right: LayoutNums.smallGap,
-                        bottom: 28,
-                        child: Builder(
-                          builder: (BuildContext context) {
-                            final bool destructive = backupActionIsDestructive(
-                              action,
-                            );
-                            final ActionButtonTheme colors = Theme.of(
-                              context,
-                            ).actionButtons;
-                            final Color glowColour = destructive
-                                ? colors.destructiveForeground
-                                : colors.primaryForeground;
-                            return BackupActionGlow(
-                              colour: glowColour,
-                              enabled: true,
-                              borderRadius: BorderRadius.circular(999),
-                              glowKey: const ValueKey<String>(
-                                'backup-tile-action-glow',
-                              ),
-                              scale: .7,
-                              child: destructive
-                                  ? AppActionIconButton.destructive(
-                                      icon: backupActionIcon(action),
-                                      tooltip:
-                                          widget.actionLabelOverride ??
-                                          backupActionLabel(action),
-                                      onPressed: onAction,
-                                      width: 34,
-                                      height: 34,
-                                      iconSize: 18,
-                                    )
-                                  : AppActionIconButton(
-                                      icon: backupActionIcon(action),
-                                      tooltip:
-                                          widget.actionLabelOverride ??
-                                          backupActionLabel(action),
-                                      onPressed: onAction,
-                                      width: 34,
-                                      height: 34,
-                                      iconSize: 18,
-                                    ),
-                            );
-                          },
-                        ),
+            splashFactory: NoSplash.splashFactory,
+            onDoubleTap: _openDetails,
+            onSecondaryTapDown: (TapDownDetails details) => showBackupMenu(
+              context,
+              details,
+              onDetails: _openDetails,
+              liveFolder: widget.folders.live,
+              backupFolder: widget.folders.backup,
+              actionLabel: widget.action == null
+                  ? null
+                  : widget.actionLabelOverride ??
+                        backupActionLabel(widget.action!),
+              onAction: widget.onAction,
+            ),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => _setHovered(true),
+              onExit: (_) => _setHovered(false),
+              child: Container(
+                width: widget.width,
+                decoration: BoxDecoration(
+                  // The shadow has to know the radius too, or it keeps painting
+                  // square corners behind the rounded tile.
+                  borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
+                  boxShadow: const <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
+                  clipBehavior: Clip.hardEdge,
+                  child: Stack(
+                    children: [
+                      ImageView(
+                        size: widget.width,
+                        previews: widget.face?.preview ?? '',
                       ),
-                  if (checked) const SelectionTint(),
-                ],
+                      // The folder name when there is no readable project.json,
+                      // which is the case the integrity tab exists to point at.
+                      ImageTitle(title: widget.face?.title ?? widget.name),
+                      Positioned(
+                        left: 4,
+                        right: 4,
+                        top: 4,
+                        child: TileBadgeStrip(badges: widget.badges),
+                      ),
+                      if (widget.action case final BackupAction action)
+                        if (widget.onAction case final VoidCallback onAction)
+                          Positioned(
+                            right: LayoutNums.smallGap,
+                            bottom: 28,
+                            width: 34,
+                            height: 34,
+                            child: AnimatedSwitcher(
+                              duration: _scrolling
+                                  ? Duration.zero
+                                  : _actionFadeIn,
+                              reverseDuration: _scrolling
+                                  ? Duration.zero
+                                  : _actionFadeOut,
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder:
+                                  (Widget child, Animation<double> animation) =>
+                                      FadeTransition(
+                                        opacity: animation,
+                                        child: child,
+                                      ),
+                              child: revealAction
+                                  ? _actionButton(context, action, onAction)
+                                  : const SizedBox.shrink(),
+                            ),
+                          ),
+                      if (checked) const SelectionTint(),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -845,10 +972,7 @@ class _DifferenceFileTree extends StatelessWidget {
             _differenceGroup(
               title: tr(AppI10n.backupDetailOnlyWorkshop),
               paths: value.onlyWorkshop,
-              colour: fileTreeLibraryColour(
-                context,
-                FileTreeLibrary.workshop,
-              ),
+              colour: fileTreeLibraryColour(context, FileTreeLibrary.workshop),
             ),
           if (value.onlyMyProjects.isNotEmpty)
             _differenceGroup(
