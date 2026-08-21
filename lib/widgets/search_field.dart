@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/widgets/custom_input.dart';
+import 'package:we_repkg/widgets/input_controls.dart';
 
 /// The search box both grids use. Where the text goes is the caller's business.
 class SearchField extends StatefulWidget {

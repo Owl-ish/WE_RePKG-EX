@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 
-import 'custom_input.dart';
+import 'input_controls.dart';
 
 /// A read-only path box with a browse button beside it.
 ///
