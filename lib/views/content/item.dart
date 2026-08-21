@@ -2,7 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/models/wallpaper.dart';
@@ -10,7 +9,6 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
-import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/hover_hint.dart';
 import 'package:we_repkg/widgets/image_view.dart';
@@ -35,6 +33,8 @@ class ImageItem extends ConsumerStatefulWidget {
 
 class _ImageItemState extends ConsumerState<ImageItem>
     with SingleTickerProviderStateMixin {
+  static const SelectionEngine<String> _selection = SelectionEngine<String>();
+
   final DoubleClickGuard _clicks = DoubleClickGuard();
   AnimationController? _hoverController;
   Animation<double>? _hoverOpacity;
@@ -97,35 +97,34 @@ class _ImageItemState extends ConsumerState<ImageItem>
       return;
     }
     final WallpaperInfo wallpaper = widget.wallpaper;
-    if (isCtrlPressed) {
-      await StorageUtil.setInt(AppKeys.ctrlPressedIndex, widget.index);
-      ref.read(checkedIdsProvider.notifier).toggle(wallpaper.id);
-    } else if (isShiftPressed) {
-      final List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
-      final List<WallpaperInfo> checked = ref.read(
-        checkedWallpaperListProvider,
-      );
-      final int? anchor = checked.isEmpty
-          ? null
-          : StorageUtil.getInt(AppKeys.ctrlPressedIndex) ??
-                list.indexOf(checked.last);
-      await StorageUtil.remove(AppKeys.ctrlPressedIndex);
-      final range = shiftRange(
-        anchor: anchor,
-        target: widget.index,
-        count: list.length,
-      );
-      final ids = list
-          .sublist(range.begin, range.end + 1)
-          .map((e) => e.id)
-          .toSet();
-      ref.read(checkedIdsProvider.notifier).setAll(ids, true);
-    } else {
-      // Plain click: this one only. Ctrl adds, Shift extends. The guard is what
-      // keeps the second click of a double click from undoing the first.
-      if (!_clicks.isSecondClick(wallpaper.id)) {
-        ref.read(checkedIdsProvider.notifier).setExclusive(wallpaper.id);
-      }
+    final bool control = isCtrlPressed;
+    final bool shift = isShiftPressed;
+
+    // The second plain click belongs to the detail-view double click. Modifier
+    // clicks are always selection gestures and keep their existing behavior.
+    if (!control && !shift && _clicks.isSecondClick(wallpaper.id)) {
+      ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
+      return;
+    }
+
+    final List<WallpaperInfo> list = ref.read(filterWallpaperListProvider);
+    final List<String> ordered = <String>[for (final item in list) item.id];
+    final CheckedIds selection = ref.read(checkedIdsProvider.notifier);
+    final Set<String> current = ref.read(checkedIdsProvider);
+    final Set<String> next = _selection.click(
+      ordered: ordered,
+      current: current,
+      target: widget.index,
+      control: control,
+      shift: shift,
+      anchor: selection.shiftAnchor,
+    );
+    selection.setExactly(next);
+
+    if (control && !shift) {
+      selection.shiftAnchor = wallpaper.id;
+    } else if (!shift) {
+      selection.shiftAnchor = next.isEmpty ? null : wallpaper.id;
       ref.read(selectedWallpaperProvider.notifier).update(wallpaper);
     }
   }

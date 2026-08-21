@@ -40,9 +40,16 @@ class CheckedIds extends _$CheckedIds {
   @override
   Set<String> build() => const <String>{};
 
-  void toggle(String id) => state = state.contains(id)
-      ? (state.toSet()..remove(id))
-      : (state.toSet()..add(id));
+  /// Which wallpaper a Shift range reaches back to. Store the id rather than
+  /// the visible index so sorting and filtering cannot move the anchor.
+  String? shiftAnchor;
+
+  void toggle(String id) {
+    shiftAnchor = id;
+    state = state.contains(id)
+        ? (state.toSet()..remove(id))
+        : (state.toSet()..add(id));
+  }
 
   void setAll(Set<String> ids, bool checked) {
     if (ids.isEmpty) return;
@@ -53,6 +60,7 @@ class CheckedIds extends _$CheckedIds {
 
   /// Selects [ids] and nothing else. What a drag over the grid needs.
   void setExactly(Set<String> ids) {
+    if (ids.isEmpty) shiftAnchor = null;
     if (setEquals(ids, state)) return;
     state = ids.toSet();
   }
@@ -63,14 +71,19 @@ class CheckedIds extends _$CheckedIds {
   void setExclusive(String id) {
     final bool only = state.length == 1 && state.contains(id);
     state = only ? const <String>{} : <String>{id};
+    shiftAnchor = state.isEmpty ? null : id;
   }
 
   void clear() {
+    shiftAnchor = null;
     if (state.isNotEmpty) state = const <String>{};
   }
 
   /// Drops ids whose wallpaper is gone, so a deleted selection cannot linger.
-  void forget(Set<String> ids) => setAll(ids, false);
+  void forget(Set<String> ids) {
+    if (shiftAnchor != null && ids.contains(shiftAnchor)) shiftAnchor = null;
+    setAll(ids, false);
+  }
 }
 
 @Riverpod(keepAlive: true)

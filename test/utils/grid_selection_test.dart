@@ -95,6 +95,276 @@ void main() {
     });
   });
 
+  group('SelectionEngine', () {
+    const SelectionEngine<String> selection = SelectionEngine<String>();
+    const List<String> ids = <String>['a', 'b', 'c', 'd', 'e'];
+
+    test('plain click selects one and clicking it again clears it', () {
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'a', 'c'},
+          target: 1,
+          control: false,
+          shift: false,
+        ),
+        <String>{'b'},
+      );
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'b'},
+          target: 1,
+          control: false,
+          shift: false,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('ctrl toggles without dropping the rest of the selection', () {
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'a', 'c'},
+          target: 3,
+          control: true,
+          shift: false,
+        ),
+        <String>{'a', 'c', 'd'},
+      );
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'a', 'c'},
+          target: 2,
+          control: true,
+          shift: false,
+        ),
+        <String>{'a'},
+      );
+    });
+
+    test('shift replaces the current selection with the anchor range', () {
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'e'},
+          target: 3,
+          control: false,
+          shift: true,
+          anchor: 'b',
+        ),
+        <String>{'b', 'c', 'd'},
+      );
+    });
+
+    test('ctrl+shift adds the anchor range to the current selection', () {
+      expect(
+        selection.click(
+          ordered: ids,
+          current: <String>{'a'},
+          target: 3,
+          control: true,
+          shift: true,
+          anchor: 'b',
+        ),
+        <String>{'a', 'b', 'c', 'd'},
+      );
+    });
+
+    test('an identity anchor follows its item through a re-order', () {
+      expect(
+        selection.click(
+          ordered: const <String>['d', 'c', 'b', 'a'],
+          current: <String>{'a', 'd'},
+          target: 2,
+          control: false,
+          shift: true,
+          anchor: 'd',
+        ),
+        <String>{'d', 'c', 'b'},
+      );
+    });
+
+    test('marquee replaces normally and adds while ctrl is held', () {
+      expect(
+        selection.marquee(
+          current: <String>{'e'},
+          hits: <String>['a', 'b'],
+          additive: false,
+        ),
+        <String>{'a', 'b'},
+      );
+      expect(
+        selection.marquee(
+          current: <String>{'e'},
+          hits: <String>['a', 'b'],
+          additive: true,
+        ),
+        <String>{'a', 'b', 'e'},
+      );
+    });
+
+    test('empty-space clearing is suppressed by modifiers or an item hit', () {
+      expect(
+        selection.clearsOnEmpty(control: false, shift: false, hitItem: false),
+        isTrue,
+      );
+      expect(
+        selection.clearsOnEmpty(control: true, shift: false, hitItem: false),
+        isFalse,
+      );
+      expect(
+        selection.clearsOnEmpty(control: false, shift: true, hitItem: false),
+        isFalse,
+      );
+      expect(
+        selection.clearsOnEmpty(control: false, shift: false, hitItem: true),
+        isFalse,
+      );
+    });
+  });
+
+  group('FileTreeSelectionAdapter', () {
+    final FileTreeSelectionAdapter<String> selection =
+        FileTreeSelectionAdapter<String>();
+    const List<String> visible = <String>['a.txt', 'b.txt', 'c.txt', 'd.txt'];
+
+    test(
+      'plain click selects one row and moves the anchor to its identity',
+      () {
+        final result = selection.click(
+          visible: visible,
+          current: <String>{'a.txt', 'c.txt'},
+          target: 'b.txt',
+          control: false,
+          shift: false,
+          anchor: 'a.txt',
+        );
+
+        expect(result.selected, <String>{'b.txt'});
+        expect(result.anchor, 'b.txt');
+      },
+    );
+
+    test(
+      'plain click on the only selected row clears selection and anchor',
+      () {
+        final result = selection.click(
+          visible: visible,
+          current: <String>{'b.txt'},
+          target: 'b.txt',
+          control: false,
+          shift: false,
+          anchor: 'b.txt',
+        );
+
+        expect(result.selected, isEmpty);
+        expect(result.anchor, isNull);
+      },
+    );
+
+    test('ctrl toggles one row and makes it the next Shift anchor', () {
+      final result = selection.click(
+        visible: visible,
+        current: <String>{'a.txt', 'c.txt'},
+        target: 'c.txt',
+        control: true,
+        shift: false,
+        anchor: 'a.txt',
+      );
+
+      expect(result.selected, <String>{'a.txt'});
+      expect(result.anchor, 'c.txt');
+    });
+
+    test('shift uses visible row order and preserves the identity anchor', () {
+      final result = selection.click(
+        visible: visible,
+        current: <String>{'d.txt'},
+        target: 'c.txt',
+        control: false,
+        shift: true,
+        anchor: 'a.txt',
+      );
+
+      expect(result.selected, <String>{'a.txt', 'b.txt', 'c.txt'});
+      expect(result.anchor, 'a.txt');
+    });
+
+    test('ctrl+shift adds the visible anchor range', () {
+      final result = selection.click(
+        visible: visible,
+        current: <String>{'d.txt'},
+        target: 'c.txt',
+        control: true,
+        shift: true,
+        anchor: 'a.txt',
+      );
+
+      expect(result.selected, <String>{'a.txt', 'b.txt', 'c.txt', 'd.txt'});
+      expect(result.anchor, 'a.txt');
+    });
+
+    test('collapsed descendants stay out of Shift ranges', () {
+      const List<String> collapsed = <String>['a.txt', 'c.txt'];
+      final result = selection.click(
+        visible: collapsed,
+        current: <String>{'a.txt'},
+        target: 'c.txt',
+        control: false,
+        shift: true,
+        anchor: 'a.txt',
+      );
+
+      expect(result.selected, <String>{'a.txt', 'c.txt'});
+      expect(result.selected, isNot(contains('b.txt')));
+    });
+
+    test('a target outside the visible tree leaves state unchanged', () {
+      final result = selection.click(
+        visible: visible,
+        current: <String>{'a.txt', 'b.txt'},
+        target: 'hidden.txt',
+        control: false,
+        shift: false,
+        anchor: 'a.txt',
+      );
+
+      expect(result.selected, <String>{'a.txt', 'b.txt'});
+      expect(result.anchor, 'a.txt');
+    });
+
+    test('plain empty-space click clears while modifiers preserve state', () {
+      final cleared = selection.emptySpaceClick(
+        current: <String>{'a.txt', 'b.txt'},
+        control: false,
+        shift: false,
+        anchor: 'b.txt',
+      );
+      final ctrl = selection.emptySpaceClick(
+        current: <String>{'a.txt', 'b.txt'},
+        control: true,
+        shift: false,
+        anchor: 'b.txt',
+      );
+      final shift = selection.emptySpaceClick(
+        current: <String>{'a.txt', 'b.txt'},
+        control: false,
+        shift: true,
+        anchor: 'b.txt',
+      );
+
+      expect(cleared.selected, isEmpty);
+      expect(cleared.anchor, isNull);
+      expect(ctrl.selected, <String>{'a.txt', 'b.txt'});
+      expect(ctrl.anchor, 'b.txt');
+      expect(shift.selected, <String>{'a.txt', 'b.txt'});
+      expect(shift.anchor, 'b.txt');
+    });
+  });
+
   group('cellOrigin', () {
     Offset at(int index) =>
         cellOrigin(index, columns: 4, tile: 100, spacing: 8);

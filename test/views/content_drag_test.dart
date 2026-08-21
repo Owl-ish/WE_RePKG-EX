@@ -224,24 +224,34 @@ void main() {
     if (modifier != null) await tester.sendKeyUpEvent(modifier);
   }
 
-  testWidgets('shift extends the selection from the last ctrl-click', (
+  testWidgets('shift replaces selection from the last ctrl-click anchor', (
     tester,
   ) async {
     await pumpGrid(tester, 8);
-    // Two ctrl-clicks, out of order, so the stored anchor and the last checked
-    // tile sit at different cells. One ctrl-click cannot tell them apart, and
-    // the fallback would reach from cell 5 instead.
+    // Two ctrl-clicks, out of order, so the anchor and the last selected tile
+    // in list order are different. Shift must reach from the last click.
     await clickCell(tester, 5, modifier: LogicalKeyboardKey.controlLeft);
     await clickCell(tester, 1, modifier: LogicalKeyboardKey.controlLeft);
     expect(checkedIds(), idsAt([1, 5]));
 
     await clickCell(tester, 3, modifier: LogicalKeyboardKey.shiftLeft);
-    expect(checkedIds(), idsAt([1, 2, 3, 5]));
+    expect(checkedIds(), idsAt([1, 2, 3]));
     expect(
-      StorageUtil.getInt(AppKeys.ctrlPressedIndex),
-      isNull,
-      reason: 'the anchor is spent, so the next shift reads the selection',
+      container.read(checkedIdsProvider.notifier).shiftAnchor,
+      idsAt([1]).single,
     );
+  });
+
+  testWidgets('ctrl+shift adds the anchor range', (tester) async {
+    await pumpGrid(tester, 8);
+    await clickCell(tester, 1, modifier: LogicalKeyboardKey.controlLeft);
+    await clickCell(tester, 5, modifier: LogicalKeyboardKey.controlLeft);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    addTearDown(() => tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft));
+    await clickCell(tester, 3, modifier: LogicalKeyboardKey.shiftLeft);
+
+    expect(checkedIds(), idsAt([1, 3, 4, 5]));
   });
 
   testWidgets('shift with nothing selected extends from the first cell', (

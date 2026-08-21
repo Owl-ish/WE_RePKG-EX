@@ -262,6 +262,8 @@ class SelectionGrid extends StatefulWidget {
 
 class _SelectionGridState extends State<SelectionGrid>
     with TickerProviderStateMixin {
+  static const SelectionEngine<String> _selection = SelectionEngine<String>();
+
   late final SmoothWheelScrollController _scrollController;
   late final ValueNotifier<bool> _topScrollControlActive;
   late final ValueNotifier<bool> _bottomScrollControlActive;
@@ -287,6 +289,7 @@ class _SelectionGridState extends State<SelectionGrid>
   /// rather than replaces. A click that twitches a pixel starts a drag, so
   /// replacing here is how a ctrl-click loses everything picked so far.
   Set<String> _dragBaseline = <String>{};
+  bool _dragAddsToSelection = false;
 
   /// Latest set the drag has worked out, waiting for the queued write.
   Set<String> _dragWanted = <String>{};
@@ -569,9 +572,11 @@ class _SelectionGridState extends State<SelectionGrid>
     };
     if (_dragIds != null && setEquals(ids, _dragIds)) return;
     _dragIds = ids;
-    _dragWanted = _dragBaseline.isEmpty
-        ? ids
-        : <String>{..._dragBaseline, ...ids};
+    _dragWanted = _selection.marquee(
+      current: _dragBaseline,
+      hits: ids,
+      additive: _dragAddsToSelection,
+    );
 
     // One write per frame. Each one refilters and re-sorts the whole library,
     // and a fast mouse reports twice a frame. The callback reads the field
@@ -593,20 +598,22 @@ class _SelectionGridState extends State<SelectionGrid>
   void _clearIfEmpty() {
     final Offset? at = _tapAt;
     _tapAt = null;
-    // A modifier is held to build a selection up, so a miss with one down is a
-    // miss, not an instruction to put everything down.
-    if (isCtrlPressed || isShiftPressed) return;
-    if (at == null ||
-        _sectionGrids().any(
-          (section) => hitsTile(
-            at,
-            origin: section.origin,
-            columns: _columns,
-            tile: _tileExtent,
-            spacing: _spacing,
-            count: section.count,
-          ),
-        )) {
+    if (at == null) return;
+    final bool hitItem = _sectionGrids().any(
+      (section) => hitsTile(
+        at,
+        origin: section.origin,
+        columns: _columns,
+        tile: _tileExtent,
+        spacing: _spacing,
+        count: section.count,
+      ),
+    );
+    if (!_selection.clearsOnEmpty(
+      control: isCtrlPressed,
+      shift: isShiftPressed,
+      hitItem: hitItem,
+    )) {
       return;
     }
     widget.onSelectionChanged(const <String>{});
@@ -812,7 +819,8 @@ class _SelectionGridState extends State<SelectionGrid>
                 // Cleared per drag, or repeating a rectangle matches the last
                 // drag's set and writes nothing.
                 _dragIds = null;
-                _dragBaseline = isCtrlPressed
+                _dragAddsToSelection = isCtrlPressed;
+                _dragBaseline = _dragAddsToSelection
                     ? widget.currentSelection()
                     : <String>{};
               },
