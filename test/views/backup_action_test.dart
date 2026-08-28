@@ -157,7 +157,10 @@ void main() {
       tester.getCenter(action).dy,
       greaterThan(tester.getCenter(find.byType(CountPill).first).dy),
     );
-    expect(find.byTooltip(AppI10n.backupActionBackUp), findsOneWidget);
+    expect(
+      find.byKey(ValueKey<String>('backup-tile-action-${card.id}')),
+      findsOneWidget,
+    );
 
     await mouse.moveTo(Offset.zero);
     await tester.pump(const Duration(milliseconds: 200));
@@ -166,7 +169,9 @@ void main() {
         .getSemantics(find.byType(BackupTileView))
         .getSemanticsData();
     expect(tileSemantics.hasAction(SemanticsAction.tap), isTrue);
-    expect(tileSemantics.customSemanticsActionIds, isNotEmpty);
+    // The wallpaper action is now a permanently rendered child control, so
+    // the tile no longer needs the old hidden-action semantics shortcut.
+    expect(tileSemantics.customSemanticsActionIds, isEmpty);
 
     final Finder tileFocus = find.byWidgetPredicate(
       (Widget widget) =>
@@ -175,7 +180,10 @@ void main() {
     );
     tester.widget<Focus>(tileFocus).focusNode!.requestFocus();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byTooltip(AppI10n.backupActionBackUp), findsOneWidget);
+    expect(
+      find.byKey(ValueKey<String>('backup-tile-action-${card.id}')),
+      findsOneWidget,
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();

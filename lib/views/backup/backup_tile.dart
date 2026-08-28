@@ -1,7 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/config/theme_extensions.dart';
@@ -22,7 +21,6 @@ import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/tile_overlays.dart';
-import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/views/backup/backup_action_ui.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
@@ -199,69 +197,13 @@ class _TileFrame extends ConsumerStatefulWidget {
 }
 
 class _TileFrameState extends ConsumerState<_TileFrame> {
-  static const Duration _actionFadeIn = Duration(milliseconds: 180);
-  static const Duration _actionFadeOut = Duration(milliseconds: 140);
-
   final DoubleClickGuard _clicks = DoubleClickGuard();
   late final FocusNode _tileFocusNode;
-  ScrollPosition? _actionScrollPosition;
-  bool _hovered = false;
-  bool _focused = false;
-  bool _scrolling = false;
 
   @override
   void initState() {
     super.initState();
     _tileFocusNode = FocusNode(debugLabel: 'backup-tile-${widget.id}');
-  }
-
-  bool get _actionInterested =>
-      widget.action != null &&
-      widget.onAction != null &&
-      (_hovered || _focused);
-
-  bool get _actionVisible => _actionInterested && !_scrolling;
-
-  void _setHovered(bool hovered) {
-    if (_hovered == hovered) return;
-    _updateActionInterest(() => _hovered = hovered);
-  }
-
-  void _setFocused(bool focused) {
-    if (_focused == focused) return;
-    _updateActionInterest(() => _focused = focused);
-  }
-
-  void _updateActionInterest(VoidCallback update) {
-    final bool wasVisible = _actionVisible;
-    update();
-    _syncActionScroll();
-    if (wasVisible != _actionVisible && mounted) setState(() {});
-  }
-
-  void _syncActionScroll() {
-    final ScrollPosition? next = _actionInterested
-        ? Scrollable.maybeOf(context)?.position
-        : null;
-    if (!identical(next, _actionScrollPosition)) {
-      _actionScrollPosition?.isScrollingNotifier.removeListener(
-        _onActionScrollChanged,
-      );
-      _actionScrollPosition = next;
-      _actionScrollPosition?.isScrollingNotifier.addListener(
-        _onActionScrollChanged,
-      );
-    }
-    _scrolling = _actionScrollPosition?.isScrollingNotifier.value ?? false;
-  }
-
-  void _onActionScrollChanged() {
-    final bool scrolling =
-        _actionScrollPosition?.isScrollingNotifier.value ?? false;
-    if (_scrolling == scrolling || !mounted) return;
-    final bool wasVisible = _actionVisible;
-    _scrolling = scrolling;
-    if (wasVisible != _actionVisible) setState(() {});
   }
 
   KeyEventResult _onTileKeyEvent(FocusNode node, KeyEvent event) {
@@ -277,16 +219,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   }
 
   @override
-  void didUpdateWidget(covariant _TileFrame oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncActionScroll();
-  }
-
-  @override
   void dispose() {
-    _actionScrollPosition?.isScrollingNotifier.removeListener(
-      _onActionScrollChanged,
-    );
     _tileFocusNode.dispose();
     super.dispose();
   }
@@ -387,42 +320,21 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     );
   }
 
-  Widget _actionButton(
-    BuildContext context,
-    BackupAction action,
-    VoidCallback onAction,
-  ) {
-    final bool destructive = backupActionIsDestructive(action);
+  Widget _actionButton(BackupAction action, VoidCallback onAction) {
     final ActionButtonTheme colors = Theme.of(context).actionButtons;
-    final Color glowColour = destructive
-        ? colors.destructiveForeground
-        : colors.primaryForeground;
-    final Widget button = destructive
-        ? AppActionIconButton.destructive(
-            icon: backupActionIcon(action),
-            tooltip: widget.actionLabelOverride ?? backupActionLabel(action),
-            onPressed: onAction,
-            width: 34,
-            height: 34,
-            iconSize: 18,
-          )
-        : AppActionIconButton(
-            icon: backupActionIcon(action),
-            tooltip: widget.actionLabelOverride ?? backupActionLabel(action),
-            onPressed: onAction,
-            width: 34,
-            height: 34,
-            iconSize: 18,
-          );
-    return RepaintBoundary(
-      child: BackupActionGlow(
-        colour: glowColour,
-        enabled: true,
-        borderRadius: BorderRadius.circular(999),
-        glowKey: const ValueKey<String>('backup-tile-action-glow'),
-        scale: .7,
-        child: button,
-      ),
+    final bool destructive = backupActionIsDestructive(action);
+    return _BackupTileActionButton(
+      id: widget.id,
+      icon: backupActionIcon(action),
+      label: widget.actionLabelOverride ?? backupActionLabel(action),
+      background: destructive
+          ? colors.destructiveBackground
+          : colors.primaryBackground,
+      foreground: destructive
+          ? colors.destructiveForeground
+          : colors.primaryForeground,
+      border: destructive ? colors.destructiveBorder : colors.primaryBorder,
+      onPressed: onAction,
     );
   }
 
@@ -431,28 +343,17 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final bool checked = ref.watch(
       backupSelectionProvider.select((ids) => ids.contains(widget.id)),
     );
-    final bool revealAction = _actionVisible;
-    Map<CustomSemanticsAction, VoidCallback>? semanticActions;
-    if (!revealAction && widget.action != null && widget.onAction != null) {
-      semanticActions = <CustomSemanticsAction, VoidCallback>{
-        CustomSemanticsAction(
-          label:
-              widget.actionLabelOverride ?? backupActionLabel(widget.action!),
-        ): widget.onAction!,
-      };
-    }
     return Semantics(
       button: true,
       onTap: widget.onTap,
-      customSemanticsActions: semanticActions,
       child: Focus(
         focusNode: _tileFocusNode,
         onKeyEvent: _onTileKeyEvent,
-        onFocusChange: _setFocused,
         child: Listener(
           onPointerDown: _onPointerDown,
           child: InkWell(
             canRequestFocus: false,
+            mouseCursor: SystemMouseCursors.click,
             overlayColor: const WidgetStatePropertyAll<Color>(
               Colors.transparent,
             ),
@@ -470,72 +371,49 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                         backupActionLabel(widget.action!),
               onAction: widget.onAction,
             ),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => _setHovered(true),
-              onExit: (_) => _setHovered(false),
-              child: Container(
-                width: widget.width,
-                decoration: BoxDecoration(
-                  // The shadow has to know the radius too, or it keeps painting
-                  // square corners behind the rounded tile.
-                  borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
-                  clipBehavior: Clip.hardEdge,
-                  child: Stack(
-                    children: [
-                      ImageView(
-                        size: widget.width,
-                        previews: widget.face?.preview ?? '',
-                      ),
-                      // The folder name when there is no readable project.json,
-                      // which is the case the integrity tab exists to point at.
-                      ImageTitle(title: widget.face?.title ?? widget.name),
-                      Positioned(
-                        left: 4,
-                        right: 4,
-                        top: 4,
-                        child: TileBadgeStrip(badges: widget.badges),
-                      ),
-                      if (widget.action case final BackupAction action)
-                        if (widget.onAction case final VoidCallback onAction)
-                          Positioned(
-                            right: LayoutNums.smallGap,
-                            bottom: 28,
-                            width: 34,
-                            height: 34,
-                            child: AnimatedSwitcher(
-                              duration: _scrolling
-                                  ? Duration.zero
-                                  : _actionFadeIn,
-                              reverseDuration: _scrolling
-                                  ? Duration.zero
-                                  : _actionFadeOut,
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              transitionBuilder:
-                                  (Widget child, Animation<double> animation) =>
-                                      FadeTransition(
-                                        opacity: animation,
-                                        child: child,
-                                      ),
-                              child: revealAction
-                                  ? _actionButton(context, action, onAction)
-                                  : const SizedBox.shrink(),
-                            ),
-                          ),
-                      if (checked) const SelectionTint(),
-                    ],
+            child: Container(
+              width: widget.width,
+              decoration: BoxDecoration(
+                // The shadow has to know the radius too, or it keeps painting
+                // square corners behind the rounded tile.
+                borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
                   ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(LayoutNums.surfaceRadius),
+                clipBehavior: Clip.hardEdge,
+                child: Stack(
+                  children: [
+                    ImageView(
+                      size: widget.width,
+                      previews: widget.face?.preview ?? '',
+                    ),
+                    // The folder name when there is no readable project.json,
+                    // which is the case the integrity tab exists to point at.
+                    ImageTitle(title: widget.face?.title ?? widget.name),
+                    Positioned(
+                      left: 4,
+                      right: 4,
+                      top: 4,
+                      child: TileBadgeStrip(badges: widget.badges),
+                    ),
+                    if (widget.action case final BackupAction action)
+                      if (widget.onAction case final VoidCallback onAction)
+                        Positioned(
+                          right: LayoutNums.smallGap,
+                          bottom: 28,
+                          width: 34,
+                          height: 34,
+                          child: _actionButton(action, onAction),
+                        ),
+                    if (checked) const SelectionTint(),
+                  ],
                 ),
               ),
             ),
@@ -544,6 +422,79 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       ),
     );
   }
+}
+
+/// Hover feedback for the always-visible tile action is isolated from the tile
+/// itself, so moving the pointer only rebuilds this 34px control rather than the
+/// preview, badges, selection tint, and provider-backed tile subtree.
+class _BackupTileActionButton extends StatefulWidget {
+  const _BackupTileActionButton({
+    required this.id,
+    required this.icon,
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.border,
+    required this.onPressed,
+  });
+
+  final String id;
+  final IconData icon;
+  final String label;
+  final Color background;
+  final Color foreground;
+  final Color border;
+  final VoidCallback onPressed;
+
+  @override
+  State<_BackupTileActionButton> createState() =>
+      _BackupTileActionButtonState();
+}
+
+class _BackupTileActionButtonState extends State<_BackupTileActionButton> {
+  bool _hovered = false;
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => _setHovered(true),
+    onExit: (_) => _setHovered(false),
+    child: AnimatedScale(
+      key: ValueKey<String>('backup-tile-action-scale-${widget.id}'),
+      scale: _hovered ? 1.10 : 1,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      child: IconButton(
+        key: ValueKey<String>('backup-tile-action-${widget.id}'),
+        icon: Icon(
+          widget.icon,
+          semanticLabel: widget.label,
+          color: widget.foreground,
+          size: 18,
+        ),
+        onPressed: widget.onPressed,
+        tooltip: null,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        style: ButtonStyle(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          animationDuration: Duration.zero,
+          backgroundColor: WidgetStatePropertyAll<Color>(widget.background),
+          overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+          splashFactory: NoSplash.splashFactory,
+          side: WidgetStatePropertyAll<BorderSide>(
+            BorderSide(color: widget.border),
+          ),
+          shape: const WidgetStatePropertyAll<OutlinedBorder>(CircleBorder()),
+        ),
+      ),
+    ),
+  );
 }
 
 String _stateDetailText(BackupState state) => switch (state) {

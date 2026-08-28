@@ -507,7 +507,7 @@ void main() {
     });
 
     testWidgets(
-      'bulk and circular tile actions use the shared glow treatment',
+      'tile actions stay visible without repeating per-tile animation',
       (tester) async {
         const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'gone');
         await showScan(
@@ -519,49 +519,64 @@ void main() {
         );
         await settle(tester);
 
+        final Finder tile = find.byType(BackupTileView);
+        final Finder tileAction = find.byKey(
+          ValueKey<String>('backup-tile-action-${card.id}'),
+        );
+        final Finder tileActionScale = find.byKey(
+          ValueKey<String>('backup-tile-action-scale-${card.id}'),
+        );
         expect(
-          find.byKey(const ValueKey<String>('backup-tile-action-glow')),
+          tileAction,
+          findsOneWidget,
+          reason: 'the tile action should be mounted before pointer hover',
+        );
+        expect(
+          find.descendant(of: tile, matching: find.byType(BackupActionGlow)),
           findsNothing,
-          reason: 'tile actions stay unmounted until hover or keyboard focus',
+          reason: 'always-visible tile actions must not own repeating tickers',
         );
         final TestGesture mouse = await tester.createGesture(
           kind: PointerDeviceKind.mouse,
         );
         await mouse.addPointer(location: Offset.zero);
-        await mouse.moveTo(tester.getCenter(find.byType(BackupTileView)));
-        await tester.pump(const Duration(milliseconds: 200));
-        addTearDown(mouse.removePointer);
+        expect(tester.widget<AnimatedScale>(tileActionScale).scale, 1);
+        await mouse.moveTo(tester.getCenter(tileAction));
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(
+          tileAction,
+          findsOneWidget,
+          reason:
+              'hovering must not control whether the tile action is mounted',
+        );
+        expect(
+          tester.widget<AnimatedScale>(tileActionScale).scale,
+          1.10,
+          reason: 'the action should respond visually only to direct hover',
+        );
+        await mouse.moveTo(const Offset(0, 0));
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(
+          tileAction,
+          findsOneWidget,
+          reason: 'leaving hover must not hide or unmount the tile action',
+        );
+        expect(tester.widget<AnimatedScale>(tileActionScale).scale, 1);
+        await mouse.removePointer();
 
         final Finder bulkGlow = find.byKey(
           const ValueKey<String>('backup-all-action-glow'),
         );
-        final Finder tileGlow = find.byKey(
-          const ValueKey<String>('backup-tile-action-glow'),
-        );
         expect(bulkGlow, findsOneWidget);
-        expect(tileGlow, findsOneWidget);
-
         final Finder bulkWrapper = find.ancestor(
           of: bulkGlow,
           matching: find.byType(BackupActionGlow),
         );
-        final Finder tileWrapper = find.ancestor(
-          of: tileGlow,
-          matching: find.byType(BackupActionGlow),
-        );
-        expect(bulkWrapper, findsOneWidget);
-        expect(tileWrapper, findsOneWidget);
-
         final BackupActionGlow bulk = tester.widget<BackupActionGlow>(
           bulkWrapper,
         );
-        final BackupActionGlow tile = tester.widget<BackupActionGlow>(
-          tileWrapper,
-        );
         expect(bulk.enabled, isTrue);
-        expect(tile.enabled, isTrue);
         expect(bulk.scale, 1);
-        expect(tile.scale, .7);
 
         final BuildContext bulkContext = tester.element(bulkWrapper);
         expect(
@@ -569,30 +584,13 @@ void main() {
           backupStateLook(bulkContext, BackupState.vanished).colour,
         );
 
-        final Finder circularMaterial = find.descendant(
-          of: tileGlow,
-          matching: find.byWidgetPredicate(
-            (Widget widget) =>
-                widget is Material && widget.shape is CircleBorder,
-          ),
-        );
-        final Finder circularButton = find.descendant(
-          of: tileGlow,
-          matching: find.byType(AppIconButton),
-        );
-        expect(circularMaterial, findsOneWidget);
-        expect(circularButton, findsOneWidget);
-        final AppIconButton button = tester.widget<AppIconButton>(
-          circularButton,
-        );
-        expect(button.color, isNotNull);
-        expect(tile.colour, button.color);
-
-        await mouse.moveTo(Offset.zero);
-        await tester.pump(const Duration(milliseconds: 70));
-        expect(tileGlow, findsOneWidget, reason: 'the action should fade out');
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(tileGlow, findsNothing);
+        final IconButton button = tester.widget<IconButton>(tileAction);
+        expect(button.tooltip, isNull);
+        expect(button.style?.animationDuration, Duration.zero);
+        expect(button.style?.splashFactory, NoSplash.splashFactory);
+        final Icon icon = button.icon as Icon;
+        expect(icon.color, isNotNull);
+        expect(icon.semanticLabel, AppI10n.backupActionRestore);
       },
     );
 
