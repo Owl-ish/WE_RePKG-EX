@@ -22,7 +22,7 @@ import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/tile_overlays.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
-import 'package:we_repkg/widgets/custom_input.dart';
+import 'package:we_repkg/widgets/input_controls.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/views/backup/backup_action.dart';
 
