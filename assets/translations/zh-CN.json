@@ -407,6 +407,7 @@
     "deleteSceneJsonFailed": "删除scene.json失败:"
   },
   "close": "关闭",
+  "expandDetails": "展开详细信息",
   "emptyTip": "未识别到任何数据\n请手动选择一个新的壁纸库文件夹\n路径为：...\\steamapps\\workshop\\content\\431960",
   "toolNoExist": "未找到工具文件，请前往设置查看工具路径是否正确",
   "loading": "正在加载",

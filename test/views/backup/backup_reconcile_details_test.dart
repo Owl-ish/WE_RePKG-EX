@@ -8,6 +8,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
+import 'package:we_repkg/views/content/detail_dialog.dart';
 
 void main() {
   testWidgets(
@@ -85,12 +86,32 @@ void main() {
         const ValueKey<String>('wallpaper-detail-panel-pane'),
       );
       expect(await waitFor(focusTarget), isTrue);
+      expect(
+        find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
+        findsOneWidget,
+      );
       final Finder expandPrompt = find.byKey(
         const ValueKey<String>('backup-reconcile-expand-differences'),
       );
       expect(expandPrompt, findsOneWidget);
       expect(find.text(AppI10n.backupDetailExpandDifferences), findsOneWidget);
       expect(tester.getSize(expandPrompt).height, greaterThanOrEqualTo(48));
+      final WallpaperDetailDialog detailDialog = tester.widget(
+        find.byType(WallpaperDetailDialog),
+      );
+      expect(detailDialog.layout.maxHeight, 560);
+      final Finder metadata = find.byKey(
+        const ValueKey<String>('wallpaper-detail-metadata'),
+      );
+      expect(metadata, findsOneWidget);
+      expect(
+        find.ancestor(
+          of: metadata,
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+        reason: 'metadata should keep its natural height above dense details',
+      );
       expect(
         find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
         findsNothing,
@@ -99,13 +120,42 @@ void main() {
       final double previewBefore = tester.getSize(previewPane).width;
       final double panelBefore = tester.getSize(panelPane).width;
       final double totalBefore = previewBefore + panelBefore;
+      final Size dialogBefore = tester.getSize(find.byType(Dialog));
 
-      await tester.tap(focusTarget);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 220));
 
       final double previewFocused = tester.getSize(previewPane).width;
       final double panelFocused = tester.getSize(panelPane).width;
+      final Size dialogFocused = tester.getSize(find.byType(Dialog));
+      expect(
+        find.byKey(
+          const ValueKey<String>('backup-reconcile-expand-differences'),
+        ),
+        findsOneWidget,
+        reason: 'pane expansion must not reveal caller-owned work',
+      );
+      expect(
+        find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
+        findsNothing,
+      );
+      expect(previewFocused, lessThan(previewBefore));
+      expect(previewFocused, lessThanOrEqualTo(100));
+      expect(panelFocused, greaterThan(panelBefore));
+      expect(previewFocused + panelFocused, closeTo(totalBefore, .5));
+      expect(dialogFocused.width, closeTo(dialogBefore.width, .5));
+      expect(dialogFocused.height, closeTo(dialogBefore.height, .5));
+
+      await tester.tap(expandPrompt);
+      await tester.pump();
+
       expect(
         find.byKey(
           const ValueKey<String>('backup-reconcile-expand-differences'),
@@ -116,10 +166,6 @@ void main() {
         find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
         findsOneWidget,
       );
-      expect(previewFocused, lessThan(previewBefore));
-      expect(previewFocused, lessThanOrEqualTo(100));
-      expect(panelFocused, greaterThan(panelBefore));
-      expect(previewFocused + panelFocused, closeTo(totalBefore, .5));
 
       await tester.tap(previewPane);
       await tester.pump();

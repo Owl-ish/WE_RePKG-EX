@@ -453,6 +453,7 @@ class AppI10n {
 
   // 其他
   static const String close = 'close';
+  static const String expandDetails = 'expandDetails';
   static const String emptyTip = 'emptyTip';
   static const String toolNoExist = 'toolNoExist';
   static const String loading = 'loading';

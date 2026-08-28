@@ -116,15 +116,24 @@ class DetailAction {
 }
 
 /// Extra caller-owned content inside the normal metadata panel.
-/// Kept optional so ordinary wallpaper details are unchanged.
+///
+/// The focus callback only changes pane geometry. Caller-owned controls decide
+/// whether focus also starts any expensive work.
 typedef DetailExtraBuilder =
-    Widget Function(BuildContext context, Color foreground, bool focused);
+    Widget Function(
+      BuildContext context,
+      Color foreground,
+      bool focused,
+      VoidCallback requestFocus,
+    );
 
 /// Optional layout tuning for specialized detail callers.
 class DetailDialogLayout {
   const DetailDialogLayout({
     this.panelWidth,
     this.maxWidthFactor = .84,
+    this.maxHeightFactor = .72,
+    this.maxHeight = _paneMaxHeight,
     this.extraFillsPanel = false,
     this.extraCanFocus = false,
     this.focusedPreviewWidth = 96,
@@ -132,6 +141,8 @@ class DetailDialogLayout {
 
   final double? panelWidth;
   final double maxWidthFactor;
+  final double maxHeightFactor;
+  final double maxHeight;
   final bool extraFillsPanel;
   final bool extraCanFocus;
   final double focusedPreviewWidth;
@@ -321,7 +332,10 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
     final double requestedPanelWidth =
         widget.layout.panelWidth ?? standardPanelWidth;
     final double maxWidth = screen.width * widget.layout.maxWidthFactor;
-    final double height = min(screen.height * .72, _paneMaxHeight);
+    final double height = min(
+      screen.height * widget.layout.maxHeightFactor,
+      widget.layout.maxHeight,
+    );
     final double aspect = widget.stats?.aspect ?? 1;
     double normalPreviewWidth = 0;
     double normalPanelWidth = min(maxWidth, height + requestedPanelWidth);
@@ -447,10 +461,17 @@ class _DetailPanelContent extends StatelessWidget {
     null => _Actions(wallpaper: wallpaper),
   };
 
-  Widget _meta() => WallpaperMeta(
-    wallpaper: wallpaper,
-    copyable: true,
-    foreground: foreground,
+  Widget _meta() => Padding(
+    key: const ValueKey<String>('wallpaper-detail-metadata'),
+    // Desktop scrollbars paint over the trailing edge of their viewport.
+    // Keep metadata copy controls inside a permanent gutter even on the rare
+    // layout that still needs scrolling.
+    padding: const EdgeInsets.only(right: 10),
+    child: WallpaperMeta(
+      wallpaper: wallpaper,
+      copyable: true,
+      foreground: foreground,
+    ),
   );
 
   Widget _extra(BuildContext context, DetailExtraBuilder builder) {
@@ -458,15 +479,31 @@ class _DetailPanelContent extends StatelessWidget {
       context,
       foreground,
       !extraCanFocus || extraFocused,
+      onExtraFocus,
     );
-    if (!extraCanFocus || extraFocused) return child;
+    if (!extraCanFocus) return child;
+
+    // Keep this wrapper stable while focus animates so stateful caller content
+    // does not get recreated when the preview collapses. Clicking the pane only
+    // expands it; caller-owned controls decide whether any heavier action runs.
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: extraFocused ? MouseCursor.defer : SystemMouseCursors.click,
       child: GestureDetector(
         key: const ValueKey<String>('wallpaper-detail-extra-focus-target'),
         behavior: HitTestBehavior.translucent,
-        onTap: onExtraFocus,
-        child: child,
+        onTap: extraFocused ? null : onExtraFocus,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            child,
+            if (!extraFocused)
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: _DetailFocusHint(foreground: foreground),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -524,51 +561,37 @@ class _DetailPanelContent extends StatelessWidget {
             )
           else if (extraFillsPanel && extra != null) ...<Widget>[
             Expanded(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  // Keep enough room for reconcile guidance and its tree affordance.
-                  const double reservedExtraHeight = 140;
-                  const double dividerHeight = 17;
-                  final double metaHeight = max(
-                    0,
-                    constraints.maxHeight - reservedExtraHeight - dividerHeight,
-                  );
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      ClipRect(
-                        child: AnimatedSize(
-                          duration: focusDuration,
-                          curve: Curves.easeInOutCubic,
-                          alignment: Alignment.topCenter,
-                          child: extraFocused
-                              ? const SizedBox.shrink()
-                              : Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: <Widget>[
-                                    ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxHeight: metaHeight,
-                                      ),
-                                      child: SingleChildScrollView(
-                                        child: _meta(),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Divider(
-                                      color: foreground.withValues(alpha: .25),
-                                      height: 1,
-                                    ),
-                                    const SizedBox(height: 8),
-                                  ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // Metadata owns its natural height. The old fixed reservation
+                  // squeezed it into a nested scroll viewport, which could put a
+                  // desktop scrollbar directly over the ID copy button. Dense
+                  // caller content gets the remaining space and owns any scroll
+                  // it actually needs.
+                  ClipRect(
+                    child: AnimatedSize(
+                      duration: focusDuration,
+                      curve: Curves.easeInOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: extraFocused
+                          ? const SizedBox.shrink()
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                _meta(),
+                                const SizedBox(height: 8),
+                                Divider(
+                                  color: foreground.withValues(alpha: .25),
+                                  height: 1,
                                 ),
-                        ),
-                      ),
-                      Expanded(child: _extra(context, extra)),
-                    ],
-                  );
-                },
+                                const SizedBox(height: 8),
+                              ],
+                            ),
+                    ),
+                  ),
+                  Expanded(child: _extra(context, extra)),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -576,6 +599,7 @@ class _DetailPanelContent extends StatelessWidget {
           ] else ...<Widget>[
             Expanded(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.only(right: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
@@ -587,7 +611,7 @@ class _DetailPanelContent extends StatelessWidget {
                         height: 1,
                       ),
                       const SizedBox(height: 14),
-                      extra(context, foreground, false),
+                      extra(context, foreground, false, onExtraFocus),
                     ],
                   ],
                 ),
@@ -600,6 +624,55 @@ class _DetailPanelContent extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shared, finite entrance cue for detail panes that can reclaim more room.
+///
+/// The whole compact pane remains clickable. This marker only makes that
+/// capability visible, and its one-shot animation stays friendly to widget
+/// tests and accessibility clients.
+class _DetailFocusHint extends StatelessWidget {
+  const _DetailFocusHint({required this.foreground});
+
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    key: const ValueKey<String>('wallpaper-detail-extra-focus-hint'),
+    tween: Tween<double>(begin: .72, end: 1),
+    duration: const Duration(milliseconds: 420),
+    curve: Curves.easeOutBack,
+    builder: (BuildContext context, double scale, Widget? child) =>
+        Transform.scale(scale: scale, child: child),
+    child: Tooltip(
+      message: tr(AppI10n.expandDetails),
+      child: Semantics(
+        button: true,
+        label: tr(AppI10n.expandDetails),
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: .9),
+            border: Border.all(color: foreground.withValues(alpha: .24)),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                blurRadius: 5,
+                color: Colors.black.withValues(alpha: .12),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.open_in_full_rounded,
+            size: 17,
+            color: foreground.withValues(alpha: .8),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Frosted pane: its own copy of the wallpaper, blurred, under a scrim.

@@ -27,6 +27,17 @@ import 'package:we_repkg/views/backup/backup_action_ui.dart';
 /// details open on whichever exists; the menu offers each one it has.
 typedef TileFolders = ({String? live, String? backup});
 
+DetailDialogLayout _backupDetailLayout({bool extraCanFocus = false}) =>
+    DetailDialogLayout(
+      // Keep Backup only modestly taller than the ordinary 500px detail card.
+      // Dense sections scroll/focus inside this footprint instead of inflating
+      // the whole modal.
+      maxHeightFactor: .84,
+      maxHeight: 560,
+      extraFillsPanel: true,
+      extraCanFocus: extraCanFocus,
+    );
+
 /// One wallpaper in the backup grid, with the badge saying where it stands.
 class BackupTileView extends StatelessWidget {
   const BackupTileView({
@@ -281,14 +292,11 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       origin: origin,
       actions: _actions(),
       includePreview: widget.junkKind == null,
-      layout: widget.reconcileEntry == null
+      layout: widget.junkKind != null
           ? const DetailDialogLayout()
-          : DetailDialogLayout(
-              extraFillsPanel: true,
-              extraCanFocus: reconcileNeedsFocus,
-            ),
+          : _backupDetailLayout(extraCanFocus: reconcileNeedsFocus),
       extraContentBuilder: widget.junkKind != null
-          ? (BuildContext context, Color foreground, bool _) =>
+          ? (BuildContext context, Color foreground, bool _, VoidCallback _) =>
                 JunkDetailContent(
                   folderPath: folder,
                   kind: widget.junkKind!,
@@ -296,15 +304,19 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                   foreground: foreground,
                 )
           : widget.reconcileEntry != null
-          ? (BuildContext context, Color foreground, bool focused) =>
-                ReconcileDetailContent(
-                  entry: widget.reconcileEntry!,
-                  foreground: foreground,
-                  focused: focused,
-                  needsFocus: reconcileNeedsFocus,
-                )
+          ? (
+              BuildContext context,
+              Color foreground,
+              bool _,
+              VoidCallback requestFocus,
+            ) => ReconcileDetailContent(
+              entry: widget.reconcileEntry!,
+              foreground: foreground,
+              needsFocus: reconcileNeedsFocus,
+              onRequestFocus: requestFocus,
+            )
           : widget.updatePlan != null && widget.backupCard != null
-          ? (BuildContext context, Color foreground, bool _) =>
+          ? (BuildContext context, Color foreground, bool _, VoidCallback _) =>
                 UpdatePlanDetailContent(
                   plan: widget.updatePlan!,
                   card: widget.backupCard!,
@@ -312,7 +324,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 )
           : widget.detailText == null
           ? null
-          : (BuildContext context, Color foreground, bool _) =>
+          : (BuildContext context, Color foreground, bool _, VoidCallback _) =>
                 BackupDetailContent(
                   text: widget.detailText!,
                   foreground: foreground,

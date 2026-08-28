@@ -98,23 +98,45 @@ bool reconcileNeedsFileFocus(ReconcileEntry? entry) {
   return difference.total + groups > 4 || longest > 58;
 }
 
-class ReconcileDetailContent extends StatelessWidget {
+class ReconcileDetailContent extends StatefulWidget {
   const ReconcileDetailContent({
     super.key,
     required this.entry,
     required this.foreground,
-    required this.focused,
     required this.needsFocus,
+    this.onRequestFocus,
   });
 
   final ReconcileEntry entry;
   final Color foreground;
-  final bool focused;
   final bool needsFocus;
+  final VoidCallback? onRequestFocus;
+
+  @override
+  State<ReconcileDetailContent> createState() => _ReconcileDetailContentState();
+}
+
+class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
+  bool _differencesRequested = false;
+
+  void _requestDifferences() {
+    if (_differencesRequested) return;
+    setState(() => _differencesRequested = true);
+    widget.onRequestFocus?.call();
+  }
+
+  @override
+  void didUpdateWidget(covariant ReconcileDetailContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.name != widget.entry.name ||
+        oldWidget.entry.reason != widget.entry.reason) {
+      _differencesRequested = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final String explanation = switch (entry.reason) {
+    final String explanation = switch (widget.entry.reason) {
       BackupReconcileReason.duplicateLiveCopies =>
         AppI10n.backupReconcileDuplicateLiveAbout,
       BackupReconcileReason.conflictingBackupCopies =>
@@ -127,7 +149,7 @@ class ReconcileDetailContent extends StatelessWidget {
       children: <Widget>[
         Text(
           tr(explanation),
-          style: TextStyle(color: foreground, height: 1.35),
+          style: TextStyle(color: widget.foreground, height: 1.35),
         ),
         const SizedBox(height: 12),
         Expanded(child: _details(context)),
@@ -135,7 +157,7 @@ class ReconcileDetailContent extends StatelessWidget {
     );
   }
 
-  Widget _details(BuildContext context) => switch (entry.reason) {
+  Widget _details(BuildContext context) => switch (widget.entry.reason) {
     BackupReconcileReason.duplicateLiveCopies => SingleChildScrollView(
       child: BackupDetailGroup(
         title: tr(AppI10n.backupDetailDetectedCopies),
@@ -143,50 +165,72 @@ class ReconcileDetailContent extends StatelessWidget {
           tr(AppI10n.backupDetailWorkshopLive),
           tr(AppI10n.backupDetailMyProjectsLive),
         ],
-        foreground: foreground,
+        foreground: widget.foreground,
       ),
     ),
     BackupReconcileReason.comparisonUnavailable => SingleChildScrollView(
       child: BackupDetailGroup(
         title: tr(AppI10n.backupDetailComparisonFailed),
         items: <String>[tr(AppI10n.backupDetailRescanAdvice)],
-        foreground: foreground,
+        foreground: widget.foreground,
       ),
     ),
-    BackupReconcileReason.conflictingBackupCopies when needsFocus && !focused =>
-      FileTreeSurface(
-        key: const ValueKey<String>('backup-reconcile-expand-differences'),
-        foreground: foreground,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.unfold_more_rounded,
-                  size: 18,
-                  color: foreground.withValues(alpha: .75),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tr(AppI10n.backupDetailExpandDifferences),
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    style: TextStyle(
-                      color: foreground,
-                      fontWeight: FontWeight.w600,
+    BackupReconcileReason.conflictingBackupCopies
+        when widget.needsFocus && !_differencesRequested =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Semantics(
+            button: true,
+            label: tr(AppI10n.backupDetailExpandDifferences),
+            onTap: _requestDifferences,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTap: _requestDifferences,
+                child: FileTreeSurface(
+                  key: const ValueKey<String>(
+                    'backup-reconcile-expand-differences',
+                  ),
+                  foreground: widget.foreground,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.unfold_more_rounded,
+                          size: 18,
+                          color: widget.foreground.withValues(alpha: .75),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tr(AppI10n.backupDetailExpandDifferences),
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                            style: TextStyle(
+                              color: widget.foreground,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     BackupReconcileReason.conflictingBackupCopies => _DifferenceFileTree(
-      difference: entry.backupDifference,
-      foreground: foreground,
+      difference: widget.entry.backupDifference,
+      foreground: widget.foreground,
     ),
   };
 }

@@ -407,6 +407,7 @@
     "deleteSceneJsonFailed": "Failed to delete scene.json:"
   },
   "close": "Close",
+  "expandDetails": "Expand details",
   "emptyTip": "No data available\nPlease manually select a new wallpaper library folder\nPath as: ...\\steamapps\\workshop\\content\\431960",
   "toolNoExist": "Tool file not found, please go to Settings to check if the tool path is correct",
   "loading": "Loading",
