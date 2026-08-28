@@ -200,9 +200,21 @@ void main() {
       );
     });
 
-    // The whole reason emptiness is judged separately from the comparison: a
-    // Workshop card with a baseline is never compared, and an emptied backup
-    // folder still has to stop reading as backed up.
+    test('an extra meaningful backup file makes the mirror stale', () async {
+      final Directory backupFolder = pair(
+        'alpha',
+        liveBody: 'same',
+        backupBody: 'same',
+      );
+      File(p.join(backupFolder.path, 'legacy.txt')).writeAsStringSync('old');
+
+      expect(
+        (await run(shared: <String>{'alpha'}))['alpha'],
+        CopyStanding.behind,
+      );
+    });
+
+    // Emptiness is judged separately from whichever folders this pass compares.
     test('an uncompared empty folder is left to the junk scan', () async {
       pair('alpha');
 
@@ -1354,9 +1366,7 @@ void main() {
       );
     });
 
-    // Once a baseline exists the manifests answer the question, so the walk is
-    // skipped entirely. That is what keeps the Workshop cost decaying to zero.
-    test('a workshop card with a baseline is not fingerprinted', () async {
+    test('a workshop baseline cannot hide a direct mirror mismatch', () async {
       File(
         p.join(wallpaper(liveWorkshop, '793602574').path, 'project.json'),
       ).writeAsStringSync('{"republished":true}');
@@ -1378,8 +1388,8 @@ void main() {
 
       expect(
         result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
-        BackupState.synced,
-        reason: 'the manifest matches the baseline, whatever the folders hold',
+        BackupState.updateAvailable,
+        reason: 'the saved manifest cannot prove backup-only or changed files',
       );
     });
 

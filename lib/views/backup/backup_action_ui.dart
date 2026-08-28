@@ -203,6 +203,7 @@ Future<BackupActionResult> _runOne(
     liveWorkshopPath: container.read(wallpaperPathProvider),
     liveMyProjectsPath: container.read(myProjectsLibraryProvider),
     acfPath: container.read(acfPathProvider),
+    mirror: action == BackupAction.update,
   ),
   BackupAction.restore => restoreVanishedWallpaper(
     cards: cards,

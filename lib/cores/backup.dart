@@ -105,11 +105,9 @@ Future<BackupScan> scanBackup({
   ).wait;
   final Set<String> liveMyProjects = myProjects.names;
 
-  // Comparing folders is the expensive half, so it runs on as little as
-  // possible: only names both sides hold, and for Workshop only cards with no
-  // saved backup version yet. An empty backup
-  // folder is judged without any of that, so it is caught even on a card whose
-  // record would otherwise answer for it.
+  // Mirror checks compare every shared folder. Workshop stays shallow because
+  // scene.pkg carries most payload, but a saved version cannot prove that stale
+  // files do not remain only in the backup.
   final Map<String, BackupRecord> byId = <String, BackupRecord>{
     for (final MapEntry<String, BackupRecord> entry in records.entries)
       entry.key.toLowerCase(): entry.value,
@@ -119,13 +117,7 @@ Future<BackupScan> scanBackup({
     liveMyProjects,
     backupMyProjects,
   );
-  final Set<String> workshopToCompare = <String>{
-    for (final String name in sharedWorkshop)
-      if (byId[BackupCard(WallpaperLibrary.workshop, name).id]
-              ?.backedUpVersion ==
-          null)
-        name,
-  };
+  final Set<String> workshopToCompare = sharedWorkshop;
   final Set<String> duplicateBackupCandidates = _duplicateBackupCandidates(
     liveWorkshop: liveWorkshop,
     liveMyProjects: liveMyProjects,
@@ -146,7 +138,7 @@ Future<BackupScan> scanBackup({
     backupWorkshop,
     backupMyProjects,
   );
-  // Report the work that actually dominates the wait: coverage comparisons.
+  // Report the work that actually dominates the wait: mirror comparisons.
   // Junk checks run beside it and usually stop at the first ordinary file.
   final int compareTotal =
       workshopToCompare.length +
@@ -1074,39 +1066,29 @@ Future<Map<String, T>> _perFolder<T extends Object>(
   return found;
 }
 
-/// Whether the backup still covers every live file that matters.
-///
-/// Extra backup files are intentionally ignored, matching [compareCopy]. Walking
-/// the live tree once and probing only its matching backup files avoids a second
-/// recursive backup-tree walk and can stop on the first stale file.
+/// Whether the backup mirrors every meaningful live file and has no residue.
 Future<CopyStanding?> _copyStanding({
   required Directory liveFolder,
   required Directory backupFolder,
   required bool recursive,
 }) async {
-  try {
-    if (!await liveFolder.exists() || !await backupFolder.exists()) return null;
-    await for (final FileSystemEntity entity in liveFolder.list(
-      recursive: recursive,
-      followLinks: false,
-    )) {
-      if (entity is! File) continue;
-      final String relative = path.relative(entity.path, from: liveFolder.path);
-      if (isRebuiltShaderPath(relative)) continue;
-      final (FileStat live, FileStat backup) = await (
-        entity.stat(),
-        File(path.join(backupFolder.path, relative)).stat(),
-      ).wait;
-      if (live.type != FileSystemEntityType.file) return null;
-      if (backup.type != FileSystemEntityType.file ||
-          backup.size != live.size) {
-        return CopyStanding.behind;
-      }
+  final (
+    Map<String, ({String display, int size})>? liveFiles,
+    Map<String, ({String display, int size})>? backupFiles,
+  ) = await (
+    _backupFileManifest(liveFolder, recursive: recursive),
+    _backupFileManifest(backupFolder, recursive: recursive),
+  ).wait;
+  if (liveFiles == null || backupFiles == null) return null;
+  if (backupFiles.isEmpty) return CopyStanding.empty;
+  if (liveFiles.length != backupFiles.length) return CopyStanding.behind;
+  for (final MapEntry<String, ({String display, int size})> file
+      in liveFiles.entries) {
+    if (backupFiles[file.key]?.size != file.value.size) {
+      return CopyStanding.behind;
     }
-    return CopyStanding.covers;
-  } on FileSystemException {
-    return null;
   }
+  return CopyStanding.covers;
 }
 
 /// Whether two backup folders hold the same meaningful files.
@@ -1163,16 +1145,18 @@ Future<_FolderComparison> _compareBackupFolders(
 }
 
 Future<Map<String, ({String display, int size})>?> _backupFileManifest(
-  Directory folder,
-) async {
+  Directory folder, {
+  bool recursive = true,
+}) async {
   try {
     if (!await folder.exists()) return null;
     final Map<String, ({String display, int size})> files =
         <String, ({String display, int size})>{};
     await for (final FileSystemEntity entity in folder.list(
-      recursive: true,
+      recursive: recursive,
       followLinks: false,
     )) {
+      if (entity is Link) return null;
       if (entity is! File) continue;
       final String relative = path.relative(entity.path, from: folder.path);
       if (isRebuiltShaderPath(relative)) continue;
@@ -1187,15 +1171,65 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
   }
 }
 
-/// Whether two backup folders hold the same meaningful files.
-Future<bool> backupFoldersEquivalent(Directory first, Directory second) async =>
-    (await _compareBackupFolders(first, second)).result ==
-    _BackupCopyComparison.equivalent;
+/// Compares two files in fixed-size chunks without buffering whole payloads.
+Future<bool?> filesHaveSameContents(File first, File second) async {
+  RandomAccessFile? firstHandle;
+  RandomAccessFile? secondHandle;
+  try {
+    firstHandle = await first.open();
+    secondHandle = await second.open();
+    const int chunkSize = 64 * 1024;
+    while (true) {
+      final List<int> firstBytes = await firstHandle.read(chunkSize);
+      final List<int> secondBytes = await secondHandle.read(chunkSize);
+      if (firstBytes.length != secondBytes.length) return false;
+      if (firstBytes.isEmpty) return true;
+      for (int index = 0; index < firstBytes.length; index++) {
+        if (firstBytes[index] != secondBytes[index]) return false;
+      }
+    }
+  } on FileSystemException {
+    return null;
+  } finally {
+    if (firstHandle != null) await firstHandle.close();
+    if (secondHandle != null) await secondHandle.close();
+  }
+}
+
+/// Whether two backup folders hold exactly the same meaningful files.
+///
+/// The normal scan compares paths and sizes for speed. This guard runs before
+/// destructive reconciliation, so same-size files are verified byte-for-byte.
+Future<bool> backupFoldersEquivalent(Directory first, Directory second) async {
+  final (
+    Map<String, ({String display, int size})>? firstFiles,
+    Map<String, ({String display, int size})>? secondFiles,
+  ) = await (
+    _backupFileManifest(first),
+    _backupFileManifest(second),
+  ).wait;
+  if (firstFiles == null ||
+      secondFiles == null ||
+      firstFiles.length != secondFiles.length) {
+    return false;
+  }
+  for (final MapEntry<String, ({String display, int size})> entry
+      in firstFiles.entries) {
+    final ({String display, int size})? other = secondFiles[entry.key];
+    if (other == null || other.size != entry.value.size) return false;
+    final bool? same = await filesHaveSameContents(
+      File(path.join(first.path, entry.value.display)),
+      File(path.join(second.path, other.display)),
+    );
+    if (same != true) return false;
+  }
+  return true;
+}
 
 /// Where each backup folder stands against its live counterpart.
 ///
 /// Only [compare] is opened. Empty/junk detection belongs to the dedicated junk
-/// pass, so saved Workshop baselines do not trigger redundant coverage walks.
+/// pass; this comparison answers whether the meaningful file sets mirror.
 Future<Map<String, CopyStanding>> copyStandings({
   required String? livePath,
   required String? backupPath,

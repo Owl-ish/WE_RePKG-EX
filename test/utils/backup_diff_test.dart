@@ -848,20 +848,18 @@ void main() {
       expect(result.cards[workshop(n)], BackupState.updateAvailable);
     });
 
-    // A folder dropped in by hand has no ACF entry and never will, so flagging
-    // it leaves a card nagging forever with no version to dismiss.
-    test('a wallpaper with no manifest is left alone', () {
+    // A missing Steam manifest cannot prove a file mismatch is current. Mirror
+    // comparison remains authoritative even when no published version exists.
+    test('a wallpaper with no manifest still reports a mirror mismatch', () {
       final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.behind),
         versions: const <String, String>{},
       );
 
-      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.cards[workshop(n)], BackupState.updateAvailable);
     });
 
-    // Once the baseline is there the manifests answer the question, which is
-    // what lets the scan skip comparing the folders at all.
-    test('a recorded baseline wins over the comparison', () {
+    test('a direct mirror mismatch beats a recorded baseline', () {
       final BackupDiffResult result = workshopResult(
         standings: standing(n, CopyStanding.behind),
         records: const <String, BackupRecord>{
@@ -869,7 +867,7 @@ void main() {
         },
       );
 
-      expect(result.cards[workshop(n)], BackupState.synced);
+      expect(result.cards[workshop(n)], BackupState.updateAvailable);
     });
 
     // Nothing compared is not the same as compared and matched.
@@ -1101,17 +1099,13 @@ void main() {
       );
     });
 
-    // The whole point of the subset rule. Nothing ever deletes from a backup,
-    // so a wallpaper edited to drop a file leaves that file there for good;
-    // counting it would report an update Back up can never clear, because
-    // backing up copies and never removes.
-    test('files the backup holds beyond live do not count against it', () {
+    test('a file that exists only in backup makes the mirror stale', () {
       expect(
         compareCopy(
           live: project,
           backup: <FileEntry>[...project, file('dropped-last-year.tex', 900)],
         ),
-        CopyStanding.covers,
+        CopyStanding.behind,
       );
     });
 
@@ -1148,8 +1142,8 @@ void main() {
       );
     });
 
-    // Coverage deliberately ignores timestamps because copying may rewrite them;
-    // relative path and size are the meaningful comparison here.
+    // Mirror equality deliberately ignores timestamps because copying may
+    // rewrite them; relative path and size are the meaningful comparison here.
     test('a copy made at another time still covers', () {
       expect(compareCopy(live: project, backup: project), CopyStanding.covers);
     });
@@ -1179,9 +1173,9 @@ void main() {
       );
     });
 
-    // Empty is checked before coverage, or a live wallpaper with nothing in it
-    // would report as covered by a backup folder holding nothing either.
-    test('a backup with no files is empty, not covering', () {
+    // Empty is checked before mirror equality, or an empty backup could be
+    // mistaken for a usable mirrored copy.
+    test('a backup with no files is empty, not mirrored', () {
       expect(
         compareCopy(live: project, backup: const <FileEntry>[]),
         CopyStanding.empty,

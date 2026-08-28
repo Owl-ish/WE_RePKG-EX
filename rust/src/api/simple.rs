@@ -239,9 +239,8 @@ where
     Ok(true)
 }
 
-/// True when the backup still contains every meaningful live file at the same
-/// size. Extra backup files are intentionally ignored.
-fn backup_covers_live(live: &Path, backup: &Path) -> std::io::Result<bool> {
+/// True when live and backup contain the same meaningful paths and sizes.
+fn backup_matches_live(live: &Path, backup: &Path) -> std::io::Result<bool> {
     if !live.is_dir() || !backup.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -249,16 +248,18 @@ fn backup_covers_live(live: &Path, backup: &Path) -> std::io::Result<bool> {
         ));
     }
 
-    let mut held = HashMap::<String, u64>::new();
-    walk_wallpaper_files(backup, |relative, size| {
-        held.insert(normalise_relative(relative), size);
+    let mut live_files = HashMap::<String, u64>::new();
+    walk_wallpaper_files(live, |relative, size| {
+        live_files.insert(normalise_relative(relative), size);
         true
     })?;
 
-    walk_wallpaper_files(live, |relative, size| {
-        held.get(&normalise_relative(relative))
-            .is_some_and(|backup_size| *backup_size == size)
-    })
+    let mut backup_files = HashMap::<String, u64>::new();
+    walk_wallpaper_files(backup, |relative, size| {
+        backup_files.insert(normalise_relative(relative), size);
+        true
+    })?;
+    Ok(live_files == backup_files)
 }
 
 fn compare_backup_folders_blocking(
@@ -291,7 +292,7 @@ fn compare_backup_folders_blocking(
             }
 
             let name = &names[index];
-            let standing = backup_covers_live(&live_root.join(name), &backup_root.join(name));
+            let standing = backup_matches_live(&live_root.join(name), &backup_root.join(name));
             if let Ok(covers) = standing {
                 results.lock().unwrap().insert(name.clone(), covers);
             }
@@ -308,8 +309,8 @@ fn compare_backup_folders_blocking(
 
 /// Compares the named recursive wallpaper folders in parallel.
 ///
-/// The map contains only readable pairs: true means the backup covers the live
-/// tree, false means at least one live file is missing or has a different size.
+/// The map contains only readable pairs: true means the meaningful trees match;
+/// false means a file is missing, extra, or has a different size.
 /// Unreadable pairs are omitted so Dart keeps the same no-verdict behaviour.
 #[flutter_rust_bridge::frb]
 pub async fn compare_backup_folders_rust(
@@ -1144,7 +1145,7 @@ mod tests {
     }
 
     #[test]
-    fn recursive_backup_comparison_matches_live_files_and_ignores_extras() {
+    fn recursive_backup_comparison_reports_backup_residue() {
         let dir = tmp_dir();
         let live = dir.join("live");
         let backup = dir.join("backup");
@@ -1152,7 +1153,7 @@ mod tests {
         write_backup_fixture(&backup, "nested/scene.json", b"same");
         write_backup_fixture(&backup, "old-file.txt", b"residue");
 
-        assert!(backup_covers_live(&live, &backup).unwrap());
+        assert!(!backup_matches_live(&live, &backup).unwrap());
     }
 
     #[test]
@@ -1163,7 +1164,7 @@ mod tests {
         write_backup_fixture(&live, "project.json", b"newer");
         write_backup_fixture(&backup, "project.json", b"old");
 
-        assert!(!backup_covers_live(&live, &backup).unwrap());
+        assert!(!backup_matches_live(&live, &backup).unwrap());
     }
 
     #[test]
@@ -1179,7 +1180,7 @@ mod tests {
             b"live cache",
         );
 
-        assert!(backup_covers_live(&live, &backup).unwrap());
+        assert!(backup_matches_live(&live, &backup).unwrap());
     }
 
     #[test]

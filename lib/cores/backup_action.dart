@@ -16,15 +16,16 @@ typedef BackupTrash = Future<String?> Function(String folder);
 
 /// Copies a live wallpaper into its matching backup library.
 ///
-/// A source that changes during the copy is not recorded as a clean baseline.
-/// Any opposite-library backup is recycled only after the matching copy exists
-/// and the source version is still stable.
+/// [mirror] is explicit so ordinary Back up remains non-destructive while
+/// Update can remove files that no longer exist in live. Cleanup happens only
+/// after copies finish and the source is still stable.
 Future<BackupActionResult> backUpWallpaper({
   required BackupCard card,
   required String? backupRoot,
   required String? liveWorkshopPath,
   required String? liveMyProjectsPath,
   required String? acfPath,
+  bool mirror = false,
   BackupTrash? trashFolder,
 }) async {
   final String? liveRoot = switch (card.library) {
@@ -57,6 +58,8 @@ Future<BackupActionResult> backUpWallpaper({
   final Directory? otherLive = otherLiveRoot == null
       ? null
       : Directory(path.join(otherLiveRoot, card.name));
+  bool changed = false;
+  bool filesystemMayHaveChanged = false;
   try {
     if (!await source.exists()) {
       return (changed: false, error: tr(AppI10n.backupActionSourceMissing));
@@ -82,14 +85,35 @@ Future<BackupActionResult> backUpWallpaper({
       liveFolder: source.path,
       acfPath: acfPath,
     );
-    await _copyFolderIncrementally(source, destination);
+    // A thrown copy can still have published files, so failures after this
+    // point refresh instead of claiming the filesystem stayed unchanged.
+    filesystemMayHaveChanged = true;
+    changed = await _copyFolderIncrementally(source, destination);
+    final String? afterCopies = await liveBackupVersion(
+      card,
+      liveFolder: source.path,
+      acfPath: acfPath,
+    );
+    if (before != afterCopies) {
+      return (changed: changed, error: tr(AppI10n.backupActionSourceChanged));
+    }
+
+    if (mirror) {
+      changed =
+          await _removeMirrorResidue(
+            source: source,
+            destination: destination,
+          ) ||
+          changed;
+    }
+
     final String? version = await liveBackupVersion(
       card,
       liveFolder: source.path,
       acfPath: acfPath,
     );
     if (before != version) {
-      return (changed: true, error: tr(AppI10n.backupActionSourceChanged));
+      return (changed: changed, error: tr(AppI10n.backupActionSourceChanged));
     }
     final Map<String, BackupRecord> records = await readBackupRecords(
       backupRoot,
@@ -118,7 +142,7 @@ Future<BackupActionResult> backUpWallpaper({
     await writeBackupRecords(backupRoot, records);
     return (changed: true, error: syncError);
   } catch (error) {
-    return (changed: false, error: '$error');
+    return (changed: changed || filesystemMayHaveChanged, error: '$error');
   }
 }
 
@@ -375,10 +399,11 @@ Future<Directory?> _preferredRestoreSource(
 /// Rebuilt shaders are skipped, links are rejected, and unchanged files are
 /// left in place. Copied files keep the source modification time so reruns can
 /// skip them safely.
-Future<void> _copyFolderIncrementally(
+Future<bool> _copyFolderIncrementally(
   Directory source,
   Directory destination,
 ) async {
+  bool changed = !await destination.exists();
   await destination.create(recursive: true);
   await for (final FileSystemEntity entity in source.list(
     recursive: true,
@@ -395,8 +420,72 @@ Future<void> _copyFolderIncrementally(
     final DateTime modified = (await entity.stat()).modified;
     await copyFileReplacing(entity, target);
     await target.setLastModified(modified);
+    changed = true;
   }
+  return changed;
 }
+
+/// Removes meaningful destination files that no longer exist in live.
+///
+/// Copy and source verification happen before this cleanup phase, so a failed
+/// copy cannot delete the previous backup first. Empty folders are removed
+/// bottom-up without touching the wallpaper root.
+Future<bool> _removeMirrorResidue({
+  required Directory source,
+  required Directory destination,
+}) async {
+  if (!await destination.exists()) return false;
+  final Set<String> liveFiles = <String>{};
+  await for (final FileSystemEntity entity in source.list(
+    recursive: true,
+    followLinks: false,
+  )) {
+    final String relative = path.relative(entity.path, from: source.path);
+    if (isRebuiltShaderPath(relative)) continue;
+    if (entity is Link) {
+      throw FileSystemException(tr(AppI10n.backupActionLinkFound), entity.path);
+    }
+    if (entity is File) liveFiles.add(_pathKey(relative));
+  }
+
+  final List<Directory> directories = <Directory>[];
+  bool changed = false;
+  await for (final FileSystemEntity entity in destination.list(
+    recursive: true,
+    followLinks: false,
+  )) {
+    final String relative = path.relative(entity.path, from: destination.path);
+    if (entity is Directory) {
+      directories.add(entity);
+      continue;
+    }
+    if (isRebuiltShaderPath(relative)) continue;
+    if (entity is Link) {
+      throw FileSystemException(tr(AppI10n.backupActionLinkFound), entity.path);
+    }
+    if (entity is! File || liveFiles.contains(_pathKey(relative))) continue;
+    await entity.delete();
+    changed = true;
+  }
+
+  directories.sort(
+    (Directory a, Directory b) => b.path.length.compareTo(a.path.length),
+  );
+  for (final Directory directory in directories) {
+    try {
+      if (await directory.list(followLinks: false).isEmpty) {
+        await directory.delete();
+        changed = true;
+      }
+    } on FileSystemException {
+      // A non-empty or concurrently changed folder is left for the next scan.
+    }
+  }
+  return changed;
+}
+
+String _pathKey(String relative) =>
+    relative.toLowerCase().replaceAll('/', r'\');
 
 Future<bool> _sameFile(File source, File destination) async {
   if (!await destination.exists()) return false;
@@ -404,8 +493,14 @@ Future<bool> _sameFile(File source, File destination) async {
     source.stat(),
     destination.stat(),
   ).wait;
-  return sourceStat.size == destinationStat.size &&
-      sourceStat.modified == destinationStat.modified;
+  if (sourceStat.size != destinationStat.size ||
+      sourceStat.modified != destinationStat.modified) {
+    return false;
+  }
+
+  // Metadata is only a fast candidate check. Different payloads can share the
+  // same size and mtime, so it cannot suppress a required Update copy.
+  return await filesHaveSameContents(source, destination) ?? false;
 }
 
 /// Restores a claimed folder only while its original destination is still free.

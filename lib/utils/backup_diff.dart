@@ -344,15 +344,10 @@ const String rebuiltShaderDir = r'shaders\blobssm40\';
 
 /// How a backup folder stands against the live wallpaper it mirrors.
 enum CopyStanding {
-  /// Every live file is in the backup at the same size.
-  ///
-  /// Files the backup holds *beyond* those do not count against it. Nothing
-  /// ever deletes from a backup, so a wallpaper edited to drop a file leaves
-  /// residue there for good; counting it would report an update that Back up
-  /// can never clear, since backing up copies and never removes.
+  /// Live and backup contain the same meaningful files at the same sizes.
   covers,
 
-  /// A live file is missing from the backup, or is there at a different size.
+  /// A meaningful file is missing, extra, or has a different size.
   behind,
 
   /// The backup folder holds nothing worth comparing.
@@ -371,7 +366,7 @@ bool isRebuiltShaderPath(String relativePath) => relativePath
     .replaceAll('/', r'\')
     .startsWith(rebuiltShaderDir);
 
-/// Whether the backup still holds everything the live wallpaper has.
+/// Whether the backup mirrors the live wallpaper's meaningful files.
 ///
 /// Sizes, never timestamps: copying rewrites mtime, so a hand-made backup
 /// differs from live on every one of them while being a perfectly good copy.
@@ -382,20 +377,20 @@ CopyStanding compareCopy({
   required Iterable<FileEntry> live,
   required Iterable<FileEntry> backup,
 }) {
-  final Map<String, int> held = <String, int>{};
-  for (final FileEntry file in backup) {
-    final String path = _relative(file);
-    if (isRebuiltShaderPath(path)) continue;
-    held[path] = file.size;
-  }
-  // Checked before coverage, so a folder holding only rebuilt shaders reads as
-  // empty rather than as covering a live wallpaper it holds nothing of.
-  if (held.isEmpty) return CopyStanding.empty;
-
+  final Map<String, int> liveFiles = <String, int>{};
+  final Map<String, int> backupFiles = <String, int>{};
   for (final FileEntry file in live) {
-    final String path = _relative(file);
-    if (isRebuiltShaderPath(path)) continue;
-    if (held[path] != file.size) return CopyStanding.behind;
+    final String relative = _relative(file);
+    if (!isRebuiltShaderPath(relative)) liveFiles[relative] = file.size;
+  }
+  for (final FileEntry file in backup) {
+    final String relative = _relative(file);
+    if (!isRebuiltShaderPath(relative)) backupFiles[relative] = file.size;
+  }
+  if (backupFiles.isEmpty) return CopyStanding.empty;
+  if (liveFiles.length != backupFiles.length) return CopyStanding.behind;
+  for (final MapEntry<String, int> file in liveFiles.entries) {
+    if (backupFiles[file.key] != file.value) return CopyStanding.behind;
   }
   return CopyStanding.covers;
 }
@@ -721,12 +716,14 @@ BackupState _cardState({
   //====================
   // Synced Rules
   //====================
-  // A usable backup exists and covers the live wallpaper.
+  // A direct mirror mismatch always wins over a saved version baseline. This
+  // keeps backup-only residue visible even when the Workshop manifest matches.
+  if (standing == CopyStanding.behind) return behind();
+
+  // A usable backup exists and mirrors the live wallpaper.
   // No unresolved content update or placement problem remains.
   // Required comparisons are filtered into Reconcile before this point.
-  if (library == WallpaperLibrary.myProjects) {
-    return standing == CopyStanding.behind ? behind() : BackupState.synced;
-  }
+  if (library == WallpaperLibrary.myProjects) return BackupState.synced;
 
   if (liveVersion == null) return BackupState.synced;
 
