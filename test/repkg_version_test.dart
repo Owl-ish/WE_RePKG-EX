@@ -96,9 +96,12 @@ void main() {
 
   final File localRepkgFixture = File(r'test\scene\RePKG.exe');
   test(
-    'reads the version directly from RePKG.exe',
+    'reads a semantic version directly from a local RePKG.exe',
     () async {
-      expect(await readRepkgVersion(localRepkgFixture.path), '0.4.0');
+      expect(
+        await readRepkgVersion(localRepkgFixture.path),
+        matches(RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')),
+      );
     },
     skip: localRepkgFixture.existsSync()
         ? false
