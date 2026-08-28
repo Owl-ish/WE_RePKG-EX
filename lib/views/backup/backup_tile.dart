@@ -17,13 +17,12 @@ import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
+import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/tile_overlays.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
-import 'package:we_repkg/widgets/input_controls.dart';
-import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/views/backup/backup_action_ui.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
@@ -340,7 +339,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final Rect? origin = _tileRect();
     final WallpaperInfo wallpaper = await readWallpaperFolder(folder);
     if (!mounted) return;
-    final bool reconcileNeedsFocus = _reconcileNeedsFileFocus(
+    final bool reconcileNeedsFocus = reconcileNeedsFileFocus(
       widget.reconcileEntry,
     );
     await showWallpaperDetail(
@@ -357,15 +356,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             ),
       extraContentBuilder: widget.junkKind != null
           ? (BuildContext context, Color foreground, bool _) =>
-                _JunkDetailContent(
+                JunkDetailContent(
                   folderPath: folder,
                   kind: widget.junkKind!,
-                  library: _fileTreeLibrary(widget.backupCard!.library),
+                  library: widget.backupCard!.library,
                   foreground: foreground,
                 )
           : widget.reconcileEntry != null
           ? (BuildContext context, Color foreground, bool focused) =>
-                _ReconcileDetailContent(
+                ReconcileDetailContent(
                   entry: widget.reconcileEntry!,
                   foreground: foreground,
                   focused: focused,
@@ -373,7 +372,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 )
           : widget.updatePlan != null && widget.backupCard != null
           ? (BuildContext context, Color foreground, bool _) =>
-                _UpdatePlanDetailContent(
+                UpdatePlanDetailContent(
                   plan: widget.updatePlan!,
                   card: widget.backupCard!,
                   foreground: foreground,
@@ -381,7 +380,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           : widget.detailText == null
           ? null
           : (BuildContext context, Color foreground, bool _) =>
-                _BackupDetailContent(
+                BackupDetailContent(
                   text: widget.detailText!,
                   foreground: foreground,
                 ),
@@ -568,217 +567,6 @@ String _reconcileBadgeText(ReconcileEntry entry) => switch (entry.reason) {
   ),
 };
 
-class _UpdatePlanDetailContent extends StatelessWidget {
-  const _UpdatePlanDetailContent({
-    required this.plan,
-    required this.card,
-    required this.foreground,
-  });
-
-  final BackupUpdatePlan plan;
-  final BackupCard card;
-  final Color foreground;
-
-  String _backupPath(WallpaperLibrary library) {
-    final String root = tr(switch (library) {
-      WallpaperLibrary.workshop => AppI10n.backupFolderBackupWorkshop,
-      WallpaperLibrary.myProjects => AppI10n.backupFolderBackupMyProjects,
-    });
-    return '$root\\${card.name}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final BackupSyncPlan? sync = plan.sync;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (plan.updateContent)
-          _DetailGroup(
-            title: tr(AppI10n.backupTileUpdate),
-            items: <String>[tr(AppI10n.backupDetailUpdateToLive)],
-            foreground: foreground,
-          ),
-        if (sync != null && sync.kind == BackupSyncKind.relocate)
-          _SyncMoveDetail(
-            fromPath: _backupPath(sync.from),
-            toPath: _backupPath(sync.to),
-            foreground: foreground,
-          ),
-        if (sync != null && sync.kind == BackupSyncKind.removeDuplicate)
-          _SyncDuplicateDetail(
-            keepPath: _backupPath(sync.to),
-            removePath: _backupPath(sync.from),
-            foreground: foreground,
-          ),
-      ],
-    );
-  }
-}
-
-class _SyncMoveHeading extends StatelessWidget {
-  const _SyncMoveHeading({required this.foreground});
-
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final String heading = tr(AppI10n.backupDetailSyncWillMove);
-    final int separator = heading.indexOf(' - ');
-    if (separator < 0) {
-      return Text(heading, style: TextStyle(color: foreground));
-    }
-    return Text.rich(
-      TextSpan(
-        style: TextStyle(color: foreground),
-        children: <InlineSpan>[
-          TextSpan(
-            text: heading.substring(0, separator),
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextSpan(text: heading.substring(separator)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SyncMoveDetail extends StatelessWidget {
-  const _SyncMoveDetail({
-    required this.fromPath,
-    required this.toPath,
-    required this.foreground,
-  });
-
-  final String fromPath;
-  final String toPath;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _SyncMoveHeading(foreground: foreground),
-          const SizedBox(height: 2),
-          ReadOnlyPathBox(path: fromPath),
-          const SizedBox(height: 1),
-          Center(
-            child: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: foreground.withValues(alpha: .72),
-              size: 18,
-            ),
-          ),
-          const SizedBox(height: 1),
-          ReadOnlyPathBox(path: toPath),
-        ],
-      ),
-    );
-  }
-}
-
-class _SyncDuplicateDetail extends StatelessWidget {
-  const _SyncDuplicateDetail({
-    required this.keepPath,
-    required this.removePath,
-    required this.foreground,
-  });
-
-  final String keepPath;
-  final String removePath;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(
-            tr(AppI10n.backupTileSync),
-            style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            tr(AppI10n.backupDetailSyncWillKeep),
-            style: TextStyle(color: foreground),
-          ),
-          const SizedBox(height: 4),
-          ReadOnlyPathBox(path: keepPath),
-          const SizedBox(height: 6),
-          Text(
-            tr(AppI10n.backupDetailSyncWillRemove),
-            style: TextStyle(color: foreground),
-          ),
-          const SizedBox(height: 4),
-          ReadOnlyPathBox(path: removePath),
-        ],
-      ),
-    );
-  }
-}
-
-class _BackupDetailContent extends StatelessWidget {
-  const _BackupDetailContent({required this.text, required this.foreground});
-
-  final String text;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) =>
-      Text(tr(text), style: TextStyle(color: foreground, height: 1.35));
-}
-
-FileTreeLibrary _fileTreeLibrary(WallpaperLibrary library) => switch (library) {
-  WallpaperLibrary.workshop => FileTreeLibrary.workshop,
-  WallpaperLibrary.myProjects => FileTreeLibrary.myProjects,
-};
-
-class _JunkDetailContent extends StatelessWidget {
-  const _JunkDetailContent({
-    required this.folderPath,
-    required this.kind,
-    required this.library,
-    required this.foreground,
-  });
-
-  final String folderPath;
-  final WallpaperJunkKind kind;
-  final FileTreeLibrary library;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final String explanation = switch (kind) {
-      WallpaperJunkKind.empty => AppI10n.backupJunkDetailsEmpty,
-      WallpaperJunkKind.shaderCacheOnly => AppI10n.backupJunkDetailsShader,
-      WallpaperJunkKind.mixed => AppI10n.backupJunkDetailsMixed,
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          tr(explanation),
-          style: TextStyle(color: foreground, height: 1.35),
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: FileTreePanel(
-            key: const ValueKey<String>('backup-junk-file-tree'),
-            folderPath: folderPath,
-            foreground: foreground,
-            library: library,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// Presentation for one backup state, using the active semantic palette.
 ({Color colour, String label}) backupStateLook(
   BuildContext context,
@@ -811,243 +599,4 @@ class _JunkDetailContent extends StatelessWidget {
       label: AppI10n.backupStateSynced,
     ),
   };
-}
-
-bool _reconcileNeedsFileFocus(ReconcileEntry? entry) {
-  if (entry == null ||
-      entry.reason != BackupReconcileReason.conflictingBackupCopies) {
-    return false;
-  }
-  final BackupCopyDifference? difference = entry.backupDifference;
-  if (difference == null || difference.total == 0) return false;
-  final int groups = <List<String>>[
-    difference.differentSize,
-    difference.onlyWorkshop,
-    difference.onlyMyProjects,
-  ].where((List<String> paths) => paths.isNotEmpty).length;
-  final Iterable<String> paths = <String>[
-    ...difference.differentSize,
-    ...difference.onlyWorkshop,
-    ...difference.onlyMyProjects,
-  ];
-  final int longest = paths.fold<int>(
-    0,
-    (int length, String path) => path.length > length ? path.length : length,
-  );
-  return difference.total + groups > 4 || longest > 58;
-}
-
-class _ReconcileDetailContent extends StatelessWidget {
-  const _ReconcileDetailContent({
-    required this.entry,
-    required this.foreground,
-    required this.focused,
-    required this.needsFocus,
-  });
-
-  final ReconcileEntry entry;
-  final Color foreground;
-  final bool focused;
-  final bool needsFocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final String explanation = switch (entry.reason) {
-      BackupReconcileReason.duplicateLiveCopies =>
-        AppI10n.backupReconcileDuplicateLiveAbout,
-      BackupReconcileReason.conflictingBackupCopies =>
-        AppI10n.backupReconcileConflictingBackupsAbout,
-      BackupReconcileReason.comparisonUnavailable =>
-        AppI10n.backupReconcileComparisonUnavailableAbout,
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          tr(explanation),
-          style: TextStyle(color: foreground, height: 1.35),
-        ),
-        const SizedBox(height: 12),
-        Expanded(child: _details(context)),
-      ],
-    );
-  }
-
-  Widget _details(BuildContext context) => switch (entry.reason) {
-    BackupReconcileReason.duplicateLiveCopies => SingleChildScrollView(
-      child: _DetailGroup(
-        title: tr(AppI10n.backupDetailDetectedCopies),
-        items: <String>[
-          tr(AppI10n.backupDetailWorkshopLive),
-          tr(AppI10n.backupDetailMyProjectsLive),
-        ],
-        foreground: foreground,
-      ),
-    ),
-    BackupReconcileReason.comparisonUnavailable => SingleChildScrollView(
-      child: _DetailGroup(
-        title: tr(AppI10n.backupDetailComparisonFailed),
-        items: <String>[tr(AppI10n.backupDetailRescanAdvice)],
-        foreground: foreground,
-      ),
-    ),
-    BackupReconcileReason.conflictingBackupCopies when needsFocus && !focused =>
-      FileTreeSurface(
-        key: const ValueKey<String>('backup-reconcile-expand-differences'),
-        foreground: foreground,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.unfold_more_rounded,
-                  size: 18,
-                  color: foreground.withValues(alpha: .75),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tr(AppI10n.backupDetailExpandDifferences),
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    style: TextStyle(
-                      color: foreground,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    BackupReconcileReason.conflictingBackupCopies => _DifferenceFileTree(
-      difference: entry.backupDifference,
-      foreground: foreground,
-    ),
-  };
-}
-
-class _DifferenceFileTree extends StatelessWidget {
-  const _DifferenceFileTree({
-    required this.difference,
-    required this.foreground,
-  });
-
-  final BackupCopyDifference? difference;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final BackupCopyDifference? value = difference;
-    if (value == null || value.total == 0) {
-      return FileTreeSurface(
-        foreground: foreground,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Text(
-            tr(AppI10n.backupDetailDifferenceUnavailable),
-            style: TextStyle(color: foreground, height: 1.3),
-          ),
-        ),
-      );
-    }
-    final StatusPalette colours = Theme.of(context).status;
-    return FileTreeScrollView(
-      key: const ValueKey<String>('backup-reconcile-detail-scroll'),
-      foreground: foreground,
-      semanticLabel:
-          '${tr(AppI10n.backupDetailDetectedDifferences)}: ${value.total}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          if (value.differentSize.isNotEmpty)
-            _differenceGroup(
-              title: tr(AppI10n.backupDetailDifferentSize),
-              paths: value.differentSize,
-              colour: colours.warn,
-            ),
-          if (value.onlyWorkshop.isNotEmpty)
-            _differenceGroup(
-              title: tr(AppI10n.backupDetailOnlyWorkshop),
-              paths: value.onlyWorkshop,
-              colour: fileTreeLibraryColour(context, FileTreeLibrary.workshop),
-            ),
-          if (value.onlyMyProjects.isNotEmpty)
-            _differenceGroup(
-              title: tr(AppI10n.backupDetailOnlyMyProjects),
-              paths: value.onlyMyProjects,
-              colour: fileTreeLibraryColour(
-                context,
-                FileTreeLibrary.myProjects,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _differenceGroup({
-    required String title,
-    required List<String> paths,
-    required Color colour,
-  }) {
-    final List<String> ordered = List<String>.from(
-      paths,
-    )..sort((String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return FileTreeGroup(
-      title: title,
-      count: ordered.length,
-      accent: colour,
-      foreground: foreground,
-      children: <Widget>[
-        for (final String filePath in ordered)
-          FileTreeRow(
-            depth: 1,
-            icon: Icons.insert_drive_file_outlined,
-            iconColor: colour,
-            label: filePath.replaceAll('\\', '  ›  ').replaceAll('/', '  ›  '),
-            foreground: foreground,
-          ),
-      ],
-    );
-  }
-}
-
-class _DetailGroup extends StatelessWidget {
-  const _DetailGroup({
-    required this.title,
-    required this.items,
-    required this.foreground,
-  });
-
-  final String title;
-  final List<String> items;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          for (final String item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                '• $item',
-                style: TextStyle(color: foreground, height: 1.3),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
