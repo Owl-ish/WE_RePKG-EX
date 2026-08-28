@@ -31,7 +31,9 @@ import 'wallpaper_meta.dart';
 /// cut itself to, and how bright the strip sitting behind the frosted panel is.
 typedef PreviewStats = ({double aspect, double luminance});
 
-final Set<String> _openingWallpaperDetails = <String>{};
+final Expando<bool> _wallpaperDetailOpenByNavigator = Expando<bool>(
+  'wallpaperDetailOpen',
+);
 
 /// Tallest the preview pane ever gets, so nothing decodes larger than it draws.
 const double _paneMaxHeight = 500;
@@ -149,9 +151,12 @@ Future<void> showWallpaperDetail(
   bool includePreview = true,
   DetailDialogLayout layout = const DetailDialogLayout(),
 }) async {
-  // Measuring and cache warming happen before the route is pushed, so a second
-  // double click in that window would open two overlapping dialogs.
-  if (!_openingWallpaperDetails.add(wallpaper.id)) return;
+  // Keep one detail route per root navigator, including while preview
+  // preparation is still running. A slow request therefore cannot surface
+  // later on top of a newer detail card.
+  final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
+  if (_wallpaperDetailOpenByNavigator[navigator] ?? false) return;
+  _wallpaperDetailOpenByNavigator[navigator] = true;
   try {
     await _showWallpaperDetail(
       context,
@@ -163,7 +168,7 @@ Future<void> showWallpaperDetail(
       layout: layout,
     );
   } finally {
-    _openingWallpaperDetails.remove(wallpaper.id);
+    _wallpaperDetailOpenByNavigator[navigator] = false;
   }
 }
 
