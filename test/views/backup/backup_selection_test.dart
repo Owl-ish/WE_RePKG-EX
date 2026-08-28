@@ -333,6 +333,23 @@ void main() {
       expect(selected(), {'workshop/b', 'workshop/c'});
     });
 
+    testWidgets('ctrl+shift adds the anchor range', (tester) async {
+      await pump(tester);
+      await click(tester, 0, modifier: LogicalKeyboardKey.controlLeft);
+      await click(tester, 3, modifier: LogicalKeyboardKey.controlLeft);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      addTearDown(() => tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft));
+      await click(tester, 1, modifier: LogicalKeyboardKey.shiftLeft);
+
+      expect(selected(), {
+        'workshop/a',
+        'workshop/b',
+        'workshop/c',
+        'workshop/d',
+      });
+    });
+
     // A marquee sets no anchor, so shift after one has to find its own start.
     testWidgets('shift with no anchor reaches from the last selected', (
       tester,

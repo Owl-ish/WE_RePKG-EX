@@ -600,39 +600,37 @@ class _Grid extends ConsumerStatefulWidget {
 }
 
 class _GridState extends ConsumerState<_Grid> {
+  static const SelectionEngine<String> _selection = SelectionEngine<String>();
+
   bool _takeEntrance() => widget.entrance.take();
 
-  /// Ctrl toggles, shift reaches back to the last click, a plain click takes
-  /// this one alone. The same three the extract grid offers.
+  /// Plain click selects one, Ctrl toggles, Shift replaces the anchor range,
+  /// and Ctrl+Shift adds that range. The id anchor is shared with Extract so
+  /// sorting or filtering cannot silently move the range start.
   void _click(WidgetRef ref, List<String> ids, int index) {
     final BackupSelection selection = ref.read(
       backupSelectionProvider.notifier,
     );
-    final String id = ids[index];
-    if (isCtrlPressed) {
-      selection.toggle(id);
-      return;
-    }
-    if (!isShiftPressed) {
-      selection.setExclusive(id);
-      return;
-    }
     final Set<String> selected = ref.read(backupSelectionProvider);
-    // The anchor is an id, so it is looked up in the list as it stands now.
-    // Falls back to the last selected tile, so shift still extends after a
-    // marquee drag, which sets no anchor.
-    final int held = ids.indexOf(selection.shiftAnchor ?? '');
-    final int? anchor = held >= 0
-        ? held
-        : (selected.isEmpty ? null : ids.lastIndexWhere(selected.contains));
-    final ({int begin, int end}) range = shiftRange(
-      anchor: anchor,
+    final String id = ids[index];
+    final bool control = isCtrlPressed;
+    final bool shift = isShiftPressed;
+
+    final Set<String> next = _selection.click(
+      ordered: ids,
+      current: selected,
       target: index,
-      count: ids.length,
+      control: control,
+      shift: shift,
+      anchor: selection.shiftAnchor,
     );
-    selection.setExactly(<String>{
-      for (int i = range.begin; i <= range.end; i++) ids[i],
-    });
+    selection.setExactly(next);
+
+    if (control && !shift) {
+      selection.shiftAnchor = id;
+    } else if (!shift) {
+      selection.shiftAnchor = next.isEmpty ? null : id;
+    }
   }
 
   Widget _selectionGrid(
