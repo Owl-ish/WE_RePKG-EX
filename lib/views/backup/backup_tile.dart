@@ -24,7 +24,7 @@ import 'package:we_repkg/widgets/tile_overlays.dart';
 import 'package:we_repkg/widgets/app_icon_button.dart';
 import 'package:we_repkg/widgets/input_controls.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
-import 'package:we_repkg/views/backup/backup_action.dart';
+import 'package:we_repkg/views/backup/backup_action_ui.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
 /// details open on whichever exists; the menu offers each one it has.
