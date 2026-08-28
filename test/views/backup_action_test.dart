@@ -19,6 +19,7 @@ import 'package:we_repkg/views/backup/backup.dart';
 import 'package:we_repkg/views/backup/backup_action_ui.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
+import 'package:we_repkg/widgets/confirm_dialog.dart';
 
 void main() {
   setUp(() async {
@@ -44,6 +45,39 @@ void main() {
     );
     return context;
   }
+
+  testWidgets('confirmation actions wrap instead of overflowing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await show(tester);
+    const String longAction =
+        'Inspect the changed packed scene contents by extracting and comparing both temporary copies before continuing';
+    final Future<bool> result = showConfirmDialog(
+      title: 'Inspect scene.pkg changes?',
+      message: 'Temporary extraction is required for this comparison.',
+      confirmLabel: longAction,
+      destructive: false,
+    );
+
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text(longAction), findsOneWidget);
+
+    await tester.tap(find.text(AppI10n.cancel));
+    await tester.pumpAndSettle();
+    expect(await result, isFalse);
+
+    // Awaiting the result must mean BotToast is fully closed, so replacing
+    // its navigator host cannot leave a delayed removal callback behind.
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Cancel leaves the backup action untouched', (tester) async {
     final BuildContext context = await show(tester);

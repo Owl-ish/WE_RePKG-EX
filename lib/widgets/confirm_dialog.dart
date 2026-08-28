@@ -24,11 +24,23 @@ Future<bool> showConfirmDialog({
 }) {
   final completer = Completer<bool>();
   late final CancelFunc close;
+  bool closing = false;
+  bool? requestedResult;
 
+  // Resolve only after BotToast has actually removed the overlay. Callers may
+  // immediately replace the widget tree after awaiting this Future, so
+  // completing before the close animation finishes can leave BotToast holding
+  // a stale navigator host.
   void finish(bool value) {
-    if (completer.isCompleted) return;
-    completer.complete(value);
+    if (completer.isCompleted || closing) return;
+    closing = true;
+    requestedResult = value;
     close();
+  }
+
+  void finishClose() {
+    if (completer.isCompleted) return;
+    completer.complete(requestedResult ?? false);
   }
 
   close = BotToast.showCustomLoading(
@@ -36,7 +48,7 @@ Future<bool> showConfirmDialog({
     // Clicking the backdrop is a dismissal, which for a destructive prompt has
     // to mean "no".
     clickClose: true,
-    onClose: () => finish(false),
+    onClose: finishClose,
     toastBuilder: (_) => _ConfirmDialog(
       title: title,
       message: message,
@@ -158,28 +170,32 @@ class _ConfirmDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: LayoutNums.sectionGap),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(88, LayoutNums.controlHeight),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: LayoutNums.smallGap,
+              runSpacing: LayoutNums.smallGap,
+              children: <Widget>[
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(88, LayoutNums.controlHeight),
+                  ),
+                  onPressed: () => onResult(false),
+                  child: Text(tr(AppI10n.cancel)),
                 ),
-                onPressed: () => onResult(false),
-                child: Text(tr(AppI10n.cancel)),
-              ),
-              const SizedBox(width: LayoutNums.smallGap),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(88, LayoutNums.controlHeight),
-                  backgroundColor: accentBackground,
-                  foregroundColor: accent,
-                  side: BorderSide(color: accentBorder),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(88, LayoutNums.controlHeight),
+                    backgroundColor: accentBackground,
+                    foregroundColor: accent,
+                    side: BorderSide(color: accentBorder),
+                  ),
+                  onPressed: () => onResult(true),
+                  child: Text(confirmLabel),
                 ),
-                onPressed: () => onResult(true),
-                child: Text(confirmLabel),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
