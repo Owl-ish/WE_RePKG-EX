@@ -17,7 +17,8 @@ class FileTreeCompareCandidate {
 ///
 /// Callers supply the visible candidate ordering so plain/Ctrl/Shift behavior
 /// stays aligned with the project's shared selection semantics. The selection
-/// is presentation-only and carries no filesystem relationship meaning.
+/// is intentionally presentation-only and carries no filesystem relationship
+/// meaning.
 class FileTreeCompareSelection {
   final FileTreeSelectionAdapter<String> _selection =
       FileTreeSelectionAdapter<String>();
@@ -114,7 +115,7 @@ class FileTreeCompareBar extends StatelessWidget {
           ),
           if (selected.isNotEmpty) ...<Widget>[
             const SizedBox(width: 4),
-            Tooltip(
+            FileTreeTooltip(
               message: clearTooltip,
               child: IconButton(
                 key: ValueKey<String>('$keyBase-clear'),

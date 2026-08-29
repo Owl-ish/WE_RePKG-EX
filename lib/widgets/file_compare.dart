@@ -6,7 +6,9 @@ import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
+import 'package:we_repkg/widgets/file_tree_panel.dart';
 
 /// One concrete side of an explicit file comparison.
 class FileComparisonSide {
@@ -125,6 +127,7 @@ class FileTreeCompareAction extends StatelessWidget {
     this.imageDifferenceIntensityLabel = 'Difference intensity',
     this.imageDifferenceSizeMismatch =
         'Difference view requires matching image dimensions.',
+    this.hoverInert = false,
   });
 
   final FileComparisonSide first;
@@ -159,6 +162,7 @@ class FileTreeCompareAction extends StatelessWidget {
   final String imageDifferenceSameHint;
   final String imageDifferenceIntensityLabel;
   final String imageDifferenceSizeMismatch;
+  final bool hoverInert;
 
   bool get enabled => canCompareFilePaths(first.path, second.path);
 
@@ -206,7 +210,15 @@ class FileTreeCompareAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final VoidCallback? onPressed = enabled ? () => open(context) : null;
-    return Tooltip(
+    if (hoverInert) {
+      return _FileTreeHoverInertAction(
+        label: tooltip,
+        icon: Icons.compare_rounded,
+        foreground: foreground,
+        onPressed: onPressed,
+      );
+    }
+    return FileTreeTooltip(
       message: tooltip,
       child: IconButton(
         onPressed: onPressed,
@@ -218,6 +230,68 @@ class FileTreeCompareAction extends StatelessWidget {
         padding: EdgeInsets.zero,
         visualDensity: VisualDensity.compact,
         constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+      ),
+    );
+  }
+}
+
+/// Preserves pointer, keyboard, and accessibility activation without creating
+/// Material hover state or inserting a tooltip overlay into a live AX subtree.
+class _FileTreeHoverInertAction extends StatelessWidget {
+  const _FileTreeHoverInertAction({
+    required this.label,
+    required this.icon,
+    required this.foreground,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color foreground;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final VoidCallback? activate = onPressed;
+    Widget child = Semantics(
+      label: label,
+      button: true,
+      enabled: activate != null,
+      onTap: activate,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTap: activate,
+          child: SizedBox.square(
+            dimension: 30,
+            child: Center(
+              child: Icon(
+                icon,
+                size: 17,
+                color: foreground.withValues(alpha: .75),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (activate == null) return child;
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              activate();
+              return null;
+            },
+          ),
+        },
+        child: Focus(child: child),
       ),
     );
   }
@@ -339,6 +413,7 @@ class FileTreeImageAction extends StatelessWidget {
     this.differenceIntensityLabel = 'Difference intensity',
     this.differenceSizeMismatch =
         'Difference view requires matching image dimensions.',
+    this.hoverInert = false,
   });
 
   final FileImageSide first;
@@ -361,6 +436,7 @@ class FileTreeImageAction extends StatelessWidget {
   final String differenceSameHint;
   final String differenceIntensityLabel;
   final String differenceSizeMismatch;
+  final bool hoverInert;
 
   @override
   Widget build(BuildContext context) {
@@ -393,7 +469,15 @@ class FileTreeImageAction extends StatelessWidget {
     final IconData icon = second == null
         ? Icons.image_outlined
         : Icons.compare_rounded;
-    return Tooltip(
+    if (hoverInert) {
+      return _FileTreeHoverInertAction(
+        label: tooltip,
+        icon: icon,
+        foreground: foreground,
+        onPressed: onPressed,
+      );
+    }
+    return FileTreeTooltip(
       message: tooltip,
       child: IconButton(
         onPressed: onPressed,

@@ -1,7 +1,12 @@
+// Public library for the shared file-tree widget system. Private part files
+// separate comparison controls, AX-sensitive row interaction, and filesystem
+// browsing without widening the API between these tightly coupled pieces.
+
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/cores/context_menu.dart';
@@ -15,6 +20,13 @@ part 'file_tree_row.dart';
 
 // Library colours stay the same anywhere a file tree is shown.
 enum FileTreeLibrary { workshop, myProjects }
+
+// Keep hover/selection treatment consistent across every shared file-tree row.
+// These values stay local to the file-tree system until another UI surface
+// proves it needs the exact same interaction language.
+const double _fileTreeRowInteractiveRadius = 7;
+const double _fileTreeRowHoverAlpha = .065;
+const double _fileTreeRowSelectedAlpha = .12;
 
 Color fileTreeLibraryColour(BuildContext context, FileTreeLibrary library) {
   final StatusPalette colours = Theme.of(context).status;
@@ -111,10 +123,14 @@ class _FileTreeScrollViewState extends State<FileTreeScrollView> {
             ),
           );
           if (widget.semanticLabel case final String label) {
-            scroll = Semantics(
-              container: true,
-              label: label,
-              child: ExcludeSemantics(child: scroll),
+            // Do not put a custom Semantics node above a dynamic two-axis tree.
+            // Windows can reject the rapid reparenting when a large difference
+            // tree appears. The native scrollables and interactive rows already
+            // contribute their own semantics; this keyed subtree keeps stable
+            // widget identity without creating another AX parent.
+            scroll = KeyedSubtree(
+              key: ValueKey<String>('file-tree-semantics-$label'),
+              child: scroll,
             );
           }
           return scroll;
@@ -128,8 +144,32 @@ class _FileTreeScrollViewState extends State<FileTreeScrollView> {
         child: tree,
       );
     }
-    return tree;
+    // Flutter #182444 can serialize orphaned Tooltip OverlayPortal nodes in
+    // Windows scrollable semantics. Preserve tooltip descriptions for
+    // accessibility, but suppress their visual overlays until the framework
+    // fix is available in the project's minimum Flutter version.
+    return TooltipVisibility(visible: !Platform.isWindows, child: tree);
   }
+}
+
+/// Tooltip contract for controls rendered inside [FileTreeScrollView].
+///
+/// Windows uses stable inline semantics without constructing the framework's
+/// tooltip overlay. Other platforms retain the normal visual tooltip.
+class FileTreeTooltip extends StatelessWidget {
+  const FileTreeTooltip({
+    super.key,
+    required this.message,
+    required this.child,
+  });
+
+  final String message;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => TooltipVisibility.of(context)
+      ? Tooltip(message: message, child: child)
+      : Semantics(tooltip: message, child: child);
 }
 
 /// Shared group header used by virtual file trees.
