@@ -414,6 +414,12 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final WallpaperInfo wallpaper = await readWallpaperFolder(folder);
     if (!mounted) return;
     final ReconcileEntry? reconcileEntry = widget.reconcileEntry;
+    final BackupReconcileReason? reconcilePrimary = reconcileEntry == null
+        ? null
+        : widget.reconcileReasonOverride ??
+              (widget.reconcileIgnored
+                  ? reconcileEntry.ignoredPrimaryReason
+                  : reconcileEntry.activePrimaryReason);
     final bool reconcileNeedsFocus = reconcileNeedsFileFocus(
       reconcileEntry,
       ignored: widget.reconcileIgnored,
@@ -422,6 +428,19 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final _ReconcileFolders? reconcileFolders = reconcileEntry == null
         ? null
         : _reconcileFolders(reconcileEntry);
+    final String? reconcileWorkshopLive = reconcileFolders?.workshopLive;
+    final String? reconcileMyProjectsLive = reconcileFolders?.myProjectsLive;
+    final bool comparesDuplicateLive =
+        reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
+        reconcileWorkshopLive != null &&
+        reconcileMyProjectsLive != null;
+    final Future<FolderFileComparison?> Function()? loadDuplicateLiveChanges =
+        comparesDuplicateLive
+        ? () => compareFolderFilesDetailed(
+            firstFolder: reconcileWorkshopLive,
+            secondFolder: reconcileMyProjectsLive,
+          )
+        : null;
     final String? updateBackupFolder = _updateBackupFolder();
     final bool updateNeedsFocus =
         widget.updatePlan?.updateContent == true &&
@@ -437,7 +456,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           ? const DetailDialogLayout()
           : _backupDetailLayout(
               extraCanFocus: reconcileEntry != null
-                  ? reconcileNeedsFocus
+                  ? reconcileNeedsFocus || comparesDuplicateLive
                   : updateNeedsFocus,
               hasSecondAction:
                   reconcileEntry != null &&
@@ -470,10 +489,11 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               foreground: foreground,
               needsFocus: reconcileNeedsFocus,
               ignoredMode: widget.reconcileIgnored,
-              workshopLiveFolder: reconcileFolders?.workshopLive,
-              myProjectsLiveFolder: reconcileFolders?.myProjectsLive,
+              workshopLiveFolder: reconcileWorkshopLive,
+              myProjectsLiveFolder: reconcileMyProjectsLive,
               workshopBackupFolder: reconcileFolders?.workshopBackup,
               myProjectsBackupFolder: reconcileFolders?.myProjectsBackup,
+              loadDuplicateLiveChanges: loadDuplicateLiveChanges,
               onRequestFocus: requestFocus,
             )
           : widget.updatePlan != null && widget.backupCard != null

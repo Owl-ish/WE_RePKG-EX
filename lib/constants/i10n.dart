@@ -210,6 +210,8 @@ class AppI10n {
   static const String backupDetailWorkshopLive = 'backup.detail.workshopLive';
   static const String backupDetailMyProjectsLive =
       'backup.detail.myProjectsLive';
+  static const String backupDetailLiveDifferences =
+      'backup.detail.liveDifferences';
   static const String backupDetailCopyFolderPath =
       'backup.detail.copyFolderPath';
   static const String backupDetailComparisonFailed =
@@ -226,11 +228,20 @@ class AppI10n {
   static const String backupDetailOnlyMyProjects =
       'backup.detail.onlyMyProjects';
   static const String backupDetailModified = 'backup.detail.modified';
+  static const String backupDetailInWorkshopLive =
+      'backup.detail.inWorkshopLive';
+  static const String backupDetailInMyProjectsLive =
+      'backup.detail.inMyProjectsLive';
   static const String backupDetailFileChanges = 'backup.detail.fileChanges';
   static const String backupDetailExpandFileChanges =
       'backup.detail.expandFileChanges';
   static const String backupDetailComparingFiles =
       'backup.detail.comparingFiles';
+  static const String backupDetailCompareFiles = 'backup.detail.compareFiles';
+  static const String backupDetailCompareFilesHint =
+      'backup.detail.compareFilesHint';
+  static const String backupDetailMatchingFiles = 'backup.detail.matchingFiles';
+  static const String backupDetailSame = 'backup.detail.same';
   static const String backupDetailFileComparisonUnavailable =
       'backup.detail.fileComparisonUnavailable';
   static const String backupDetailNoFileDifferences =

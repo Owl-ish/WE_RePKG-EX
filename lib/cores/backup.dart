@@ -800,6 +800,15 @@ typedef FolderFileChanges = ({
   List<String> onlySecond,
 });
 
+/// Exact comparison result for detail views that also need proof of equality.
+///
+/// [matching] contains relative paths that existed on both sides and whose
+/// contents were confirmed equal.
+typedef FolderFileComparison = ({
+  FolderFileChanges changes,
+  List<String> matching,
+});
+
 /// Update-facing names for an exact live-to-backup comparison.
 typedef BackupFileChanges = ({
   List<String> modified,
@@ -1219,7 +1228,7 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
 ///
 /// The comparison streams file contents in fixed-size chunks and returns null
 /// when either tree cannot be read reliably.
-Future<FolderFileChanges?> compareFolderFileChanges({
+Future<FolderFileComparison?> compareFolderFilesDetailed({
   required String firstFolder,
   required String secondFolder,
 }) async {
@@ -1237,6 +1246,7 @@ Future<FolderFileChanges?> compareFolderFileChanges({
   final List<String> modified = <String>[];
   final List<String> onlyFirst = <String>[];
   final List<String> onlySecond = <String>[];
+  final List<String> matching = <String>[];
   final Set<String> keys = <String>{...firstFiles.keys, ...secondFiles.keys};
   for (final String key in keys) {
     final ({String display, int size})? firstFile = firstFiles[key];
@@ -1258,7 +1268,11 @@ Future<FolderFileChanges?> compareFolderFileChanges({
       File(path.join(second.path, secondFile.display)),
     );
     if (same == null) return null;
-    if (!same) modified.add(firstFile.display);
+    if (same) {
+      matching.add(firstFile.display);
+    } else {
+      modified.add(firstFile.display);
+    }
   }
 
   void sortPaths(List<String> paths) => paths.sort(
@@ -1267,7 +1281,23 @@ Future<FolderFileChanges?> compareFolderFileChanges({
   sortPaths(modified);
   sortPaths(onlyFirst);
   sortPaths(onlySecond);
-  return (modified: modified, onlyFirst: onlyFirst, onlySecond: onlySecond);
+  sortPaths(matching);
+  return (
+    changes: (modified: modified, onlyFirst: onlyFirst, onlySecond: onlySecond),
+    matching: matching,
+  );
+}
+
+/// Difference-only wrapper retained for Update and existing callers.
+Future<FolderFileChanges?> compareFolderFileChanges({
+  required String firstFolder,
+  required String secondFolder,
+}) async {
+  final FolderFileComparison? comparison = await compareFolderFilesDetailed(
+    firstFolder: firstFolder,
+    secondFolder: secondFolder,
+  );
+  return comparison?.changes;
 }
 
 /// Compares the live wallpaper with the backup that Update will replace.

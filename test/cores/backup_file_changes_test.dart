@@ -4,6 +4,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/cores/backup.dart';
 
 void main() {
+  test('detailed comparison retains files proven identical', () async {
+    final Directory root = Directory.systemTemp.createTempSync(
+      'we_repkg_detailed_file_changes',
+    );
+    addTearDown(() {
+      if (root.existsSync()) root.deleteSync(recursive: true);
+    });
+    final Directory first = Directory(
+      '${root.path}${Platform.pathSeparator}first',
+    )..createSync();
+    final Directory second = Directory(
+      '${root.path}${Platform.pathSeparator}second',
+    )..createSync();
+
+    File(
+      '${first.path}${Platform.pathSeparator}project.json',
+    ).writeAsStringSync('same project');
+    File(
+      '${second.path}${Platform.pathSeparator}project.json',
+    ).writeAsStringSync('same project');
+    File(
+      '${first.path}${Platform.pathSeparator}same-size.txt',
+    ).writeAsStringSync('left');
+    File(
+      '${second.path}${Platform.pathSeparator}same-size.txt',
+    ).writeAsStringSync('rift');
+
+    final FolderFileComparison? comparison = await compareFolderFilesDetailed(
+      firstFolder: first.path,
+      secondFolder: second.path,
+    );
+
+    expect(comparison, isNotNull);
+    expect(comparison!.matching, <String>['project.json']);
+    expect(comparison.changes.modified, <String>['same-size.txt']);
+  });
+
   test(
     'file inspection detects content and path differences exactly',
     () async {
