@@ -38,6 +38,8 @@ dependencies:
   flutter_riverpod: 3.2.1
   riverpod_annotation: 4.0.2
   path: ^1.9.1
+  # SHA-256 is streamed for explicit binary/unknown file comparison.
+  crypto: ^3.0.7
   window_manager: ^0.5.1
   file_selector: ^1.1.0
   shared_preferences: ^2.5.4
