@@ -170,7 +170,8 @@ Future<void> applyBackupAction(
         .setExactly(const <String>{});
     container.invalidate(backupScanProvider);
     container.invalidate(backupTilesProvider);
-    if (action != BackupAction.showUpdateAgain) {
+    if (action != BackupAction.showUpdateAgain &&
+        action != BackupAction.ignoreUpdate) {
       container.invalidate(integrityScanProvider);
     }
     if (action == BackupAction.restore &&
@@ -216,6 +217,13 @@ Future<BackupActionResult> _runOne(
     liveWorkshopPath: container.read(wallpaperPathProvider),
     liveMyProjectsPath: container.read(myProjectsLibraryProvider),
   ),
+  BackupAction.ignoreUpdate => ignoreBackupUpdate(
+    card: cards.single,
+    backupRoot: container.read(backupRootProvider),
+    liveWorkshopPath: container.read(wallpaperPathProvider),
+    liveMyProjectsPath: container.read(myProjectsLibraryProvider),
+    acfPath: container.read(acfPathProvider),
+  ),
   BackupAction.showUpdateAgain => showBackupUpdateAgain(
     card: cards.single,
     backupRoot: container.read(backupRootProvider),
@@ -237,6 +245,7 @@ String _label(BackupAction action) => switch (action) {
   BackupAction.update => AppI10n.backupActionUpdate,
   BackupAction.restore => AppI10n.backupActionRestore,
   BackupAction.recycleJunk => AppI10n.backupActionRecycle,
+  BackupAction.ignoreUpdate => AppI10n.backupActionIgnore,
   BackupAction.showUpdateAgain => AppI10n.backupActionShowAgain,
 };
 
@@ -245,6 +254,7 @@ String _title(BackupAction action) => switch (action) {
   BackupAction.update => AppI10n.backupActionUpdateTitle,
   BackupAction.restore => AppI10n.backupActionRestoreTitle,
   BackupAction.recycleJunk => AppI10n.backupActionRecycleTitle,
+  BackupAction.ignoreUpdate => AppI10n.backupActionIgnoreUpdateTitle,
   BackupAction.showUpdateAgain => AppI10n.backupActionShowAgainTitle,
 };
 
@@ -257,6 +267,10 @@ String _message(BackupAction action, bool one) => switch (action) {
     one ? AppI10n.backupActionRestoreOne : AppI10n.backupActionRestoreMany,
   BackupAction.recycleJunk =>
     one ? AppI10n.backupActionRecycleOne : AppI10n.backupActionRecycleMany,
+  BackupAction.ignoreUpdate =>
+    one
+        ? AppI10n.backupActionIgnoreUpdateOne
+        : AppI10n.backupActionIgnoreUpdateMany,
   BackupAction.showUpdateAgain =>
     one ? AppI10n.backupActionShowAgainOne : AppI10n.backupActionShowAgainMany,
 };
@@ -271,5 +285,6 @@ IconData backupActionIcon(BackupAction action) => switch (action) {
   BackupAction.update => Icons.sync_rounded,
   BackupAction.restore => Icons.restore_rounded,
   BackupAction.recycleJunk => Icons.delete_outline_rounded,
+  BackupAction.ignoreUpdate => Icons.visibility_off_outlined,
   BackupAction.showUpdateAgain => Icons.visibility_outlined,
 };

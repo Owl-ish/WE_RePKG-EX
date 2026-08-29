@@ -40,8 +40,10 @@ void main() {
       WidgetTester tester, {
       List<BackupTile> tiles = const <BackupTile>[],
       List<ReconcileTile> reconcile = const <ReconcileTile>[],
+      Map<BackupCard, BackupState>? scanCards,
       Map<BackupCard, BackupUpdatePlan> updates =
           const <BackupCard, BackupUpdatePlan>{},
+      Set<BackupCard> ignoredUpdates = const <BackupCard>{},
       Map<String, ({bool live, bool backup})>? presence,
       bool entrance = false,
     }) async {
@@ -51,10 +53,14 @@ void main() {
           backupScanProvider.overrideWithValue(
             AsyncValue<BackupScan>.data(
               scanOf(
-                cards: <BackupCard, BackupState>{
-                  for (final BackupTile tile in tiles) tile.card: tile.state,
-                },
+                cards:
+                    scanCards ??
+                    <BackupCard, BackupState>{
+                      for (final BackupTile tile in tiles)
+                        tile.card: tile.state,
+                    },
                 updates: updates,
+                ignoredUpdates: ignoredUpdates,
                 presence: presence,
                 reconcile: <ReconcileEntry>[
                   for (final ReconcileTile tile in reconcile) tile.entry,
@@ -138,6 +144,45 @@ void main() {
       await tester.tap(find.text('$label $count'));
       await settle(tester);
     }
+
+    testWidgets('ignored updates use the shared Ignored pill and grid', (
+      tester,
+    ) async {
+      const BackupCard card = BackupCard(
+        WallpaperLibrary.workshop,
+        'ignored-update',
+      );
+      await pumpPills(
+        tester,
+        tiles: const <BackupTile>[
+          (card: card, state: BackupState.updateDismissed, face: null),
+        ],
+        scanCards: const <BackupCard, BackupState>{},
+        ignoredUpdates: <BackupCard>{card},
+        reconcile: <ReconcileTile>[conflict()],
+      );
+
+      final Iterable<CountPill> pills = tester.widgetList<CountPill>(
+        find.byType(CountPill),
+      );
+      expect(
+        pills.where(
+          (CountPill pill) => pill.label == AppI10n.backupStateUpdateDismissed,
+        ),
+        isEmpty,
+      );
+      expect(countOf(AppI10n.backupIgnored, 1), findsOneWidget);
+      expect(container.read(backupStateFilterProvider).reconcile, isTrue);
+
+      await tapPill(tester, AppI10n.backupIgnored, 1);
+
+      expect(container.read(backupStateFilterProvider).ignored, isTrue);
+      expect(
+        find.byKey(const ValueKey<String>('backup-ignored-grid')),
+        findsOneWidget,
+      );
+      expect(find.text('ignored-update'), findsOneWidget);
+    });
 
     Finder arrivingTiles() => find.descendant(
       of: find.byType(SelectionGrid),

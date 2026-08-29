@@ -134,6 +134,7 @@ void main() {
     final BackupScan scan = (
       cards: <BackupCard, BackupState>{card: BackupState.notBackedUp},
       updates: <BackupCard, BackupUpdatePlan>{},
+      ignoredUpdates: <BackupCard>{},
       presence: <String, ({bool live, bool backup})>{
         card.id: (live: true, backup: false),
       },

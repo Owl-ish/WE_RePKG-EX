@@ -363,18 +363,22 @@ class _Loaded extends ConsumerWidget {
     BackupAction.update => AppI10n.backupActionUpdateAll,
     BackupAction.restore => AppI10n.backupActionRestoreAll,
     BackupAction.recycleJunk => AppI10n.backupActionRecycleAll,
+    BackupAction.ignoreUpdate => AppI10n.backupActionIgnoreAll,
     BackupAction.showUpdateAgain => AppI10n.backupActionShowAgainAll,
   };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final Map<BackupState, int> counts = countByState(scan.cards.values);
+    final int ignoredCount = scan.ignoredUpdates.length;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
     final BackupAction? action =
-        shown.reconcile || shown.state == BackupState.emptyBackup
+        shown.reconcile ||
+            shown.ignored ||
+            shown.state == BackupState.emptyBackup
         ? null
         : actionForBackupState(shown.state);
     final Map<BackupState, ({Color colour, String label})> looks =
@@ -406,7 +410,10 @@ class _Loaded extends ConsumerWidget {
                   colour: looks[state]!.colour,
                   label: tr(looks[state]!.label),
                   count: counts[state]!,
-                  on: !shown.reconcile && shown.state == state,
+                  on:
+                      !shown.reconcile &&
+                      !shown.ignored &&
+                      shown.state == state,
                   // Synced is the one state with nothing to come back to, and
                   // on a looked-after library it is most of the grid.
                   nags: state != BackupState.synced,
@@ -420,6 +427,13 @@ class _Loaded extends ConsumerWidget {
                 count: scan.reconcile.length,
                 on: shown.reconcile,
                 onPressed: pills.showReconcile,
+              ),
+              CountPill(
+                colour: Theme.of(context).status.muted,
+                label: tr(AppI10n.backupIgnored),
+                count: ignoredCount,
+                on: shown.ignored,
+                onPressed: pills.showIgnored,
               ),
             ],
           ),
@@ -448,7 +462,37 @@ class _Loaded extends ConsumerWidget {
               ),
             ),
           ),
+        if (shown.ignored && ignoredCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _GlowingActionButton(
+                label: tr(
+                  AppI10n.backupActionShowAgainAll,
+                  namedArgs: <String, String>{'count': '$ignoredCount'},
+                ),
+                icon: backupActionIcon(BackupAction.showUpdateAgain),
+                colour: Theme.of(context).status.muted,
+                onPressed: () => applyBackupAction(
+                  context,
+                  BackupAction.showUpdateAgain,
+                  scan.ignoredUpdates.toList(),
+                ),
+              ),
+            ),
+          ),
+        if (shown.ignored && ignoredCount > 0)
+          _BackupIssueHeader(
+            noteKey: const ValueKey<String>('backup-ignored-note'),
+            child: Text(
+              tr(AppI10n.backupIgnoredAbout),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         if (!shown.reconcile &&
+            !shown.ignored &&
             shown.state != BackupState.emptyBackup &&
             counts[shown.state]! > 0)
           _BackupIssueHeader(
@@ -1016,7 +1060,37 @@ class _GridState extends ConsumerState<_Grid> {
     final Map<String, ({bool live, bool backup})> presence = scan.presence;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     late final Widget grid;
-    if (shown.reconcile) {
+    if (shown.ignored) {
+      grid = _grid<BackupTile>(
+        ref,
+        ref.watch(backupVisibleTilesProvider),
+        id: 'backup-ignored-grid',
+        reflowIdentity: const ValueKey<String>('ignored-updates'),
+        waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
+        idOf: (BackupTile tile) => tile.card.id,
+        build: (BackupTile tile, double width, VoidCallback onTap) =>
+            BackupTileView(
+              key: ValueKey<String>(tile.card.id),
+              width: width,
+              tile: tile,
+              folders: cardFolders(
+                library: tile.card.library,
+                name: tile.card.name,
+                liveExists: presence[tile.card.id]?.live ?? false,
+                backupExists: presence[tile.card.id]?.backup ?? false,
+                backupRoot: backupRoot,
+                liveWorkshopPath: workshop,
+                liveMyProjectsPath: myProjects,
+              ),
+              onTap: onTap,
+              onAction: () => applyBackupAction(
+                context,
+                BackupAction.showUpdateAgain,
+                <BackupCard>[tile.card],
+              ),
+            ),
+      );
+    } else if (shown.reconcile) {
       grid = _reconcileGrid(
         ref,
         ref.watch(backupVisibleReconcileTilesProvider),

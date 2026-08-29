@@ -44,6 +44,7 @@ typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
 typedef BackupScan = ({
   Map<BackupCard, BackupState> cards,
   Map<BackupCard, BackupUpdatePlan> updates,
+  Set<BackupCard> ignoredUpdates,
   Map<String, ({bool live, bool backup})> presence,
   Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk,
   List<ReconcileEntry> reconcile,
@@ -330,6 +331,7 @@ Future<BackupScan> scanBackup({
   return (
     cards: diff.cards,
     updates: diff.updates,
+    ignoredUpdates: diff.ignoredUpdates,
     presence: presence,
     junk: junk,
     reconcile: diff.reconcile,

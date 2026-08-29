@@ -57,6 +57,13 @@ Future<BackupScan> backupScan(Ref ref) async {
 @Riverpod(keepAlive: true)
 Future<List<BackupTile>> backupTiles(Ref ref) async {
   final BackupScan scan = await ref.watch(backupScanProvider.future);
+  // An ignored content update can belong to a wallpaper that Reconcile owns.
+  // Read its face too so Ignored never loses a detection to pill precedence.
+  final Map<BackupCard, BackupState> faceCards = <BackupCard, BackupState>{
+    ...scan.cards,
+    for (final BackupCard card in scan.ignoredUpdates)
+      if (!scan.cards.containsKey(card)) card: BackupState.updateDismissed,
+  };
   // Keep the scan's final preparing state while the short title/preview read
   // finishes, so the tab has one continuous loading phase instead of a second
   // progress bar.
@@ -69,7 +76,7 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
       backupRoot: ref.watch(backupRootProvider),
       liveWorkshopPath: ref.watch(wallpaperPathProvider),
       liveMyProjectsPath: ref.watch(myProjectsLibraryProvider),
-      cards: scan.cards,
+      cards: faceCards,
       presence: scan.presence,
     );
   } catch (_) {
@@ -81,8 +88,8 @@ Future<List<BackupTile>> backupTiles(Ref ref) async {
   // Keep the final preparing state until the completed tiles replace the
   // progress view. Clearing it here can win the frame and hide that state.
   final List<BackupTile> tiles = <BackupTile>[
-    for (final BackupCard card in sortedCards(scan.cards))
-      (card: card, state: scan.cards[card]!, face: faces[card]),
+    for (final BackupCard card in sortedCards(faceCards))
+      (card: card, state: faceCards[card]!, face: faces[card]),
   ];
   return tiles;
 }
@@ -119,8 +126,8 @@ class BackupSearch extends _$BackupSearch {
   void update(String text) => state = text;
 }
 
-/// Which state pill is active, and whether the reconcile pill has taken over.
-typedef BackupShown = ({BackupState state, bool reconcile});
+/// Which top-level Backup pill owns the grid right now.
+typedef BackupShown = ({BackupState state, bool reconcile, bool ignored});
 
 /// Session state rather than a setting: the pills are how the tab is being
 /// looked at now, and returning to a grid narrowed by a pill switched off days
@@ -134,6 +141,7 @@ class BackupStateFilter extends _$BackupStateFilter {
   static const BackupShown _opening = (
     state: BackupState.notBackedUp,
     reconcile: false,
+    ignored: false,
   );
   BackupShown _shown = _opening;
 
@@ -155,25 +163,49 @@ class BackupStateFilter extends _$BackupStateFilter {
   /// over an empty grid, and a rescan that clears whatever was being looked at
   /// leaves the same thing behind.
   static BackupShown _holding(BackupShown shown, BackupScan scan) {
-    if (shown.reconcile) return shown;
+    if (shown.reconcile && scan.reconcile.isNotEmpty) return shown;
+    if (shown.ignored && scan.ignoredUpdates.isNotEmpty) return shown;
     final Map<BackupState, int> counts = countByState(scan.cards.values);
-    if (counts[shown.state]! > 0) {
+    if (!shown.reconcile &&
+        !shown.ignored &&
+        shown.state != BackupState.updateDismissed &&
+        counts[shown.state]! > 0) {
       return shown;
     }
-    return (state: worstBackupState(counts), reconcile: false);
+    for (final BackupState state in backupStateOrder) {
+      if (state == BackupState.synced) continue;
+      if (counts[state]! > 0) {
+        return (state: state, reconcile: false, ignored: false);
+      }
+    }
+    if (scan.reconcile.isNotEmpty) {
+      return (state: shown.state, reconcile: true, ignored: false);
+    }
+    if (counts[BackupState.synced]! > 0) {
+      return (state: BackupState.synced, reconcile: false, ignored: false);
+    }
+    if (scan.ignoredUpdates.isNotEmpty) {
+      return (state: shown.state, reconcile: false, ignored: true);
+    }
+    return _opening;
   }
 
   /// One at a time, the way tabs behave: the grid shows the state picked and
   /// nothing else, and is never left showing everything or nothing.
   void show(BackupState state) {
-    _shown = (state: state, reconcile: false);
+    _shown = (state: state, reconcile: false, ignored: false);
     this.state = _shown;
   }
 
   /// Swaps the grid over. The state pills are left as they were because picking
   /// one is what takes the grid back.
   void showReconcile() {
-    _shown = (state: state.state, reconcile: true);
+    _shown = (state: state.state, reconcile: true, ignored: false);
+    state = _shown;
+  }
+
+  void showIgnored() {
+    _shown = (state: state.state, reconcile: false, ignored: true);
     state = _shown;
   }
 }
@@ -211,18 +243,40 @@ class BackupSortAscending extends _$BackupSortAscending {
 /// the in-memory list instead of repeating face reads.
 @Riverpod(keepAlive: true)
 AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
-  return ref
-      .watch(backupTilesProvider)
-      .whenData(
-        (List<BackupTile> tiles) => visibleBackupTiles(
-          tiles: tiles,
-          state: ref.watch(backupStateFilterProvider).state,
-          needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
-          filter: ref.watch(filterStateProvider),
-          sort: ref.watch(backupSortOrderProvider),
-          ascending: ref.watch(backupSortAscendingProvider),
-        ),
+  return ref.watch(backupTilesProvider).whenData((List<BackupTile> tiles) {
+    final BackupShown shown = ref.watch(backupStateFilterProvider);
+    if (shown.ignored) {
+      final Set<String> ignoredIds = <String>{
+        for (final BackupCard card
+            in ref.watch(backupScanProvider).requireValue.ignoredUpdates)
+          card.id,
+      };
+      return visibleBackupTilesMatching(
+        tiles: <BackupTile>[
+          for (final BackupTile tile in tiles)
+            if (ignoredIds.contains(tile.card.id))
+              (
+                card: tile.card,
+                state: BackupState.updateDismissed,
+                face: tile.face,
+              ),
+        ],
+        include: (BackupTile _) => true,
+        needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
+        filter: ref.watch(filterStateProvider),
+        sort: ref.watch(backupSortOrderProvider),
+        ascending: ref.watch(backupSortAscendingProvider),
       );
+    }
+    return visibleBackupTiles(
+      tiles: tiles,
+      state: shown.state,
+      needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
+      filter: ref.watch(filterStateProvider),
+      sort: ref.watch(backupSortOrderProvider),
+      ascending: ref.watch(backupSortAscendingProvider),
+    );
+  });
 }
 
 /// The reconcile tiles the grid draws, under the same search, filter and order.
@@ -245,7 +299,8 @@ AsyncValue<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) {
 /// against: a tile out of view is out of the selection.
 @Riverpod(keepAlive: true)
 AsyncValue<Set<String>> backupVisibleIds(Ref ref) {
-  if (ref.watch(backupStateFilterProvider).reconcile) {
+  final BackupShown shown = ref.watch(backupStateFilterProvider);
+  if (shown.reconcile) {
     return ref
         .watch(backupVisibleReconcileTilesProvider)
         .whenData(

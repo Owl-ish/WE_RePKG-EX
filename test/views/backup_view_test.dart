@@ -471,9 +471,9 @@ void main() {
       expect(countOf(AppI10n.backupStateSynced, 2), findsOneWidget);
       expect(countOf(AppI10n.backupStateNotBackedUp, 0), findsOneWidget);
       expect(countOf(AppI10n.backupStateUpdateAvailable, 0), findsOneWidget);
-      expect(countOf(AppI10n.backupStateUpdateDismissed, 0), findsOneWidget);
       expect(countOf(AppI10n.backupStateEmptyBackup, 0), findsOneWidget);
       expect(countOf(AppI10n.backupReconcile, 0), findsOneWidget);
+      expect(countOf(AppI10n.backupIgnored, 0), findsOneWidget);
     });
 
     // A wallpaper in both libraries is two tiles, and the badge is the only

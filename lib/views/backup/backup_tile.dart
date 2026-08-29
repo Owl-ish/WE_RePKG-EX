@@ -276,6 +276,17 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           onPressed: onAction,
           destructive: backupActionIsDestructive(action),
         ),
+    if (widget.reconcileEntry == null &&
+        widget.updatePlan?.updateContent == true)
+      if (widget.backupCard case final BackupCard card)
+        DetailAction(
+          label: backupActionLabel(BackupAction.ignoreUpdate),
+          onPressed: () => applyBackupAction(
+            context,
+            BackupAction.ignoreUpdate,
+            <BackupCard>[card],
+          ),
+        ),
     if (widget.reconcileEntry == null)
       if (widget.folders.live case final String live)
         DetailAction(

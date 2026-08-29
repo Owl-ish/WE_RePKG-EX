@@ -168,6 +168,8 @@ class AppI10n {
       'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
   static const String backupReconcileAbout = 'backup.reconcileAbout';
+  static const String backupIgnored = 'backup.ignored';
+  static const String backupIgnoredAbout = 'backup.ignoredAbout';
   static const String backupReconcileDuplicateLiveTitle =
       'backup.reconcileReason.duplicateLiveTitle';
   static const String backupReconcileDuplicateLiveAbout =
@@ -248,6 +250,8 @@ class AppI10n {
   static const String backupActionUpdate = 'backup.action.update';
   static const String backupActionRestore = 'backup.action.restore';
   static const String backupActionRecycle = 'backup.action.recycle';
+  static const String backupActionIgnore = 'backup.action.ignore';
+  static const String backupActionIgnoreAll = 'backup.action.ignoreAll';
   static const String backupActionRecycleAll = 'backup.action.recycleAll';
   static const String backupActionBackUpAll = 'backup.action.backUpAll';
   static const String backupActionUpdateAll = 'backup.action.updateAll';
@@ -258,6 +262,8 @@ class AppI10n {
   static const String backupActionUpdateTitle = 'backup.action.updateTitle';
   static const String backupActionRestoreTitle = 'backup.action.restoreTitle';
   static const String backupActionRecycleTitle = 'backup.action.recycleTitle';
+  static const String backupActionIgnoreUpdateTitle =
+      'backup.action.ignoreUpdateTitle';
   static const String backupActionShowAgainTitle =
       'backup.action.showAgainTitle';
   static const String backupActionBackUpOne = 'backup.action.backUpOne';
@@ -268,6 +274,10 @@ class AppI10n {
   static const String backupActionRestoreMany = 'backup.action.restoreMany';
   static const String backupActionRecycleOne = 'backup.action.recycleOne';
   static const String backupActionRecycleMany = 'backup.action.recycleMany';
+  static const String backupActionIgnoreUpdateOne =
+      'backup.action.ignoreUpdateOne';
+  static const String backupActionIgnoreUpdateMany =
+      'backup.action.ignoreUpdateMany';
   static const String backupActionShowAgainOne = 'backup.action.showAgainOne';
   static const String backupActionShowAgainMany = 'backup.action.showAgainMany';
   static const String backupActionWallpaper = 'backup.action.wallpaper';

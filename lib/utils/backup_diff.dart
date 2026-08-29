@@ -49,7 +49,14 @@ enum BackupState {
 }
 
 // Each normal pill exposes at most one safe action.
-enum BackupAction { backUp, update, restore, recycleJunk, showUpdateAgain }
+enum BackupAction {
+  backUp,
+  update,
+  restore,
+  recycleJunk,
+  ignoreUpdate,
+  showUpdateAgain,
+}
 
 // Update refreshes content. Sync fixes which backup library owns the copy.
 enum BackupUpdateKind { update, sync }
@@ -147,13 +154,17 @@ const List<BackupState> backupStateOrder = <BackupState>[
   BackupState.emptyBackup,
   BackupState.notBackedUp,
   BackupState.updateAvailable,
-  BackupState.updateDismissed,
   BackupState.synced,
 ];
 
-/// Position of each state in [backupStateOrder], for anything sorting by it.
+/// Sort priority includes ignored updates even though Ignored owns their pill.
 final Map<BackupState, int> backupSeverity = <BackupState, int>{
-  for (int i = 0; i < backupStateOrder.length; i++) backupStateOrder[i]: i,
+  BackupState.vanished: 0,
+  BackupState.emptyBackup: 1,
+  BackupState.notBackedUp: 2,
+  BackupState.updateAvailable: 3,
+  BackupState.updateDismissed: 4,
+  BackupState.synced: 5,
 };
 
 /// How many cards sit in each state, zero-filled so a caller can list every
@@ -447,6 +458,7 @@ CopyStanding compareCopy({
 typedef BackupDiffResult = ({
   Map<BackupCard, BackupState> cards,
   Map<BackupCard, BackupUpdatePlan> updates,
+  Set<BackupCard> ignoredUpdates,
   List<ReconcileEntry> reconcile,
 });
 
@@ -605,6 +617,7 @@ BackupDiffResult backupDiff({
   final Map<BackupCard, BackupState> cards = <BackupCard, BackupState>{};
   final Map<BackupCard, BackupUpdatePlan> updates =
       <BackupCard, BackupUpdatePlan>{};
+  final Set<BackupCard> ignoredUpdates = <BackupCard>{};
   final List<ReconcileEntry> reconcile = <ReconcileEntry>[];
 
   final Set<String> keys = <String>{
@@ -681,6 +694,14 @@ BackupDiffResult backupDiff({
       );
     }
 
+    for (final MapEntry<WallpaperLibrary, BackupState> entry
+        in states.entries) {
+      if (entry.value == BackupState.updateDismissed) {
+        final String name = entry.key == WallpaperLibrary.workshop ? lw! : lm!;
+        ignoredUpdates.add(BackupCard(entry.key, name));
+      }
+    }
+
     if (rule == BackupRuleKind.reconcile) {
       reconcile.add(
         ReconcileEntry(
@@ -728,7 +749,12 @@ BackupDiffResult backupDiff({
     }
   }
 
-  return (cards: cards, updates: updates, reconcile: reconcile);
+  return (
+    cards: cards,
+    updates: updates,
+    ignoredUpdates: ignoredUpdates,
+    reconcile: reconcile,
+  );
 }
 
 /// One library's names under a lowercased key, since Windows sees `A` and `a`

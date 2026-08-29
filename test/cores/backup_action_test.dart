@@ -293,6 +293,31 @@ void main() {
     expect(record.dismissedVersion, isNull);
   });
 
+  test('ignore update records the current live version', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory liveMyProjects = Directory(
+      path.join(temporary.path, 'live-myprojects'),
+    )..createSync();
+    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
+
+    final BackupActionResult result = await ignoreBackupUpdate(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: null,
+      liveMyProjectsPath: liveMyProjects.path,
+      acfPath: null,
+    );
+    final BackupRecord record = (await readBackupRecords(
+      backupRoot.path,
+    ))['myprojects/demo']!;
+
+    expect(result, (changed: true, error: null));
+    expect(record.dismissedVersion, isNotNull);
+  });
+
   test(
     'empty cleanup recycles the claimed folder, not a replacement',
     () async {

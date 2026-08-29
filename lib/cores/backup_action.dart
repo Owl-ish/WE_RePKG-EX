@@ -146,6 +146,55 @@ Future<BackupActionResult> backUpWallpaper({
   }
 }
 
+/// Moves one content-update detection into the shared Ignored view.
+///
+/// The ignored version is tied to the current live version. A later live
+/// change no longer matches the marker, so the update automatically surfaces
+/// again.
+Future<BackupActionResult> ignoreBackupUpdate({
+  required BackupCard card,
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+  required String? acfPath,
+}) async {
+  if (backupRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  final String? liveRoot = switch (card.library) {
+    WallpaperLibrary.workshop => liveWorkshopPath,
+    WallpaperLibrary.myProjects => liveMyProjectsPath,
+  };
+  if (liveRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  try {
+    final String? version = await liveBackupVersion(
+      card,
+      liveFolder: path.join(liveRoot, card.name),
+      acfPath: acfPath,
+    );
+    if (version == null) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    final Map<String, BackupRecord> records = await readBackupRecords(
+      backupRoot,
+    );
+    final BackupRecord previous = records[card.id] ?? const BackupRecord();
+    if (previous.dismissedVersion == version) {
+      return (changed: false, error: null);
+    }
+    records[card.id] = BackupRecord(
+      backedUpVersion: previous.backedUpVersion,
+      dismissedVersion: version,
+    );
+    await writeBackupRecords(backupRoot, records);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
 /// Clears only the dismissed update marker, preserving the backup baseline.
 Future<BackupActionResult> showBackupUpdateAgain({
   required BackupCard card,

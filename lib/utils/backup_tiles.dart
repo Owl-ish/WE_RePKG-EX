@@ -25,10 +25,27 @@ List<BackupTile> visibleBackupTiles({
   required WallpaperFilter filter,
   required BackupSortType sort,
   required bool ascending,
+}) => visibleBackupTilesMatching(
+  tiles: tiles,
+  include: (BackupTile tile) => tile.state == state,
+  needle: needle,
+  filter: filter,
+  sort: sort,
+  ascending: ascending,
+);
+
+/// Shared filtering and sorting for normal state pills and Ignored.
+List<BackupTile> visibleBackupTilesMatching({
+  required List<BackupTile> tiles,
+  required bool Function(BackupTile tile) include,
+  required String needle,
+  required WallpaperFilter filter,
+  required BackupSortType sort,
+  required bool ascending,
 }) {
   final List<BackupTile> shown = <BackupTile>[
     for (final BackupTile tile in tiles)
-      if (tile.state == state &&
+      if (include(tile) &&
           _passes(
             face: tile.face,
             name: tile.card.name,

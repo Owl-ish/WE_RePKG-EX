@@ -30,6 +30,8 @@
     },
     "reconcile": "Needs reconciling",
     "reconcileAbout": "These names need your decision. The live source may be ambiguous, backup copies may conflict, or a required comparison could not finish safely. Automatic cleanup stops here rather than guessing.",
+    "ignored": "Ignored",
+    "ignoredAbout": "Content updates you chose to ignore. Files remain unchanged, and an update returns automatically when its live wallpaper changes or when you show it again.",
     "reconcileReason": {
       "duplicateLiveTitle": "Duplicate live copies",
       "duplicateLiveAbout": "This wallpaper exists in both Live {location1} and {location2} folders. WeRePKG will not guess which live copy should be authoritative.",
@@ -74,7 +76,7 @@
       "notBackedUp": "These live wallpapers have no usable backup copy in either backup library.",
       "vanished": "These wallpapers exist only in backup. No live copy is found in the libraries.",
       "updateAvailable": "These wallpapers need their backup refreshed or moved into the matching backup library.",
-      "updateDismissed": "These content updates were intentionally dismissed. Undismiss them to show them under Update / Sync again."
+      "updateDismissed": "These content updates are ignored. A later live version automatically returns them to Update / Sync."
     },
     "sort": {
       "name": "By name",
@@ -91,7 +93,7 @@
       "notBackedUp": "Not backed up",
       "vanished": "Vanished",
       "updateAvailable": "Update / Sync",
-      "updateDismissed": "Update dismissed",
+      "updateDismissed": "Ignored update",
       "emptyBackup": "Empty/Junk"
     },
     "action": {
@@ -99,6 +101,8 @@
       "update": "Update / Sync",
       "restore": "Restore",
       "recycle": "Move to Recycle Bin",
+      "ignore": "Ignore",
+      "ignoreAll": "Ignore All ({count})",
       "recycleAll": "Recycle Bin All ({count})",
       "backUpAll": "Backup All ({count})",
       "updateAll": "Update / Sync All ({count})",
@@ -109,6 +113,7 @@
       "updateTitle": "Update / Sync backup?",
       "restoreTitle": "Restore wallpaper?",
       "recycleTitle": "Remove empty or junk folders?",
+      "ignoreUpdateTitle": "Ignore update?",
       "showAgainTitle": "Undismiss update?",
       "backUpOne": "Copy this live wallpaper to its matching backup folder? Existing backup files are updated; nothing is deleted.",
       "backUpMany": "Back up these {count} live wallpapers? Existing backup files are updated; nothing is deleted.",
@@ -118,6 +123,8 @@
       "restoreMany": "Restore these {count} vanished wallpapers to MyProjects? The backup copies stay unchanged.",
       "recycleOne": "Move this wallpaper's empty or junk folders to the Recycle Bin? Live shader-cache folders, empty folders, and backup cache are checked again first.",
       "recycleMany": "Move empty or junk folders for these {count} wallpapers to the Recycle Bin? Each target will be checked again first.",
+      "ignoreUpdateOne": "Move this content update to Ignored? No wallpaper files will change. It returns automatically when the live version changes.",
+      "ignoreUpdateMany": "Move these {count} content updates to Ignored? No wallpaper files will change. Each returns automatically when its live version changes.",
       "showAgainOne": "Undismiss this update so it appears under Update / Sync again? No wallpaper files will change.",
       "showAgainMany": "Undismiss these {count} updates so they appear under Update / Sync again? No wallpaper files will change.",
       "wallpaper": "Wallpaper",

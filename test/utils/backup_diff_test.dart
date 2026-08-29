@@ -1145,8 +1145,33 @@ void main() {
         WallpaperLibrary.workshop: BackupState.updateAvailable,
         WallpaperLibrary.myProjects: BackupState.updateDismissed,
       });
+      expect(result.ignoredUpdates, <BackupCard>{myProjects('793602574')});
     });
   });
+
+  test(
+    'ignored content update stays in Ignored while required Sync stays active',
+    () {
+      const String name = '793602574';
+      final BackupDiffResult result = diff(
+        liveWorkshop: const <String>{name},
+        backupMyProjects: const <String>{name},
+        liveWorkshopVersions: const <String, String>{name: 'manifest-2'},
+        records: const <String, BackupRecord>{
+          'workshop/$name': BackupRecord(
+            backedUpVersion: 'manifest-1',
+            dismissedVersion: 'manifest-2',
+          ),
+        },
+      );
+      final BackupCard card = workshop(name);
+
+      expect(result.ignoredUpdates, contains(card));
+      expect(result.cards[card], BackupState.updateAvailable);
+      expect(result.updates[card]?.updateContent, isFalse);
+      expect(result.updates[card]?.needsSync, isTrue);
+    },
+  );
 
   test('a card ids itself by library and name', () {
     expect(myProjects('793602574').id, 'myprojects/793602574');
@@ -1396,11 +1421,15 @@ void main() {
     });
   });
 
-  // The grid sorts by this and the counts above the grid are listed in it, so a
-  // state left out would both sort last and lose its row.
-  test('every state has a place in the display order', () {
-    expect(backupStateOrder.toSet(), BackupState.values.toSet());
-    expect(backupStateOrder, hasLength(BackupState.values.length));
+  test('normal pill order leaves ignored updates to the Ignored pill', () {
+    expect(backupStateOrder, isNot(contains(BackupState.updateDismissed)));
+    expect(
+      backupStateOrder.toSet(),
+      BackupState.values
+          .where((BackupState state) => state != BackupState.updateDismissed)
+          .toSet(),
+    );
+    expect(backupSeverity.keys.toSet(), BackupState.values.toSet());
   });
 
   group('sortedCards', () {

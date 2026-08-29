@@ -14,6 +14,7 @@ BackupScan scanOf({
   Map<BackupCard, BackupState> cards = const <BackupCard, BackupState>{},
   Map<BackupCard, BackupUpdatePlan> updates =
       const <BackupCard, BackupUpdatePlan>{},
+  Set<BackupCard> ignoredUpdates = const <BackupCard>{},
   Map<String, ({bool live, bool backup})>? presence,
   Map<String, ({bool live, bool backup, WallpaperJunkKind kind})> junk =
       const <String, ({bool live, bool backup, WallpaperJunkKind kind})>{},
@@ -22,6 +23,7 @@ BackupScan scanOf({
 }) => (
   cards: cards,
   updates: updates,
+  ignoredUpdates: ignoredUpdates,
   presence:
       presence ??
       <String, ({bool live, bool backup})>{
