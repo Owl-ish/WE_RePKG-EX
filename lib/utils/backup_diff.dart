@@ -185,6 +185,32 @@ enum BackupReconcileReason {
   comparisonUnavailable,
 }
 
+/// Everything known about a wallpaper that needs manual review.
+class BackupIssueEvidence {
+  const BackupIssueEvidence({
+    required this.reconcileReasons,
+    required this.states,
+    required this.liveWorkshop,
+    required this.liveMyProjects,
+    required this.backupWorkshop,
+    required this.backupMyProjects,
+  });
+
+  final Set<BackupReconcileReason> reconcileReasons;
+  final Map<WallpaperLibrary, BackupState> states;
+  final bool liveWorkshop;
+  final bool liveMyProjects;
+  final bool backupWorkshop;
+  final bool backupMyProjects;
+
+  bool get requiresUserDecision => reconcileReasons.isNotEmpty;
+
+  Set<BackupState> get attentionStates => <BackupState>{
+    for (final BackupState state in states.values)
+      if (state != BackupState.synced) state,
+  };
+}
+
 /// What differs between the two backup copies for one wallpaper.
 class BackupCopyDifference {
   const BackupCopyDifference({
@@ -223,11 +249,18 @@ class ReconcileEntry {
     required this.states,
     required this.backupWorkshop,
     required this.backupMyProjects,
+    this.additionalReasons = const <BackupReconcileReason>{},
     this.backupDifference,
   });
 
   final String name;
   final BackupReconcileReason reason;
+  final Set<BackupReconcileReason> additionalReasons;
+
+  Set<BackupReconcileReason> get reasons => <BackupReconcileReason>{
+    reason,
+    ...additionalReasons,
+  };
 
   /// What each live copy would read as an ordinary card, one entry per live
   /// library. Carried here so a wallpaper waiting to be reconciled still shows
@@ -240,6 +273,15 @@ class ReconcileEntry {
 
   bool get liveWorkshop => states.containsKey(WallpaperLibrary.workshop);
   bool get liveMyProjects => states.containsKey(WallpaperLibrary.myProjects);
+
+  BackupIssueEvidence get evidence => BackupIssueEvidence(
+    reconcileReasons: reasons,
+    states: states,
+    liveWorkshop: liveWorkshop,
+    liveMyProjects: liveMyProjects,
+    backupWorkshop: backupWorkshop,
+    backupMyProjects: backupMyProjects,
+  );
 
   /// Backup libraries that hold this name without a same-library live copy.
   ///
@@ -267,6 +309,7 @@ class ReconcileEntry {
       other is ReconcileEntry &&
       other.name == name &&
       other.reason == reason &&
+      setEquals(other.additionalReasons, additionalReasons) &&
       other.backupWorkshop == backupWorkshop &&
       other.backupMyProjects == backupMyProjects &&
       other.backupDifference == backupDifference &&
@@ -279,6 +322,12 @@ class ReconcileEntry {
   int get hashCode => Object.hash(
     name,
     reason,
+    Object.hashAll(
+      additionalReasons.toList()..sort(
+        (BackupReconcileReason a, BackupReconcileReason b) =>
+            a.index.compareTo(b.index),
+      ),
+    ),
     backupWorkshop,
     backupMyProjects,
     backupDifference,
@@ -406,6 +455,7 @@ enum BackupRuleKind { absent, vanished, ordinary, structureSync, reconcile }
 typedef BackupRuleDecision = ({
   BackupRuleKind kind,
   BackupReconcileReason? reconcileReason,
+  Set<BackupReconcileReason> reconcileReasons,
 });
 
 /// One source of truth for how folder presence affects a wallpaper.
@@ -416,14 +466,21 @@ BackupRuleDecision backupRule({
   required bool backupMyProjects,
   bool backupCopiesEquivalent = false,
   bool backupComparisonUnavailable = false,
+  bool backupCopiesCompared = false,
   bool contentComparisonUnavailable = false,
 }) {
   final int liveCount = (liveWorkshop ? 1 : 0) + (liveMyProjects ? 1 : 0);
   final int backupCount = (backupWorkshop ? 1 : 0) + (backupMyProjects ? 1 : 0);
 
+  BackupRuleDecision decision(
+    BackupRuleKind kind, [
+    BackupReconcileReason? primary,
+    Set<BackupReconcileReason> reasons = const <BackupReconcileReason>{},
+  ]) => (kind: kind, reconcileReason: primary, reconcileReasons: reasons);
+
   // No live or backup copy means there is nothing to show.
   if (liveCount == 0 && backupCount == 0) {
-    return (kind: BackupRuleKind.absent, reconcileReason: null);
+    return decision(BackupRuleKind.absent);
   }
 
   //====================
@@ -432,43 +489,49 @@ BackupRuleDecision backupRule({
   // No live copy exists in either live library.
   // At least one valid backup exists in either backup library.
   if (liveCount == 0) {
-    return (kind: BackupRuleKind.vanished, reconcileReason: null);
+    return decision(BackupRuleKind.vanished);
   }
 
-  final bool ownBackup = liveWorkshop ? backupWorkshop : backupMyProjects;
-  final bool otherBackup = liveWorkshop ? backupMyProjects : backupWorkshop;
+  final Set<BackupReconcileReason> reasons = <BackupReconcileReason>{};
 
   //====================
   // Reconcile Rules
   //====================
-  // Two live copies make the authoritative source ambiguous.
-  // Different backup copies need a user decision before either is replaced.
-  // Failed required comparisons stay unknown instead of being guessed Synced.
+  // Collect every ambiguity proved by work the scan has already completed.
+  // More expensive duplicate-live comparison remains a detail action.
   if (liveCount > 1) {
-    return (
-      kind: BackupRuleKind.reconcile,
-      reconcileReason: BackupReconcileReason.duplicateLiveCopies,
-    );
+    reasons.add(BackupReconcileReason.duplicateLiveCopies);
   }
-  if (ownBackup && otherBackup) {
+
+  final bool oneLive = liveCount == 1;
+  final bool duplicateBackups = backupWorkshop && backupMyProjects;
+  final bool backupComparisonKnown = oneLive || backupCopiesCompared;
+  if (duplicateBackups && backupComparisonKnown) {
     if (backupComparisonUnavailable) {
-      return (
-        kind: BackupRuleKind.reconcile,
-        reconcileReason: BackupReconcileReason.comparisonUnavailable,
-      );
-    }
-    if (!backupCopiesEquivalent) {
-      return (
-        kind: BackupRuleKind.reconcile,
-        reconcileReason: BackupReconcileReason.conflictingBackupCopies,
-      );
+      reasons.add(BackupReconcileReason.comparisonUnavailable);
+    } else if (!backupCopiesEquivalent) {
+      reasons.add(BackupReconcileReason.conflictingBackupCopies);
     }
   }
-  if (ownBackup && !otherBackup && contentComparisonUnavailable) {
-    return (
-      kind: BackupRuleKind.reconcile,
-      reconcileReason: BackupReconcileReason.comparisonUnavailable,
-    );
+
+  final bool ownBackup = oneLive
+      ? (liveWorkshop ? backupWorkshop : backupMyProjects)
+      : false;
+  final bool otherBackup = oneLive
+      ? (liveWorkshop ? backupMyProjects : backupWorkshop)
+      : false;
+  if (oneLive && ownBackup && !otherBackup && contentComparisonUnavailable) {
+    reasons.add(BackupReconcileReason.comparisonUnavailable);
+  }
+
+  if (reasons.isNotEmpty) {
+    const List<BackupReconcileReason> priority = <BackupReconcileReason>[
+      BackupReconcileReason.duplicateLiveCopies,
+      BackupReconcileReason.conflictingBackupCopies,
+      BackupReconcileReason.comparisonUnavailable,
+    ];
+    final BackupReconcileReason primary = priority.firstWhere(reasons.contains);
+    return decision(BackupRuleKind.reconcile, primary, reasons);
   }
 
   //====================
@@ -478,10 +541,10 @@ BackupRuleDecision backupRule({
   // Equivalent copies in both backup libraries are also safe structure cleanup.
   // Placement problems cannot be hidden by dismissing a content update.
   if (otherBackup) {
-    return (kind: BackupRuleKind.structureSync, reconcileReason: null);
+    return decision(BackupRuleKind.structureSync);
   }
 
-  return (kind: BackupRuleKind.ordinary, reconcileReason: null);
+  return decision(BackupRuleKind.ordinary);
 }
 
 /// Every folder name sorted into a grid card or a reconcile entry.
@@ -569,6 +632,10 @@ BackupDiffResult backupDiff({
       backupMyProjects: bm != null,
       backupCopiesEquivalent: equivalent.contains(key),
       backupComparisonUnavailable: backupUnavailable.contains(key),
+      backupCopiesCompared:
+          equivalent.contains(key) ||
+          backupUnavailable.contains(key) ||
+          differences.containsKey(key),
       contentComparisonUnavailable:
           liveId != null && contentUnavailable.contains(liveId),
     );
@@ -619,6 +686,9 @@ BackupDiffResult backupDiff({
         ReconcileEntry(
           name: lw ?? lm!,
           reason: decision.reconcileReason!,
+          additionalReasons: decision.reconcileReasons.difference(
+            <BackupReconcileReason>{decision.reconcileReason!},
+          ),
           states: states,
           backupWorkshop: bw != null,
           backupMyProjects: bm != null,

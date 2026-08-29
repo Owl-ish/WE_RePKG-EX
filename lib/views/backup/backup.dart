@@ -723,7 +723,7 @@ class _GridState extends ConsumerState<_Grid> {
       switch (reason) {
         BackupReconcileReason.duplicateLiveCopies => (
           title: AppI10n.backupReconcileDuplicateLiveTitle,
-          about: AppI10n.backupReconcileDuplicateLiveAbout,
+          about: AppI10n.backupReconcileDuplicateLiveGroupAbout,
         ),
         BackupReconcileReason.conflictingBackupCopies => (
           title: AppI10n.backupReconcileConflictingBackupsTitle,
@@ -827,6 +827,9 @@ class _GridState extends ConsumerState<_Grid> {
                         liveWorkshopPath: workshop,
                         liveMyProjectsPath: myProjects,
                       ),
+                      backupRoot: backupRoot,
+                      liveWorkshopRoot: workshop,
+                      liveMyProjectsRoot: myProjects,
                       onTap: () => _click(ref, ids, index),
                     );
                   },

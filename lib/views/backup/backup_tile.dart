@@ -3,11 +3,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/backup.dart';
@@ -26,6 +28,13 @@ import 'package:we_repkg/views/backup/backup_action_ui.dart';
 /// The two folders a tile stands for, either of which may not be there. The
 /// details open on whichever exists; the menu offers each one it has.
 typedef TileFolders = ({String? live, String? backup});
+
+typedef _ReconcileFolders = ({
+  String? workshopLive,
+  String? myProjectsLive,
+  String? workshopBackup,
+  String? myProjectsBackup,
+});
 
 DetailDialogLayout _backupDetailLayout({bool extraCanFocus = false}) =>
     DetailDialogLayout(
@@ -130,12 +139,18 @@ class ReconcileTileView extends StatelessWidget {
     required this.tile,
     required this.folders,
     required this.onTap,
+    this.backupRoot,
+    this.liveWorkshopRoot,
+    this.liveMyProjectsRoot,
   });
 
   final double width;
   final ReconcileTile tile;
   final TileFolders folders;
   final VoidCallback onTap;
+  final String? backupRoot;
+  final String? liveWorkshopRoot;
+  final String? liveMyProjectsRoot;
 
   @override
   Widget build(BuildContext context) {
@@ -146,18 +161,11 @@ class ReconcileTileView extends StatelessWidget {
       name: tile.entry.name,
       folders: folders,
       onTap: onTap,
+      backupRoot: backupRoot,
+      liveWorkshopRoot: liveWorkshopRoot,
+      liveMyProjectsRoot: liveMyProjectsRoot,
       reconcileEntry: tile.entry,
-      badges: <TileBadgeData>[
-        TileBadgeData(
-          colour: Theme.of(context).status.bad,
-          text: _reconcileBadgeText(tile.entry),
-        ),
-        if (tile.entry.needsBackup.isNotEmpty)
-          TileBadgeData(
-            colour: backupStateLook(context, BackupState.notBackedUp).colour,
-            text: tr(AppI10n.backupStateNotBackedUp),
-          ),
-      ],
+      badges: _reconcileBadges(context, tile.entry),
     );
   }
 }
@@ -178,6 +186,9 @@ class _TileFrame extends ConsumerStatefulWidget {
     this.onAction,
     this.junkKind,
     this.updatePlan,
+    this.backupRoot,
+    this.liveWorkshopRoot,
+    this.liveMyProjectsRoot,
     this.backupCard,
     this.detailText,
     this.reconcileEntry,
@@ -199,6 +210,9 @@ class _TileFrame extends ConsumerStatefulWidget {
   final VoidCallback? onAction;
   final WallpaperJunkKind? junkKind;
   final BackupUpdatePlan? updatePlan;
+  final String? backupRoot;
+  final String? liveWorkshopRoot;
+  final String? liveMyProjectsRoot;
   final BackupCard? backupCard;
   final String? detailText;
   final ReconcileEntry? reconcileEntry;
@@ -262,17 +276,69 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           onPressed: onAction,
           destructive: backupActionIsDestructive(action),
         ),
-    if (widget.folders.live case final String live)
-      DetailAction(
-        label: tr(AppI10n.backupOpenLiveFolder),
-        onPressed: () => browserFolder(live),
-      ),
-    if (widget.folders.backup case final String backup)
-      DetailAction(
-        label: tr(AppI10n.backupOpenBackupFolder),
-        onPressed: () => browserFolder(backup),
-      ),
+    if (widget.reconcileEntry == null)
+      if (widget.folders.live case final String live)
+        DetailAction(
+          label: tr(AppI10n.backupOpenLiveFolder),
+          onPressed: () => browserFolder(live),
+        ),
+    if (widget.reconcileEntry == null)
+      if (widget.folders.backup case final String backup)
+        DetailAction(
+          label: tr(AppI10n.backupOpenBackupFolder),
+          onPressed: () => browserFolder(backup),
+        ),
   ];
+
+  String? _backupFolderFor(WallpaperLibrary library, String name) {
+    final String? libraryPath = switch (library) {
+      WallpaperLibrary.workshop => backupWorkshopPath(widget.backupRoot),
+      WallpaperLibrary.myProjects => backupMyProjectsPath(widget.backupRoot),
+    };
+    return libraryPath == null ? null : path.join(libraryPath, name);
+  }
+
+  _ReconcileFolders _reconcileFolders(ReconcileEntry entry) {
+    final BackupIssueEvidence evidence = entry.evidence;
+    return (
+      workshopLive: evidence.liveWorkshop && widget.liveWorkshopRoot != null
+          ? path.join(widget.liveWorkshopRoot!, entry.name)
+          : null,
+      myProjectsLive:
+          evidence.liveMyProjects && widget.liveMyProjectsRoot != null
+          ? path.join(widget.liveMyProjectsRoot!, entry.name)
+          : null,
+      workshopBackup: evidence.backupWorkshop
+          ? _backupFolderFor(WallpaperLibrary.workshop, entry.name)
+          : null,
+      myProjectsBackup: evidence.backupMyProjects
+          ? _backupFolderFor(WallpaperLibrary.myProjects, entry.name)
+          : null,
+    );
+  }
+
+  List<BackupFolderMenuTarget> _menuFolders() {
+    final ReconcileEntry? entry = widget.reconcileEntry;
+    if (entry == null) {
+      return <BackupFolderMenuTarget>[
+        if (widget.folders.live case final String live)
+          (label: tr(AppI10n.backupOpenLiveFolder), path: live),
+        if (widget.folders.backup case final String backup)
+          (label: tr(AppI10n.backupOpenBackupFolder), path: backup),
+      ];
+    }
+    final _ReconcileFolders folders = _reconcileFolders(entry);
+    return <BackupFolderMenuTarget>[
+      if (folders.workshopLive case final String folder)
+        (label: tr(AppI10n.backupOpenWorkshopLiveFolder), path: folder),
+      if (folders.myProjectsLive case final String folder)
+        (label: tr(AppI10n.backupOpenMyProjectsLiveFolder), path: folder),
+      if (folders.workshopBackup case final String folder)
+        (label: tr(AppI10n.backupOpenWorkshopBackupFolder), path: folder),
+      if (folders.myProjectsBackup case final String folder)
+        (label: tr(AppI10n.backupOpenMyProjectsBackupFolder), path: folder),
+    ];
+  }
 
   Future<void> _openDetails() async {
     // The backup copy is the only one left for a vanished wallpaper.
@@ -286,6 +352,9 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final bool reconcileNeedsFocus = reconcileNeedsFileFocus(
       widget.reconcileEntry,
     );
+    final _ReconcileFolders? reconcileFolders = widget.reconcileEntry == null
+        ? null
+        : _reconcileFolders(widget.reconcileEntry!);
     await showWallpaperDetail(
       context,
       wallpaper,
@@ -313,6 +382,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               entry: widget.reconcileEntry!,
               foreground: foreground,
               needsFocus: reconcileNeedsFocus,
+              workshopLiveFolder: reconcileFolders?.workshopLive,
+              myProjectsLiveFolder: reconcileFolders?.myProjectsLive,
+              workshopBackupFolder: reconcileFolders?.workshopBackup,
+              myProjectsBackupFolder: reconcileFolders?.myProjectsBackup,
               onRequestFocus: requestFocus,
             )
           : widget.updatePlan != null && widget.backupCard != null
@@ -375,8 +448,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               context,
               details,
               onDetails: _openDetails,
-              liveFolder: widget.folders.live,
-              backupFolder: widget.folders.backup,
+              folders: _menuFolders(),
               actionLabel: widget.action == null
                   ? null
                   : widget.actionLabelOverride ??
@@ -518,17 +590,42 @@ String _stateDetailText(BackupState state) => switch (state) {
   BackupState.emptyBackup => AppI10n.backupEmptyJunkAbout,
 };
 
-String _reconcileBadgeText(ReconcileEntry entry) => switch (entry.reason) {
-  BackupReconcileReason.duplicateLiveCopies => tr(
-    AppI10n.backupTileDuplicateLive,
-  ),
-  BackupReconcileReason.conflictingBackupCopies => tr(
-    AppI10n.backupTileBackupsConflict,
-  ),
-  BackupReconcileReason.comparisonUnavailable => tr(
-    AppI10n.backupTileComparisonUnavailable,
-  ),
-};
+String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
+    switch (reason) {
+      BackupReconcileReason.duplicateLiveCopies => tr(
+        AppI10n.backupTileDuplicateLive,
+      ),
+      BackupReconcileReason.conflictingBackupCopies => tr(
+        AppI10n.backupTileBackupsConflict,
+      ),
+      BackupReconcileReason.comparisonUnavailable => tr(
+        AppI10n.backupTileComparisonUnavailable,
+      ),
+    };
+
+List<TileBadgeData> _reconcileBadges(
+  BuildContext context,
+  ReconcileEntry entry,
+) {
+  final List<BackupReconcileReason> reasons = entry.reasons.toList()
+    ..sort((a, b) => a.index.compareTo(b.index));
+  final List<BackupState> states = entry.evidence.attentionStates.toList()
+    ..sort(
+      (a, b) => (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),
+    );
+  return <TileBadgeData>[
+    for (final BackupReconcileReason reason in reasons)
+      TileBadgeData(
+        colour: Theme.of(context).status.bad,
+        text: _reconcileReasonBadgeText(reason),
+      ),
+    for (final BackupState state in states)
+      TileBadgeData(
+        colour: backupStateLook(context, state).colour,
+        text: tr(backupStateLook(context, state).label),
+      ),
+  ];
+}
 
 /// Presentation for one backup state, using the active semantic palette.
 ({Color colour, String label}) backupStateLook(

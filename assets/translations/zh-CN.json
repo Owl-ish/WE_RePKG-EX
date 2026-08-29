@@ -32,7 +32,8 @@
     "reconcileAbout": "这些名称需要你决定如何处理：实时副本可能冲突、备份副本可能不同，或必要的比较无法安全完成。自动清理会在这里停止，不会猜测。",
     "reconcileReason": {
       "duplicateLiveTitle": "重复的实时副本",
-      "duplicateLiveAbout": "此壁纸同时存在于创意工坊和 MyProjects 实时库中。WeRePKG 不会猜测哪个实时副本应当作为主副本。",
+      "duplicateLiveAbout": "此壁纸同时存在于实时 {location1} 和 {location2} 文件夹中。WeRePKG 不会猜测哪个实时副本应当作为主副本。",
+      "duplicateLiveGroupAbout": "同一壁纸被检测到存在于多个实时文件夹中。打开“详情”可查看实际检测到的位置。",
       "conflictingBackupsTitle": "冲突的备份副本",
       "conflictingBackupsAbout": "此壁纸在两个备份库中都有副本，而且内容不同。WeRePKG 不会自动删除或替换其中任何一个。",
       "comparisonUnavailableTitle": "无法完成比较",
@@ -50,9 +51,10 @@
       "reconcile": "需要处理"
     },
     "detail": {
-      "detectedCopies": "检测到的实时副本",
-      "workshopLive": "存在创意工坊实时副本",
-      "myProjectsLive": "存在 MyProjects 实时副本",
+      "detectedCopies": "检测到的副本",
+      "workshopLive": "创意工坊 - 实时",
+      "myProjectsLive": "MyProjects - 实时",
+      "copyFolderPath": "复制文件夹路径",
       "comparisonFailed": "比较未能完成",
       "rescanAdvice": "一个或多个必要文件夹无法可靠读取。不会提供自动操作；请在文件夹可用后重新扫描。",
       "detectedDifferences": "检测到的备份差异",
@@ -80,6 +82,10 @@
     },
     "openLiveFolder": "打开当前文件夹",
     "openBackupFolder": "打开备份文件夹",
+    "openWorkshopLiveFolder": "打开创意工坊实时文件夹",
+    "openMyProjectsLiveFolder": "打开 MyProjects 实时文件夹",
+    "openWorkshopBackupFolder": "打开创意工坊备份文件夹",
+    "openMyProjectsBackupFolder": "打开 MyProjects 备份文件夹",
     "state": {
       "synced": "已同步",
       "notBackedUp": "未备份",

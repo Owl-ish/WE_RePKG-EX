@@ -32,7 +32,8 @@
     "reconcileAbout": "These names need your decision. The live source may be ambiguous, backup copies may conflict, or a required comparison could not finish safely. Automatic cleanup stops here rather than guessing.",
     "reconcileReason": {
       "duplicateLiveTitle": "Duplicate live copies",
-      "duplicateLiveAbout": "This wallpaper exists live in both Workshop and MyProjects. WeRePKG will not guess which live copy should be authoritative.",
+      "duplicateLiveAbout": "This wallpaper exists in both Live {location1} and {location2} folders. WeRePKG will not guess which live copy should be authoritative.",
+      "duplicateLiveGroupAbout": "The same wallpaper was detected in more than one live folder. Open Details to review the detected locations.",
       "conflictingBackupsTitle": "Conflicting backup copies",
       "conflictingBackupsAbout": "This wallpaper has backup copies in both backup libraries, and those copies differ. WeRePKG will not delete or replace either copy automatically.",
       "comparisonUnavailableTitle": "Comparison unavailable",
@@ -50,9 +51,10 @@
       "reconcile": "Reconcile"
     },
     "detail": {
-      "detectedCopies": "Detected live copies",
-      "workshopLive": "Workshop live copy exists",
-      "myProjectsLive": "MyProjects live copy exists",
+      "detectedCopies": "Detected copies",
+      "workshopLive": "Workshop - Live",
+      "myProjectsLive": "MyProjects - Live",
+      "copyFolderPath": "Copy folder path",
       "comparisonFailed": "Comparison could not finish",
       "rescanAdvice": "One or more required folders could not be read reliably. No automatic action is offered; rescan after the folders are available.",
       "detectedDifferences": "Detected backup differences",
@@ -80,6 +82,10 @@
     },
     "openLiveFolder": "Open live folder",
     "openBackupFolder": "Open backup folder",
+    "openWorkshopLiveFolder": "Open Workshop - Live",
+    "openMyProjectsLiveFolder": "Open MyProjects - Live",
+    "openWorkshopBackupFolder": "Open Backup Workshop",
+    "openMyProjectsBackupFolder": "Open Backup MyProjects",
     "state": {
       "synced": "Synced",
       "notBackedUp": "Not backed up",

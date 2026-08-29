@@ -506,6 +506,44 @@ void main() {
       expect(find.text(AppI10n.homeLibraryMyProjects), findsOneWidget);
     });
 
+    testWidgets('a reconcile tile shows every reason and warning state', (
+      tester,
+    ) async {
+      const ReconcileEntry entry = ReconcileEntry(
+        name: '3707191336',
+        reason: BackupReconcileReason.duplicateLiveCopies,
+        additionalReasons: <BackupReconcileReason>{
+          BackupReconcileReason.conflictingBackupCopies,
+        },
+        states: <WallpaperLibrary, BackupState>{
+          WallpaperLibrary.workshop: BackupState.updateAvailable,
+          WallpaperLibrary.myProjects: BackupState.notBackedUp,
+        },
+        backupWorkshop: true,
+        backupMyProjects: true,
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Scaffold(
+              body: ReconcileTileView(
+                width: 220,
+                tile: (entry: entry, face: null),
+                folders: (live: r'C:\live\3707191336', backup: null),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text(AppI10n.backupTileDuplicateLive), findsOneWidget);
+      expect(find.text(AppI10n.backupTileBackupsConflict), findsOneWidget);
+      expect(find.text(AppI10n.backupStateUpdateAvailable), findsOneWidget);
+      expect(find.text(AppI10n.backupStateNotBackedUp), findsOneWidget);
+    });
+
     testWidgets(
       'tile actions stay visible without repeating per-tile animation',
       (tester) async {
@@ -924,6 +962,16 @@ void main() {
         'Duplicate live copies',
       );
       expect(
+        english['backup']['reconcileReason']['duplicateLiveAbout'],
+        'This wallpaper exists in both Live {location1} and {location2} '
+        'folders. WeRePKG will not guess which live copy should be authoritative.',
+      );
+      expect(
+        english['backup']['reconcileReason']['duplicateLiveGroupAbout'],
+        'The same wallpaper was detected in more than one live folder. '
+        'Open Details to review the detected locations.',
+      );
+      expect(
         english['backup']['reconcileReason']['conflictingBackupsTitle'],
         'Conflicting backup copies',
       );
@@ -936,6 +984,7 @@ void main() {
         english['backup']['detail']['updateToLive'],
         'Updates this backup to mirror the live wallpaper location.',
       );
+      expect(english['backup']['detail']['copyFolderPath'], 'Copy folder path');
       expect(
         english['backup']['about']['vanished'],
         'These wallpapers exist only in backup. No live copy is found in the libraries.',

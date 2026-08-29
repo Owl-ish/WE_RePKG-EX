@@ -72,15 +72,14 @@ Future<void> showRightMenu(
   await showMenuAt(context, details, entries);
 }
 
-/// What a backup tile offers on a right click. Only the folders for now:
-/// backing up, restoring and deleting land with the operations. A folder that
-/// is not there is left out rather than shown pointing at nothing.
+typedef BackupFolderMenuTarget = ({String label, String path});
+
+/// What a backup tile offers on a right click.
 Future<void> showBackupMenu(
   BuildContext context,
   TapDownDetails details, {
   required VoidCallback onDetails,
-  required String? liveFolder,
-  required String? backupFolder,
+  required List<BackupFolderMenuTarget> folders,
   String? actionLabel,
   VoidCallback? onAction,
 }) async {
@@ -91,18 +90,13 @@ Future<void> showBackupMenu(
       label: tr(AppI10n.homeDetails),
       onSelected: (_) => onDetails(),
     ),
-    if (liveFolder != null)
+    for (final BackupFolderMenuTarget folder in folders)
       RightMenuItem(
-        label: tr(AppI10n.backupOpenLiveFolder),
-        onSelected: (_) => browserFolder(liveFolder),
+        label: folder.label,
+        onSelected: (_) => browserFolder(folder.path),
       ),
     if (actionLabel != null && onAction != null)
       RightMenuItem(label: actionLabel, onSelected: (_) => onAction()),
-    if (backupFolder != null)
-      RightMenuItem(
-        label: tr(AppI10n.backupOpenBackupFolder),
-        onSelected: (_) => browserFolder(backupFolder),
-      ),
   ]);
 }
 

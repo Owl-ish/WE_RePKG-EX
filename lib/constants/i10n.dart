@@ -172,6 +172,8 @@ class AppI10n {
       'backup.reconcileReason.duplicateLiveTitle';
   static const String backupReconcileDuplicateLiveAbout =
       'backup.reconcileReason.duplicateLiveAbout';
+  static const String backupReconcileDuplicateLiveGroupAbout =
+      'backup.reconcileReason.duplicateLiveGroupAbout';
   static const String backupReconcileConflictingBackupsTitle =
       'backup.reconcileReason.conflictingBackupsTitle';
   static const String backupReconcileConflictingBackupsAbout =
@@ -196,6 +198,8 @@ class AppI10n {
   static const String backupDetailWorkshopLive = 'backup.detail.workshopLive';
   static const String backupDetailMyProjectsLive =
       'backup.detail.myProjectsLive';
+  static const String backupDetailCopyFolderPath =
+      'backup.detail.copyFolderPath';
   static const String backupDetailComparisonFailed =
       'backup.detail.comparisonFailed';
   static const String backupDetailRescanAdvice = 'backup.detail.rescanAdvice';
@@ -291,6 +295,14 @@ class AppI10n {
   static const String backupSortDate = 'backup.sort.date';
   static const String backupOpenLiveFolder = 'backup.openLiveFolder';
   static const String backupOpenBackupFolder = 'backup.openBackupFolder';
+  static const String backupOpenWorkshopLiveFolder =
+      'backup.openWorkshopLiveFolder';
+  static const String backupOpenMyProjectsLiveFolder =
+      'backup.openMyProjectsLiveFolder';
+  static const String backupOpenWorkshopBackupFolder =
+      'backup.openWorkshopBackupFolder';
+  static const String backupOpenMyProjectsBackupFolder =
+      'backup.openMyProjectsBackupFolder';
 
   static const String homeDetails = 'home.details';
   static const String homeDoubleClickDetails = 'home.doubleClickDetails';

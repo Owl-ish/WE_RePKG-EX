@@ -20,6 +20,8 @@ void main() {
     Map<String, BackupRecord> records = const <String, BackupRecord>{},
     Set<String> equivalentBackupCopies = const <String>{},
     Set<String> unavailableBackupComparisons = const <String>{},
+    Map<String, BackupCopyDifference> backupCopyDifferences =
+        const <String, BackupCopyDifference>{},
     Set<String> unavailableContentComparisons = const <String>{},
   }) => backupDiff(
     liveWorkshop: liveWorkshop,
@@ -35,6 +37,7 @@ void main() {
     records: records,
     equivalentBackupCopies: equivalentBackupCopies,
     unavailableBackupComparisons: unavailableBackupComparisons,
+    backupCopyDifferences: backupCopyDifferences,
     unavailableContentComparisons: unavailableContentComparisons,
   );
 
@@ -294,6 +297,26 @@ void main() {
         decision.reconcileReason,
         BackupReconcileReason.duplicateLiveCopies,
       );
+    });
+
+    test('reconcile collects every already-known ambiguity', () {
+      final BackupRuleDecision decision = backupRule(
+        liveWorkshop: true,
+        liveMyProjects: true,
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupCopiesCompared: true,
+      );
+
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.duplicateLiveCopies,
+      );
+      expect(decision.reconcileReasons, <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+        BackupReconcileReason.conflictingBackupCopies,
+      });
     });
 
     test('different duplicate backups name their reconcile reason', () {
@@ -587,6 +610,75 @@ void main() {
       });
       expect(result.reconcile.single.needsBackup, isEmpty);
     });
+
+    test('duplicate live evidence keeps all detected locations together', () {
+      final ReconcileEntry entry = diff(
+        liveWorkshop: const <String>{'3707191336'},
+        liveMyProjects: const <String>{'3707191336'},
+        backupWorkshop: const <String>{'3707191336'},
+      ).reconcile.single;
+
+      expect(entry.evidence.requiresUserDecision, isTrue);
+      expect(entry.evidence.liveWorkshop, isTrue);
+      expect(entry.evidence.liveMyProjects, isTrue);
+      expect(entry.evidence.backupWorkshop, isTrue);
+      expect(entry.evidence.backupMyProjects, isFalse);
+      expect(entry.evidence.reconcileReasons, <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+      });
+    });
+
+    test(
+      'duplicate live stays reconcile when one live copy differs from the backup',
+      () {
+        final BackupDiffResult result = diff(
+          liveWorkshop: const <String>{'3707191336'},
+          liveMyProjects: const <String>{'3707191336'},
+          backupWorkshop: const <String>{'3707191336'},
+          crossMyProjectsStanding: standing('3707191336', CopyStanding.behind),
+        );
+
+        expect(result.cards, isEmpty);
+        expect(result.reconcile, hasLength(1));
+        expect(
+          result.reconcile.single.reason,
+          BackupReconcileReason.duplicateLiveCopies,
+        );
+        expect(result.reconcile.single.states, <WallpaperLibrary, BackupState>{
+          WallpaperLibrary.workshop: BackupState.synced,
+          WallpaperLibrary.myProjects: BackupState.updateAvailable,
+        });
+        expect(result.reconcile.single.evidence.attentionStates, <BackupState>{
+          BackupState.updateAvailable,
+        });
+      },
+    );
+
+    test(
+      'a compared backup conflict stays attached to duplicate live copies',
+      () {
+        final ReconcileEntry entry = diff(
+          liveWorkshop: const <String>{'3707191336'},
+          liveMyProjects: const <String>{'3707191336'},
+          backupWorkshop: const <String>{'3707191336'},
+          backupMyProjects: const <String>{'3707191336'},
+          backupCopyDifferences: const <String, BackupCopyDifference>{
+            '3707191336': BackupCopyDifference(
+              differentSize: <String>['scene.pkg'],
+            ),
+          },
+        ).reconcile.single;
+
+        expect(entry.reason, BackupReconcileReason.duplicateLiveCopies);
+        expect(entry.additionalReasons, <BackupReconcileReason>{
+          BackupReconcileReason.conflictingBackupCopies,
+        });
+        expect(entry.evidence.reconcileReasons, <BackupReconcileReason>{
+          BackupReconcileReason.duplicateLiveCopies,
+          BackupReconcileReason.conflictingBackupCopies,
+        });
+      },
+    );
 
     test('an opposite-tree card keeps the live spelling', () {
       expect(
