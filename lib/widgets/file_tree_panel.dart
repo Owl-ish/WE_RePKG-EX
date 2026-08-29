@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:path/path.dart' as path;
+import 'package:we_repkg/config/theme_extensions.dart';
+import 'package:we_repkg/cores/context_menu.dart';
+import 'package:we_repkg/utils/grid_selection.dart';
+import 'package:we_repkg/utils/modifier_keys.dart';
+import 'package:we_repkg/widgets/right_menu_item.dart';
 
+part 'file_tree_compare_controls.dart';
 part 'file_tree_browser.dart';
 part 'file_tree_row.dart';
 

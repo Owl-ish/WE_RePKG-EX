@@ -173,24 +173,22 @@ class _TreeEntityNodeState extends State<_TreeEntityNode> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        InkWell(
+        FileTreeRow(
+          depth: widget.depth,
+          icon: directory
+              ? (_expanded ? Icons.folder_open_rounded : Icons.folder_rounded)
+              : widget.entity is Link
+              ? Icons.link_rounded
+              : Icons.insert_drive_file_outlined,
+          label: path.basename(widget.entity.path),
+          foreground: widget.foreground,
+          iconColor: widget.accent,
+          disclosure: directory
+              ? (_expanded
+                    ? Icons.expand_more_rounded
+                    : Icons.chevron_right_rounded)
+              : null,
           onTap: directory ? _toggle : null,
-          child: FileTreeRow(
-            depth: widget.depth,
-            icon: directory
-                ? (_expanded ? Icons.folder_open_rounded : Icons.folder_rounded)
-                : widget.entity is Link
-                ? Icons.link_rounded
-                : Icons.insert_drive_file_outlined,
-            label: path.basename(widget.entity.path),
-            foreground: widget.foreground,
-            iconColor: widget.accent,
-            disclosure: directory
-                ? (_expanded
-                      ? Icons.expand_more_rounded
-                      : Icons.chevron_right_rounded)
-                : null,
-          ),
         ),
         if (_expanded)
           FutureBuilder<List<FileSystemEntity>>(
