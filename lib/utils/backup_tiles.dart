@@ -16,6 +16,22 @@ typedef ReconcileTile = ({ReconcileEntry entry, CardFace? face});
 /// cannot collide with a card's `library/name`.
 String reconcileTileId(String name) => 'reconcile/${name.toLowerCase()}';
 
+/// Selection id for one ignored Reconcile warning. A wallpaper can have more
+/// than one ignored warning, so the reason is part of its identity.
+String ignoredReconcileTileId(String name, BackupReconcileReason reason) =>
+    'ignored/${reason.name}/${reconcileTileId(name)}';
+
+/// Number shown by the shared Ignored pill.
+int ignoredDetectionCount({
+  required Iterable<BackupCard> updates,
+  required Iterable<ReconcileEntry> reconcile,
+}) =>
+    updates.length +
+    reconcile.fold<int>(
+      0,
+      (int total, ReconcileEntry entry) => total + entry.ignoredReasons.length,
+    );
+
 /// The cards the grid draws: what the pills, the search box and the filter
 /// button leave, in the chosen order.
 List<BackupTile> visibleBackupTiles({

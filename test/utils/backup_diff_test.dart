@@ -577,18 +577,15 @@ void main() {
       );
 
       expect(result.cards, isEmpty);
-      expect(result.reconcile, <ReconcileEntry>[
-        const ReconcileEntry(
-          name: '793602574',
-          reason: BackupReconcileReason.duplicateLiveCopies,
-          states: <WallpaperLibrary, BackupState>{
-            WallpaperLibrary.workshop: BackupState.notBackedUp,
-            WallpaperLibrary.myProjects: BackupState.notBackedUp,
-          },
-          backupWorkshop: false,
-          backupMyProjects: false,
-        ),
-      ]);
+      final ReconcileEntry entry = result.reconcile.single;
+      expect(entry.name, '793602574');
+      expect(entry.reason, BackupReconcileReason.duplicateLiveCopies);
+      expect(entry.states, <WallpaperLibrary, BackupState>{
+        WallpaperLibrary.workshop: BackupState.notBackedUp,
+        WallpaperLibrary.myProjects: BackupState.notBackedUp,
+      });
+      expect(entry.backupWorkshop, isFalse);
+      expect(entry.backupMyProjects, isFalse);
       expect(result.reconcile.single.needsBackup, <WallpaperLibrary>{
         WallpaperLibrary.workshop,
         WallpaperLibrary.myProjects,
@@ -1362,6 +1359,155 @@ void main() {
     test('a folder with no top-level files has no token', () {
       expect(folderVersion(const <FileStamp>[]), isNull);
     });
+  });
+
+  test(
+    'ignored duplicate-live detection re-arms when live evidence changes',
+    () {
+      const String name = 'same-live-name';
+      BackupDiffResult result = diff(
+        liveWorkshop: const <String>{name},
+        liveMyProjects: const <String>{name},
+        backupWorkshop: const <String>{name},
+        liveWorkshopVersions: const <String, String>{name: 'workshop-v1'},
+        liveMyProjectsVersions: const <String, String>{name: 'project-v1'},
+      );
+      final String fingerprint = result
+          .reconcile
+          .single
+          .issueFingerprints[BackupReconcileReason.duplicateLiveCopies]!;
+
+      result = diff(
+        liveWorkshop: const <String>{name},
+        liveMyProjects: const <String>{name},
+        backupWorkshop: const <String>{name},
+        liveWorkshopVersions: const <String, String>{name: 'workshop-v1'},
+        liveMyProjectsVersions: const <String, String>{name: 'project-v1'},
+        records: <String, BackupRecord>{
+          reconcileIgnoreRecordId(name): BackupRecord(
+            ignoredReconcileIssues: <BackupReconcileReason, String>{
+              BackupReconcileReason.duplicateLiveCopies: fingerprint,
+            },
+          ),
+        },
+      );
+      expect(result.reconcile.single.activeReasons, isEmpty);
+      expect(result.reconcile.single.ignoredReasons, <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+      });
+
+      result = diff(
+        liveWorkshop: const <String>{name},
+        liveMyProjects: const <String>{name},
+        backupWorkshop: const <String>{name},
+        liveWorkshopVersions: const <String, String>{name: 'workshop-v1'},
+        liveMyProjectsVersions: const <String, String>{name: 'project-v2'},
+        records: <String, BackupRecord>{
+          reconcileIgnoreRecordId(name): BackupRecord(
+            ignoredReconcileIssues: <BackupReconcileReason, String>{
+              BackupReconcileReason.duplicateLiveCopies: fingerprint,
+            },
+          ),
+        },
+      );
+      expect(
+        result.reconcile.single.activeReasons,
+        contains(BackupReconcileReason.duplicateLiveCopies),
+      );
+      expect(result.reconcile.single.ignoredReasons, isEmpty);
+    },
+  );
+
+  test('ignored conflicting backups re-arm when backup evidence changes', () {
+    const String name = 'conflicting-backups';
+    BackupDiffResult result = diff(
+      liveWorkshop: const <String>{name},
+      backupWorkshop: const <String>{name},
+      backupMyProjects: const <String>{name},
+      backupCopyDifferences: const <String, BackupCopyDifference>{
+        name: BackupCopyDifference(
+          differentSize: <String>['scene.pkg'],
+          evidenceFingerprint: 'conflicting-backups:scene.pkg:10:12',
+        ),
+      },
+    );
+    final String fingerprint = result
+        .reconcile
+        .single
+        .issueFingerprints[BackupReconcileReason.conflictingBackupCopies]!;
+
+    result = diff(
+      liveWorkshop: const <String>{name},
+      backupWorkshop: const <String>{name},
+      backupMyProjects: const <String>{name},
+      records: <String, BackupRecord>{
+        reconcileIgnoreRecordId(name): BackupRecord(
+          ignoredReconcileIssues: <BackupReconcileReason, String>{
+            BackupReconcileReason.conflictingBackupCopies: fingerprint,
+          },
+        ),
+      },
+      backupCopyDifferences: const <String, BackupCopyDifference>{
+        name: BackupCopyDifference(
+          differentSize: <String>['scene.pkg'],
+          evidenceFingerprint: 'conflicting-backups:scene.pkg:10:12',
+        ),
+      },
+    );
+    expect(result.reconcile.single.activeReasons, isEmpty);
+    expect(result.reconcile.single.ignoredReasons, <BackupReconcileReason>{
+      BackupReconcileReason.conflictingBackupCopies,
+    });
+
+    result = diff(
+      liveWorkshop: const <String>{name},
+      backupWorkshop: const <String>{name},
+      backupMyProjects: const <String>{name},
+      records: <String, BackupRecord>{
+        reconcileIgnoreRecordId(name): BackupRecord(
+          ignoredReconcileIssues: <BackupReconcileReason, String>{
+            BackupReconcileReason.conflictingBackupCopies: fingerprint,
+          },
+        ),
+      },
+      backupCopyDifferences: const <String, BackupCopyDifference>{
+        name: BackupCopyDifference(
+          differentSize: <String>['scene.pkg'],
+          evidenceFingerprint: 'conflicting-backups:scene.pkg:10:13',
+        ),
+      },
+    );
+    expect(
+      result.reconcile.single.activeReasons,
+      contains(BackupReconcileReason.conflictingBackupCopies),
+    );
+    expect(result.reconcile.single.ignoredReasons, isEmpty);
+  });
+
+  test('equal reconcile evidence has a stable hash code', () {
+    final ReconcileEntry first = ReconcileEntry(
+      name: 'demo',
+      reason: BackupReconcileReason.duplicateLiveCopies,
+      states: <WallpaperLibrary, BackupState>{},
+      backupWorkshop: false,
+      backupMyProjects: false,
+      issueFingerprints: <BackupReconcileReason, String>{
+        BackupReconcileReason.duplicateLiveCopies: 'fingerprint',
+      },
+    );
+    final ReconcileEntry second = ReconcileEntry(
+      name: 'demo',
+      reason: BackupReconcileReason.duplicateLiveCopies,
+      states: <WallpaperLibrary, BackupState>{},
+      backupWorkshop: false,
+      backupMyProjects: false,
+      issueFingerprints: <BackupReconcileReason, String>{
+        BackupReconcileReason.duplicateLiveCopies: 'fingerprint',
+      },
+    );
+
+    expect(first, second);
+    expect(first.hashCode, second.hashCode);
   });
 
   group('countByState', () {

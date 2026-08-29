@@ -32,6 +32,12 @@ import 'package:we_repkg/widgets/sliding_switch.dart';
 import 'package:we_repkg/widgets/top_bar.dart';
 import 'package:we_repkg/widgets/scan_progress.dart';
 
+typedef _IgnoredGridItem = ({
+  BackupTile? update,
+  ReconcileTile? reconcile,
+  BackupReconcileReason? reason,
+});
+
 /// The backup area: the backup itself, and the integrity check beside it.
 class BackupView extends ConsumerWidget {
   const BackupView({super.key});
@@ -370,10 +376,16 @@ class _Loaded extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final Map<BackupState, int> counts = countByState(scan.cards.values);
-    final int ignoredCount = scan.ignoredUpdates.length;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
+    );
+    final int activeReconcileCount = scan.reconcile
+        .where((ReconcileEntry entry) => entry.activeReasons.isNotEmpty)
+        .length;
+    final int ignoredCount = ignoredDetectionCount(
+      updates: scan.ignoredUpdates,
+      reconcile: scan.reconcile,
     );
     final BackupAction? action =
         shown.reconcile ||
@@ -406,25 +418,26 @@ class _Loaded extends ConsumerWidget {
           child: PillRow(
             children: [
               for (final BackupState state in backupStateOrder)
-                CountPill(
-                  colour: looks[state]!.colour,
-                  label: tr(looks[state]!.label),
-                  count: counts[state]!,
-                  on:
-                      !shown.reconcile &&
-                      !shown.ignored &&
-                      shown.state == state,
-                  // Synced is the one state with nothing to come back to, and
-                  // on a looked-after library it is most of the grid.
-                  nags: state != BackupState.synced,
-                  onPressed: () => pills.show(state),
-                ),
+                if (state != BackupState.updateDismissed)
+                  CountPill(
+                    colour: looks[state]!.colour,
+                    label: tr(looks[state]!.label),
+                    count: counts[state]!,
+                    on:
+                        !shown.reconcile &&
+                        !shown.ignored &&
+                        shown.state == state,
+                    // Synced is the one state with nothing to come back to, and
+                    // on a looked-after library it is most of the grid.
+                    nags: state != BackupState.synced,
+                    onPressed: () => pills.show(state),
+                  ),
               // Reconcile is red because it is the one count the tab cannot
               // answer automatically.
               CountPill(
                 colour: Theme.of(context).status.bad,
                 label: tr(AppI10n.backupReconcile),
-                count: scan.reconcile.length,
+                count: activeReconcileCount,
                 on: shown.reconcile,
                 onPressed: pills.showReconcile,
               ),
@@ -474,11 +487,7 @@ class _Loaded extends ConsumerWidget {
                 ),
                 icon: backupActionIcon(BackupAction.showUpdateAgain),
                 colour: Theme.of(context).status.muted,
-                onPressed: () => applyBackupAction(
-                  context,
-                  BackupAction.showUpdateAgain,
-                  scan.ignoredUpdates.toList(),
-                ),
+                onPressed: () => showAllIgnoredDetections(context, scan),
               ),
             ),
           ),
@@ -806,7 +815,7 @@ class _GridState extends ConsumerState<_Grid> {
                     reason: <ReconcileTile>[],
                 };
             for (final ReconcileTile tile in value) {
-              groups[tile.entry.reason]!.add(tile);
+              groups[tile.entry.activePrimaryReason]!.add(tile);
             }
             final List<ReconcileTile> grouped = <ReconcileTile>[
               for (final BackupReconcileReason reason
@@ -885,6 +894,166 @@ class _GridState extends ConsumerState<_Grid> {
       ),
       _ => ScanProgress(label: tr(AppI10n.backupReadingDetails)),
     };
+  }
+
+  Widget _ignoredGrid(
+    WidgetRef ref,
+    AsyncValue<List<BackupTile>> updateTiles,
+    AsyncValue<List<ReconcileTile>> reconcileTiles, {
+    required BackupScan scan,
+    required String? backupRoot,
+    required String? workshop,
+    required String? myProjects,
+  }) {
+    if (updateTiles case AsyncError<List<BackupTile>>(:final Object error)) {
+      return Center(child: Text('${tr(AppI10n.backupTilesFailed)} $error'));
+    }
+    if (reconcileTiles case AsyncError<List<ReconcileTile>>(
+      :final Object error,
+    )) {
+      return Center(child: Text('${tr(AppI10n.backupTilesFailed)} $error'));
+    }
+    if (updateTiles is! AsyncData<List<BackupTile>> ||
+        reconcileTiles is! AsyncData<List<ReconcileTile>>) {
+      return ScanProgress(label: tr(AppI10n.backupReadingDetails));
+    }
+
+    final List<BackupTile> updates = updateTiles.value;
+    final List<ReconcileTile> reconcile = reconcileTiles.value;
+    if (updates.isEmpty && reconcile.isEmpty) {
+      widget.entrance.discard();
+      return const NoResultsView(key: NoResultsView.viewKey);
+    }
+
+    widget.entrance.discard();
+    final Map<BackupReconcileReason, List<ReconcileTile>> reasonGroups =
+        <BackupReconcileReason, List<ReconcileTile>>{
+          for (final BackupReconcileReason reason
+              in BackupReconcileReason.values)
+            reason: <ReconcileTile>[],
+        };
+    for (final ReconcileTile tile in reconcile) {
+      for (final BackupReconcileReason reason in tile.entry.ignoredReasons) {
+        reasonGroups[reason]!.add(tile);
+      }
+    }
+
+    final List<_IgnoredGridItem> grouped = <_IgnoredGridItem>[
+      for (final BackupTile tile in updates)
+        (update: tile, reconcile: null, reason: null),
+      for (final BackupReconcileReason reason in BackupReconcileReason.values)
+        for (final ReconcileTile tile in reasonGroups[reason]!)
+          (update: null, reconcile: tile, reason: reason),
+    ];
+    final List<String> ids = <String>[
+      for (final _IgnoredGridItem item in grouped)
+        item.update?.card.id ??
+            ignoredReconcileTileId(item.reconcile!.entry.name, item.reason!),
+    ];
+
+    return _selectionGrid(
+      ref,
+      context,
+      id: 'backup-ignored-grid',
+      ids: ids,
+      padding: EdgeInsets.zero,
+      entranceToken: 0,
+      entranceOnMount: false,
+      reflowIdentity: const ValueKey<String>('ignored-groups'),
+      sections: <SelectionGridSection>[
+        if (updates.isNotEmpty)
+          SelectionGridSection(
+            itemCount: updates.length,
+            headerPinned: true,
+            headerExtent: _backupIssueHeaderHeight,
+            header: _BackupIssueHeader(
+              noteKey: const ValueKey<String>('backup-ignored-note-update'),
+              pinned: true,
+              child: Text.rich(
+                TextSpan(
+                  children: <InlineSpan>[
+                    TextSpan(
+                      text: '${tr(AppI10n.backupIgnoredUpdateTitle)} - ',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    TextSpan(text: tr(AppI10n.backupIgnoredUpdateAbout)),
+                  ],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        for (final BackupReconcileReason reason in BackupReconcileReason.values)
+          if (reasonGroups[reason]!.isNotEmpty)
+            SelectionGridSection(
+              itemCount: reasonGroups[reason]!.length,
+              headerPinned: true,
+              headerExtent: _backupIssueHeaderHeight,
+              header: _BackupIssueHeader(
+                noteKey: ValueKey<String>('backup-ignored-note-${reason.name}'),
+                pinned: true,
+                child: Text.rich(
+                  TextSpan(
+                    children: <InlineSpan>[
+                      TextSpan(
+                        text: '${tr(_reconcileText(reason).title)} - ',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: tr(AppI10n.backupIgnoredReconcileAbout)),
+                    ],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+      ],
+      itemBuilder: (BuildContext context, int index, GridGeometry geometry) {
+        final _IgnoredGridItem item = grouped[index];
+        if (item.update case final BackupTile tile) {
+          return BackupTileView(
+            key: ValueKey<String>(ids[index]),
+            width: geometry.tile,
+            tile: tile,
+            folders: cardFolders(
+              library: tile.card.library,
+              name: tile.card.name,
+              liveExists: scan.presence[tile.card.id]?.live ?? false,
+              backupExists: scan.presence[tile.card.id]?.backup ?? false,
+              backupRoot: backupRoot,
+              liveWorkshopPath: workshop,
+              liveMyProjectsPath: myProjects,
+            ),
+            onTap: () => _click(ref, ids, index),
+            onAction: () => applyBackupAction(
+              context,
+              BackupAction.showUpdateAgain,
+              <BackupCard>[tile.card],
+            ),
+          );
+        }
+        final ReconcileTile tile = item.reconcile!;
+        return ReconcileTileView(
+          key: ValueKey<String>(ids[index]),
+          width: geometry.tile,
+          tile: tile,
+          ignored: true,
+          reasonOverride: item.reason,
+          selectionIdOverride: ids[index],
+          folders: reconcileFolders(
+            entry: tile.entry,
+            backupRoot: backupRoot,
+            liveWorkshopPath: workshop,
+            liveMyProjectsPath: myProjects,
+          ),
+          backupRoot: backupRoot,
+          liveWorkshopRoot: workshop,
+          liveMyProjectsRoot: myProjects,
+          onTap: () => _click(ref, ids, index),
+        );
+      },
+    );
   }
 
   ({String title, String about}) _junkText(WallpaperJunkKind kind) =>
@@ -1061,34 +1230,14 @@ class _GridState extends ConsumerState<_Grid> {
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     late final Widget grid;
     if (shown.ignored) {
-      grid = _grid<BackupTile>(
+      grid = _ignoredGrid(
         ref,
         ref.watch(backupVisibleTilesProvider),
-        id: 'backup-ignored-grid',
-        reflowIdentity: const ValueKey<String>('ignored-updates'),
-        waiting: const _Scanning(idle: AppI10n.backupPreparingGrid),
-        idOf: (BackupTile tile) => tile.card.id,
-        build: (BackupTile tile, double width, VoidCallback onTap) =>
-            BackupTileView(
-              key: ValueKey<String>(tile.card.id),
-              width: width,
-              tile: tile,
-              folders: cardFolders(
-                library: tile.card.library,
-                name: tile.card.name,
-                liveExists: presence[tile.card.id]?.live ?? false,
-                backupExists: presence[tile.card.id]?.backup ?? false,
-                backupRoot: backupRoot,
-                liveWorkshopPath: workshop,
-                liveMyProjectsPath: myProjects,
-              ),
-              onTap: onTap,
-              onAction: () => applyBackupAction(
-                context,
-                BackupAction.showUpdateAgain,
-                <BackupCard>[tile.card],
-              ),
-            ),
+        ref.watch(backupVisibleReconcileTilesProvider),
+        scan: scan,
+        backupRoot: backupRoot,
+        workshop: workshop,
+        myProjects: myProjects,
       );
     } else if (shown.reconcile) {
       grid = _reconcileGrid(

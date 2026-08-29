@@ -163,8 +163,15 @@ class BackupStateFilter extends _$BackupStateFilter {
   /// over an empty grid, and a rescan that clears whatever was being looked at
   /// leaves the same thing behind.
   static BackupShown _holding(BackupShown shown, BackupScan scan) {
-    if (shown.reconcile && scan.reconcile.isNotEmpty) return shown;
-    if (shown.ignored && scan.ignoredUpdates.isNotEmpty) return shown;
+    final int activeReconcile = scan.reconcile
+        .where((ReconcileEntry entry) => entry.activeReasons.isNotEmpty)
+        .length;
+    final int ignored = ignoredDetectionCount(
+      updates: scan.ignoredUpdates,
+      reconcile: scan.reconcile,
+    );
+    if (shown.reconcile && activeReconcile > 0) return shown;
+    if (shown.ignored && ignored > 0) return shown;
     final Map<BackupState, int> counts = countByState(scan.cards.values);
     if (!shown.reconcile &&
         !shown.ignored &&
@@ -173,18 +180,20 @@ class BackupStateFilter extends _$BackupStateFilter {
       return shown;
     }
     for (final BackupState state in backupStateOrder) {
-      if (state == BackupState.synced) continue;
+      if (state == BackupState.updateDismissed || state == BackupState.synced) {
+        continue;
+      }
       if (counts[state]! > 0) {
         return (state: state, reconcile: false, ignored: false);
       }
     }
-    if (scan.reconcile.isNotEmpty) {
+    if (activeReconcile > 0) {
       return (state: shown.state, reconcile: true, ignored: false);
     }
     if (counts[BackupState.synced]! > 0) {
       return (state: BackupState.synced, reconcile: false, ignored: false);
     }
-    if (scan.ignoredUpdates.isNotEmpty) {
+    if (ignored > 0) {
       return (state: shown.state, reconcile: false, ignored: true);
     }
     return _opening;
@@ -282,17 +291,24 @@ AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
 /// The reconcile tiles the grid draws, under the same search, filter and order.
 @Riverpod(keepAlive: true)
 AsyncValue<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) {
-  return ref
-      .watch(backupReconcileTilesProvider)
-      .whenData(
-        (List<ReconcileTile> tiles) => visibleReconcileTiles(
-          tiles: tiles,
-          needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
-          filter: ref.watch(filterStateProvider),
-          sort: ref.watch(backupSortOrderProvider),
-          ascending: ref.watch(backupSortAscendingProvider),
-        ),
-      );
+  return ref.watch(backupReconcileTilesProvider).whenData((
+    List<ReconcileTile> tiles,
+  ) {
+    final BackupShown shown = ref.watch(backupStateFilterProvider);
+    return visibleReconcileTiles(
+      tiles: <ReconcileTile>[
+        for (final ReconcileTile tile in tiles)
+          if (shown.ignored
+              ? tile.entry.ignoredReasons.isNotEmpty
+              : tile.entry.activeReasons.isNotEmpty)
+            tile,
+      ],
+      needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
+      filter: ref.watch(filterStateProvider),
+      sort: ref.watch(backupSortOrderProvider),
+      ascending: ref.watch(backupSortAscendingProvider),
+    );
+  });
 }
 
 /// Ids of whatever the grid is drawing, which is what the selection is pruned
@@ -300,6 +316,46 @@ AsyncValue<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) {
 @Riverpod(keepAlive: true)
 AsyncValue<Set<String>> backupVisibleIds(Ref ref) {
   final BackupShown shown = ref.watch(backupStateFilterProvider);
+  if (shown.ignored) {
+    final AsyncValue<List<BackupTile>> updates = ref.watch(
+      backupVisibleTilesProvider,
+    );
+    final AsyncValue<List<ReconcileTile>> reconcile = ref.watch(
+      backupVisibleReconcileTilesProvider,
+    );
+    return switch ((updates, reconcile)) {
+      (
+        AsyncData<List<BackupTile>>(value: final List<BackupTile> updateTiles),
+        AsyncData<List<ReconcileTile>>(
+          value: final List<ReconcileTile> reconcileTiles,
+        ),
+      ) =>
+        AsyncData<Set<String>>(<String>{
+          for (final BackupTile tile in updateTiles) tile.card.id,
+          for (final ReconcileTile tile in reconcileTiles)
+            for (final BackupReconcileReason reason
+                in tile.entry.ignoredReasons)
+              ignoredReconcileTileId(tile.entry.name, reason),
+        }),
+      (
+        AsyncError<List<BackupTile>>(
+          :final Object error,
+          :final StackTrace stackTrace,
+        ),
+        _,
+      ) =>
+        AsyncError<Set<String>>(error, stackTrace),
+      (
+        _,
+        AsyncError<List<ReconcileTile>>(
+          :final Object error,
+          :final StackTrace stackTrace,
+        ),
+      ) =>
+        AsyncError<Set<String>>(error, stackTrace),
+      _ => const AsyncLoading<Set<String>>(),
+    };
+  }
   if (shown.reconcile) {
     return ref
         .watch(backupVisibleReconcileTilesProvider)

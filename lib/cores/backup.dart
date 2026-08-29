@@ -782,6 +782,7 @@ typedef _FolderDifference = ({
   List<String> differentSize,
   List<String> onlyFirst,
   List<String> onlySecond,
+  String evidenceFingerprint,
 });
 
 typedef _FolderComparison = ({
@@ -846,6 +847,7 @@ Future<_BackupCopyComparisons> _compareDuplicateBackups({
             differentSize: difference.differentSize,
             onlyWorkshop: difference.onlyFirst,
             onlyMyProjects: difference.onlySecond,
+            evidenceFingerprint: difference.evidenceFingerprint,
           );
           break;
       }
@@ -1032,6 +1034,19 @@ Future<Map<String, BackupRecord>> readBackupRecords(String? backupRoot) async {
           entry.key: BackupRecord(
             backedUpVersion: entry.value['backedUpVersion'] as String?,
             dismissedVersion: entry.value['dismissedVersion'] as String?,
+            ignoredReconcileIssues:
+                entry.value['ignoredReconcileIssues'] is Map<String, dynamic>
+                ? <BackupReconcileReason, String>{
+                    for (final MapEntry<String, dynamic> issue
+                        in (entry.value['ignoredReconcileIssues']
+                                as Map<String, dynamic>)
+                            .entries)
+                      for (final BackupReconcileReason reason
+                          in BackupReconcileReason.values)
+                        if (reason.name == issue.key && issue.value is String)
+                          reason: issue.value as String,
+                  }
+                : const <BackupReconcileReason, String>{},
           ),
     };
   } catch (e) {
@@ -1131,10 +1146,20 @@ Future<_FolderComparison> _compareBackupFolders(
   sortPaths(onlyFirst);
   sortPaths(onlySecond);
 
+  final List<String> evidence = keys.toList()..sort();
+  final String evidenceFingerprint = evidence
+      .map((String key) {
+        final firstFile = firstFiles[key];
+        final secondFile = secondFiles[key];
+        return '$key:${firstFile?.size ?? -1}:${secondFile?.size ?? -1}';
+      })
+      .join('|');
+
   final _FolderDifference difference = (
     differentSize: differentSize,
     onlyFirst: onlyFirst,
     onlySecond: onlySecond,
+    evidenceFingerprint: 'conflicting-backups:$evidenceFingerprint',
   );
   final bool same =
       differentSize.isEmpty && onlyFirst.isEmpty && onlySecond.isEmpty;
@@ -1288,19 +1313,30 @@ Future<void> writeBackupRecords(
   Map<String, BackupRecord> records,
 ) async {
   if (backupRoot == null) return;
-  final Map<String, Map<String, String>> encoded =
-      <String, Map<String, String>>{};
+  final Map<String, Map<String, dynamic>> encoded =
+      <String, Map<String, dynamic>>{};
   // Sorted, and indented below, because this file sits in the user's backup
   // where they read it by hand. A stable order also keeps one changed wallpaper
   // from rewriting the whole thing.
   final List<String> ids = records.keys.toList()..sort();
   for (final String id in ids) {
     final BackupRecord record = records[id]!;
-    final Map<String, String> fields = <String, String>{
+    final Map<String, dynamic> fields = <String, dynamic>{
       if (record.backedUpVersion != null)
         'backedUpVersion': record.backedUpVersion!,
       if (record.dismissedVersion != null)
         'dismissedVersion': record.dismissedVersion!,
+      if (record.ignoredReconcileIssues.isNotEmpty)
+        'ignoredReconcileIssues': <String, String>{
+          for (final MapEntry<BackupReconcileReason, String> issue
+              in (record.ignoredReconcileIssues.entries.toList()..sort(
+                (
+                  MapEntry<BackupReconcileReason, String> a,
+                  MapEntry<BackupReconcileReason, String> b,
+                ) => a.key.index.compareTo(b.key.index),
+              )))
+            issue.key.name: issue.value,
+        },
     };
     if (fields.isNotEmpty) encoded[id] = fields;
   }

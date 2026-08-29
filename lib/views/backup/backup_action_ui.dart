@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
+import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/backup_action.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/models/enums.dart';
@@ -13,6 +14,7 @@ import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
+import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/widgets/confirm_dialog.dart';
 
 typedef BackupActionRunner =
@@ -229,6 +231,124 @@ Future<BackupActionResult> _runOne(
     backupRoot: container.read(backupRootProvider),
   ),
 };
+
+Future<void> ignoreReconcileDetections(
+  BuildContext context,
+  ReconcileEntry entry,
+) async {
+  final Map<BackupReconcileReason, String> fingerprints =
+      <BackupReconcileReason, String>{
+        for (final BackupReconcileReason reason in entry.activeReasons)
+          if (reconcileReasonCanBeIgnored(reason))
+            if (entry.issueFingerprints[reason] case final String fingerprint)
+              reason: fingerprint,
+      };
+  if (fingerprints.isEmpty) return;
+  final bool confirmed = await showConfirmDialog(
+    title: tr(AppI10n.backupActionIgnoreReconcileTitle),
+    message: tr(AppI10n.backupActionIgnoreReconcileOne),
+    confirmLabel: tr(AppI10n.backupActionIgnore),
+    details: <ConfirmDetail>[
+      (label: tr(AppI10n.backupActionWallpaper), value: entry.name),
+    ],
+  );
+  if (!confirmed || !context.mounted) return;
+  final ProviderContainer container = ProviderScope.containerOf(
+    context,
+    listen: false,
+  );
+  final BackupActionResult result = await ignoreReconcileIssues(
+    name: entry.name,
+    fingerprints: fingerprints,
+    backupRoot: container.read(backupRootProvider),
+  );
+  if (!context.mounted) return;
+  _finishIgnoredMetadataAction(
+    container,
+    result,
+    completed: fingerprints.length,
+  );
+}
+
+Future<void> showReconcileDetectionAgain(
+  BuildContext context,
+  ReconcileEntry entry,
+  BackupReconcileReason reason,
+) async {
+  final bool confirmed = await showConfirmDialog(
+    title: tr(AppI10n.backupActionShowAgainTitle),
+    message: tr(AppI10n.backupActionShowReconcileAgainOne),
+    confirmLabel: tr(AppI10n.backupActionShowAgain),
+    details: <ConfirmDetail>[
+      (label: tr(AppI10n.backupActionWallpaper), value: entry.name),
+    ],
+  );
+  if (!confirmed || !context.mounted) return;
+  final ProviderContainer container = ProviderScope.containerOf(
+    context,
+    listen: false,
+  );
+  final BackupActionResult result = await showReconcileIssuesAgain(
+    name: entry.name,
+    reasons: <BackupReconcileReason>{reason},
+    backupRoot: container.read(backupRootProvider),
+  );
+  if (!context.mounted) return;
+  _finishIgnoredMetadataAction(container, result);
+}
+
+Future<void> showAllIgnoredDetections(
+  BuildContext context,
+  BackupScan scan,
+) async {
+  final int count = ignoredDetectionCount(
+    updates: scan.ignoredUpdates,
+    reconcile: scan.reconcile,
+  );
+  if (count == 0) return;
+  final bool confirmed = await showConfirmDialog(
+    title: tr(AppI10n.backupActionShowAgainTitle),
+    message: tr(
+      AppI10n.backupActionShowAgainMany,
+      namedArgs: <String, String>{'count': '$count'},
+    ),
+    confirmLabel: tr(AppI10n.backupActionShowAgain),
+  );
+  if (!confirmed || !context.mounted) return;
+  final ProviderContainer container = ProviderScope.containerOf(
+    context,
+    listen: false,
+  );
+  final BackupActionResult result = await showAllIgnoredIssues(
+    backupRoot: container.read(backupRootProvider),
+    ignoredUpdates: scan.ignoredUpdates,
+    reconcileEntries: scan.reconcile,
+  );
+  if (!context.mounted) return;
+  _finishIgnoredMetadataAction(container, result, completed: count);
+}
+
+void _finishIgnoredMetadataAction(
+  ProviderContainer container,
+  BackupActionResult result, {
+  int completed = 1,
+}) {
+  if (result.error case final String error) {
+    showErrorToast(error);
+    return;
+  }
+  if (!result.changed) return;
+  container.read(backupSelectionProvider.notifier).setExactly(const <String>{});
+  container.invalidate(backupScanProvider);
+  container.invalidate(backupTilesProvider);
+  container.invalidate(backupReconcileTilesProvider);
+  showNoticeToast(
+    tr(
+      AppI10n.backupActionDone,
+      namedArgs: <String, String>{'count': '$completed'},
+    ),
+  );
+}
 
 List<List<BackupCard>> _restoreTargets(List<BackupCard> cards) {
   final Map<String, List<BackupCard>> grouped = <String, List<BackupCard>>{};

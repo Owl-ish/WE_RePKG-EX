@@ -170,16 +170,26 @@ class AppI10n {
   static const String backupReconcileAbout = 'backup.reconcileAbout';
   static const String backupIgnored = 'backup.ignored';
   static const String backupIgnoredAbout = 'backup.ignoredAbout';
+  static const String backupIgnoredUpdateTitle =
+      'backup.ignoredGroup.updateTitle';
+  static const String backupIgnoredUpdateAbout =
+      'backup.ignoredGroup.updateAbout';
+  static const String backupIgnoredReconcileAbout =
+      'backup.ignoredGroup.reconcileAbout';
   static const String backupReconcileDuplicateLiveTitle =
       'backup.reconcileReason.duplicateLiveTitle';
   static const String backupReconcileDuplicateLiveAbout =
       'backup.reconcileReason.duplicateLiveAbout';
   static const String backupReconcileDuplicateLiveGroupAbout =
       'backup.reconcileReason.duplicateLiveGroupAbout';
+  static const String backupReconcileDuplicateLiveIgnoredAbout =
+      'backup.reconcileReason.duplicateLiveIgnoredAbout';
   static const String backupReconcileConflictingBackupsTitle =
       'backup.reconcileReason.conflictingBackupsTitle';
   static const String backupReconcileConflictingBackupsAbout =
       'backup.reconcileReason.conflictingBackupsAbout';
+  static const String backupReconcileConflictingBackupsIgnoredAbout =
+      'backup.reconcileReason.conflictingBackupsIgnoredAbout';
   static const String backupReconcileComparisonUnavailableTitle =
       'backup.reconcileReason.comparisonUnavailableTitle';
   static const String backupReconcileComparisonUnavailableAbout =
@@ -264,6 +274,8 @@ class AppI10n {
   static const String backupActionRecycleTitle = 'backup.action.recycleTitle';
   static const String backupActionIgnoreUpdateTitle =
       'backup.action.ignoreUpdateTitle';
+  static const String backupActionIgnoreReconcileTitle =
+      'backup.action.ignoreReconcileTitle';
   static const String backupActionShowAgainTitle =
       'backup.action.showAgainTitle';
   static const String backupActionBackUpOne = 'backup.action.backUpOne';
@@ -278,6 +290,10 @@ class AppI10n {
       'backup.action.ignoreUpdateOne';
   static const String backupActionIgnoreUpdateMany =
       'backup.action.ignoreUpdateMany';
+  static const String backupActionIgnoreReconcileOne =
+      'backup.action.ignoreReconcileOne';
+  static const String backupActionShowReconcileAgainOne =
+      'backup.action.showReconcileAgainOne';
   static const String backupActionShowAgainOne = 'backup.action.showAgainOne';
   static const String backupActionShowAgainMany = 'backup.action.showAgainMany';
   static const String backupActionWallpaper = 'backup.action.wallpaper';

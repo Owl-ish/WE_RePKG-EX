@@ -36,16 +36,20 @@ typedef _ReconcileFolders = ({
   String? myProjectsBackup,
 });
 
-DetailDialogLayout _backupDetailLayout({bool extraCanFocus = false}) =>
-    DetailDialogLayout(
-      // Keep Backup only modestly taller than the ordinary 500px detail card.
-      // Dense sections scroll/focus inside this footprint instead of inflating
-      // the whole modal.
-      maxHeightFactor: .84,
-      maxHeight: 560,
-      extraFillsPanel: true,
-      extraCanFocus: extraCanFocus,
-    );
+DetailDialogLayout _backupDetailLayout({
+  bool extraCanFocus = false,
+  bool hasSecondAction = false,
+}) => DetailDialogLayout(
+  // Keep Backup only modestly taller than the ordinary 500px detail card.
+  // Dense sections scroll/focus inside this footprint instead of inflating
+  // the whole modal.
+  maxHeightFactor: .84,
+  // An added Reconcile Ignore/Show Again action needs one more control row.
+  // Reserve its eight pixels up front so focusing the file pane stays stable.
+  maxHeight: hasSecondAction ? 568 : 560,
+  extraFillsPanel: true,
+  extraCanFocus: extraCanFocus,
+);
 
 /// One wallpaper in the backup grid, with the badge saying where it stands.
 class BackupTileView extends StatelessWidget {
@@ -142,6 +146,9 @@ class ReconcileTileView extends StatelessWidget {
     this.backupRoot,
     this.liveWorkshopRoot,
     this.liveMyProjectsRoot,
+    this.ignored = false,
+    this.reasonOverride,
+    this.selectionIdOverride,
   });
 
   final double width;
@@ -151,12 +158,15 @@ class ReconcileTileView extends StatelessWidget {
   final String? backupRoot;
   final String? liveWorkshopRoot;
   final String? liveMyProjectsRoot;
+  final bool ignored;
+  final BackupReconcileReason? reasonOverride;
+  final String? selectionIdOverride;
 
   @override
   Widget build(BuildContext context) {
     return _TileFrame(
       width: width,
-      id: reconcileTileId(tile.entry.name),
+      id: selectionIdOverride ?? reconcileTileId(tile.entry.name),
       face: tile.face,
       name: tile.entry.name,
       folders: folders,
@@ -165,7 +175,23 @@ class ReconcileTileView extends StatelessWidget {
       liveWorkshopRoot: liveWorkshopRoot,
       liveMyProjectsRoot: liveMyProjectsRoot,
       reconcileEntry: tile.entry,
-      badges: _reconcileBadges(context, tile.entry),
+      reconcileIgnored: ignored,
+      reconcileReasonOverride: reasonOverride,
+      action: ignored ? BackupAction.showUpdateAgain : null,
+      actionLabelOverride: ignored ? tr(AppI10n.backupActionShowAgain) : null,
+      onAction: ignored && reasonOverride != null
+          ? () => showReconcileDetectionAgain(
+              context,
+              tile.entry,
+              reasonOverride!,
+            )
+          : null,
+      badges: _reconcileBadges(
+        context,
+        tile.entry,
+        ignored: ignored,
+        reasonOverride: reasonOverride,
+      ),
     );
   }
 }
@@ -192,6 +218,8 @@ class _TileFrame extends ConsumerStatefulWidget {
     this.backupCard,
     this.detailText,
     this.reconcileEntry,
+    this.reconcileIgnored = false,
+    this.reconcileReasonOverride,
   });
 
   final double width;
@@ -216,6 +244,8 @@ class _TileFrame extends ConsumerStatefulWidget {
   final BackupCard? backupCard;
   final String? detailText;
   final ReconcileEntry? reconcileEntry;
+  final bool reconcileIgnored;
+  final BackupReconcileReason? reconcileReasonOverride;
 
   @override
   ConsumerState<_TileFrame> createState() => _TileFrameState();
@@ -287,6 +317,17 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             <BackupCard>[card],
           ),
         ),
+    if (widget.reconcileEntry != null && !widget.reconcileIgnored)
+      if (widget.reconcileEntry case final ReconcileEntry entry)
+        if (entry.activeReasons.any(
+          (BackupReconcileReason reason) =>
+              reconcileReasonCanBeIgnored(reason) &&
+              entry.issueFingerprints.containsKey(reason),
+        ))
+          DetailAction(
+            label: tr(AppI10n.backupActionIgnore),
+            onPressed: () => ignoreReconcileDetections(context, entry),
+          ),
     if (widget.reconcileEntry == null)
       if (widget.folders.live case final String live)
         DetailAction(
@@ -360,12 +401,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final Rect? origin = _tileRect();
     final WallpaperInfo wallpaper = await readWallpaperFolder(folder);
     if (!mounted) return;
+    final ReconcileEntry? reconcileEntry = widget.reconcileEntry;
     final bool reconcileNeedsFocus = reconcileNeedsFileFocus(
-      widget.reconcileEntry,
+      reconcileEntry,
+      ignored: widget.reconcileIgnored,
+      reasonOverride: widget.reconcileReasonOverride,
     );
-    final _ReconcileFolders? reconcileFolders = widget.reconcileEntry == null
+    final _ReconcileFolders? reconcileFolders = reconcileEntry == null
         ? null
-        : _reconcileFolders(widget.reconcileEntry!);
+        : _reconcileFolders(reconcileEntry);
     await showWallpaperDetail(
       context,
       wallpaper,
@@ -374,7 +418,19 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       includePreview: widget.junkKind == null,
       layout: widget.junkKind != null
           ? const DetailDialogLayout()
-          : _backupDetailLayout(extraCanFocus: reconcileNeedsFocus),
+          : _backupDetailLayout(
+              extraCanFocus: reconcileNeedsFocus,
+              hasSecondAction:
+                  reconcileEntry != null &&
+                  (widget.reconcileIgnored ||
+                      reconcileEntry.activeReasons.any(
+                        (BackupReconcileReason reason) =>
+                            reconcileReasonCanBeIgnored(reason) &&
+                            reconcileEntry.issueFingerprints.containsKey(
+                              reason,
+                            ),
+                      )),
+            ),
       extraContentBuilder: widget.junkKind != null
           ? (BuildContext context, Color foreground, bool _, VoidCallback _) =>
                 JunkDetailContent(
@@ -391,8 +447,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               VoidCallback requestFocus,
             ) => ReconcileDetailContent(
               entry: widget.reconcileEntry!,
+              primaryReasonOverride: widget.reconcileReasonOverride,
               foreground: foreground,
               needsFocus: reconcileNeedsFocus,
+              ignoredMode: widget.reconcileIgnored,
               workshopLiveFolder: reconcileFolders?.workshopLive,
               myProjectsLiveFolder: reconcileFolders?.myProjectsLive,
               workshopBackupFolder: reconcileFolders?.workshopBackup,
@@ -616,10 +674,16 @@ String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
 
 List<TileBadgeData> _reconcileBadges(
   BuildContext context,
-  ReconcileEntry entry,
-) {
-  final List<BackupReconcileReason> reasons = entry.reasons.toList()
-    ..sort((a, b) => a.index.compareTo(b.index));
+  ReconcileEntry entry, {
+  bool ignored = false,
+  BackupReconcileReason? reasonOverride,
+}) {
+  final List<BackupReconcileReason> reasons =
+      (reasonOverride == null
+              ? (ignored ? entry.ignoredReasons : entry.activeReasons)
+              : <BackupReconcileReason>{reasonOverride})
+          .toList()
+        ..sort((a, b) => a.index.compareTo(b.index));
   final List<BackupState> states = entry.evidence.attentionStates.toList()
     ..sort(
       (a, b) => (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),

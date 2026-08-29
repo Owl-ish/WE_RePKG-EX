@@ -707,6 +707,85 @@ void main() {
       );
     });
 
+    testWidgets('ignored groups each detection independently in one pill', (
+      tester,
+    ) async {
+      const BackupCard ignoredUpdate = BackupCard(
+        WallpaperLibrary.workshop,
+        'ignored-update',
+      );
+      final ReconcileTile ignoredReconcile = (
+        entry: const ReconcileEntry(
+          name: 'ignored-reconcile',
+          reason: BackupReconcileReason.duplicateLiveCopies,
+          additionalReasons: <BackupReconcileReason>{
+            BackupReconcileReason.conflictingBackupCopies,
+          },
+          ignoredReasons: <BackupReconcileReason>{
+            BackupReconcileReason.duplicateLiveCopies,
+            BackupReconcileReason.conflictingBackupCopies,
+          },
+          issueFingerprints: <BackupReconcileReason, String>{
+            BackupReconcileReason.duplicateLiveCopies: 'live-fingerprint',
+            BackupReconcileReason.conflictingBackupCopies: 'backup-fingerprint',
+          },
+          states: <WallpaperLibrary, BackupState>{
+            WallpaperLibrary.workshop: BackupState.synced,
+            WallpaperLibrary.myProjects: BackupState.synced,
+          },
+          backupWorkshop: true,
+          backupMyProjects: true,
+          backupDifference: BackupCopyDifference(
+            differentSize: <String>['project.json'],
+          ),
+        ),
+        face: null,
+      );
+      await pumpPills(
+        tester,
+        tiles: const <BackupTile>[
+          (card: ignoredUpdate, state: BackupState.updateDismissed, face: null),
+        ],
+        ignoredUpdates: <BackupCard>{ignoredUpdate},
+        reconcile: <ReconcileTile>[ignoredReconcile],
+      );
+
+      await tapPill(tester, AppI10n.backupIgnored, 3);
+
+      final Finder ignoredGrid = find.byKey(
+        const ValueKey<String>('backup-ignored-grid'),
+      );
+      expect(ignoredGrid, findsOneWidget);
+      final SelectionGrid grid = tester.widget<SelectionGrid>(ignoredGrid);
+      expect(grid.sections, hasLength(3));
+      expect(
+        grid.sections.map((SelectionGridSection section) => section.itemCount),
+        everyElement(1),
+      );
+      expect(grid.idAt(0), ignoredUpdate.id);
+      expect(
+        grid.idAt(1),
+        ignoredReconcileTileId(
+          'ignored-reconcile',
+          BackupReconcileReason.duplicateLiveCopies,
+        ),
+      );
+      expect(
+        grid.idAt(2),
+        ignoredReconcileTileId(
+          'ignored-reconcile',
+          BackupReconcileReason.conflictingBackupCopies,
+        ),
+      );
+      expect(find.text('ignored-update'), findsOneWidget);
+      expect(
+        grid.sections.map(
+          (SelectionGridSection section) => section.headerPinned,
+        ),
+        everyElement(isTrue),
+      );
+    });
+
     // They all read as off while it has the grid, so lighting one has to mean
     // "show me that state".
     testWidgets('a state pill takes the grid back from reconcile', (

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
@@ -121,6 +122,7 @@ Future<BackupActionResult> backUpWallpaper({
     final BackupRecord previous = records[card.id] ?? const BackupRecord();
     records[card.id] = BackupRecord(
       backedUpVersion: version ?? previous.backedUpVersion,
+      ignoredReconcileIssues: previous.ignoredReconcileIssues,
     );
 
     // The matching copy and stable source are established before any
@@ -187,7 +189,145 @@ Future<BackupActionResult> ignoreBackupUpdate({
     records[card.id] = BackupRecord(
       backedUpVersion: previous.backedUpVersion,
       dismissedVersion: version,
+      ignoredReconcileIssues: previous.ignoredReconcileIssues,
     );
+    await writeBackupRecords(backupRoot, records);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+/// Saves the current evidence for each ignored Reconcile warning.
+Future<BackupActionResult> ignoreReconcileIssues({
+  required String name,
+  required Map<BackupReconcileReason, String> fingerprints,
+  required String? backupRoot,
+}) async {
+  if (backupRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  final Map<BackupReconcileReason, String> supported =
+      <BackupReconcileReason, String>{
+        for (final MapEntry<BackupReconcileReason, String> entry
+            in fingerprints.entries)
+          if (reconcileReasonCanBeIgnored(entry.key)) entry.key: entry.value,
+      };
+  if (supported.isEmpty) return (changed: false, error: null);
+  try {
+    final Map<String, BackupRecord> records = await readBackupRecords(
+      backupRoot,
+    );
+    final String id = reconcileIgnoreRecordId(name);
+    final BackupRecord previous = records[id] ?? const BackupRecord();
+    final Map<BackupReconcileReason, String> ignored =
+        <BackupReconcileReason, String>{
+          ...previous.ignoredReconcileIssues,
+          ...supported,
+        };
+    if (mapEquals(ignored, previous.ignoredReconcileIssues)) {
+      return (changed: false, error: null);
+    }
+    records[id] = BackupRecord(
+      backedUpVersion: previous.backedUpVersion,
+      dismissedVersion: previous.dismissedVersion,
+      ignoredReconcileIssues: ignored,
+    );
+    await writeBackupRecords(backupRoot, records);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+/// Restores only the requested Reconcile warnings for one wallpaper.
+Future<BackupActionResult> showReconcileIssuesAgain({
+  required String name,
+  required Set<BackupReconcileReason> reasons,
+  required String? backupRoot,
+}) async {
+  if (backupRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  if (reasons.isEmpty) return (changed: false, error: null);
+  try {
+    final Map<String, BackupRecord> records = await readBackupRecords(
+      backupRoot,
+    );
+    final String id = reconcileIgnoreRecordId(name);
+    final BackupRecord? previous = records[id];
+    if (previous == null || previous.ignoredReconcileIssues.isEmpty) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    final Map<BackupReconcileReason, String> ignored =
+        <BackupReconcileReason, String>{...previous.ignoredReconcileIssues}
+          ..removeWhere(
+            (BackupReconcileReason reason, String _) =>
+                reasons.contains(reason),
+          );
+    if (mapEquals(ignored, previous.ignoredReconcileIssues)) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    if (ignored.isEmpty &&
+        previous.backedUpVersion == null &&
+        previous.dismissedVersion == null) {
+      records.remove(id);
+    } else {
+      records[id] = BackupRecord(
+        backedUpVersion: previous.backedUpVersion,
+        dismissedVersion: previous.dismissedVersion,
+        ignoredReconcileIssues: ignored,
+      );
+    }
+    await writeBackupRecords(backupRoot, records);
+    return (changed: true, error: null);
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
+/// Restores every ignored content update and Reconcile warning in one write.
+Future<BackupActionResult> showAllIgnoredIssues({
+  required String? backupRoot,
+  required Iterable<BackupCard> ignoredUpdates,
+  required Iterable<ReconcileEntry> reconcileEntries,
+}) async {
+  if (backupRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  try {
+    final Map<String, BackupRecord> records = await readBackupRecords(
+      backupRoot,
+    );
+    bool changed = false;
+    for (final BackupCard card in ignoredUpdates) {
+      final BackupRecord? previous = records[card.id];
+      if (previous == null || previous.dismissedVersion == null) continue;
+      records[card.id] = BackupRecord(
+        backedUpVersion: previous.backedUpVersion,
+        ignoredReconcileIssues: previous.ignoredReconcileIssues,
+      );
+      changed = true;
+    }
+    for (final ReconcileEntry entry in reconcileEntries) {
+      if (entry.ignoredReasons.isEmpty) continue;
+      final String id = reconcileIgnoreRecordId(entry.name);
+      final BackupRecord? previous = records[id];
+      if (previous == null || previous.ignoredReconcileIssues.isEmpty) continue;
+      if (previous.backedUpVersion == null &&
+          previous.dismissedVersion == null) {
+        records.remove(id);
+      } else {
+        records[id] = BackupRecord(
+          backedUpVersion: previous.backedUpVersion,
+          dismissedVersion: previous.dismissedVersion,
+        );
+      }
+      changed = true;
+    }
+    if (!changed) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
     await writeBackupRecords(backupRoot, records);
     return (changed: true, error: null);
   } catch (error) {
@@ -211,7 +351,10 @@ Future<BackupActionResult> showBackupUpdateAgain({
     if (previous == null || previous.dismissedVersion == null) {
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
-    records[card.id] = BackupRecord(backedUpVersion: previous.backedUpVersion);
+    records[card.id] = BackupRecord(
+      backedUpVersion: previous.backedUpVersion,
+      ignoredReconcileIssues: previous.ignoredReconcileIssues,
+    );
     await writeBackupRecords(backupRoot, records);
     return (changed: true, error: null);
   } catch (error) {

@@ -31,13 +31,15 @@
     "reconcile": "待处理",
     "reconcileAbout": "这些名称需要你决定如何处理：实时副本可能冲突、备份副本可能不同，或必要的比较无法安全完成。自动清理会在这里停止，不会猜测。",
     "ignored": "已忽略",
-    "ignoredAbout": "你选择忽略的内容更新会集中显示在这里。文件不会被修改；当实时壁纸发生变化或你选择再次显示时，更新会自动重新出现。",
+    "ignoredAbout": "你选择忽略的检测会集中显示在这里。文件不会被修改；当检测依据发生变化或你选择再次显示时，它们会重新出现。",
     "reconcileReason": {
       "duplicateLiveTitle": "重复的实时副本",
       "duplicateLiveAbout": "此壁纸同时存在于实时 {location1} 和 {location2} 文件夹中。WeRePKG 不会猜测哪个实时副本应当作为主副本。",
       "duplicateLiveGroupAbout": "同一壁纸被检测到存在于多个实时文件夹中。打开“详情”可查看实际检测到的位置。",
+      "duplicateLiveIgnoredAbout": "此壁纸同时存在于实时 {location1} 和 {location2} 文件夹中。此检测已忽略，直到实时副本发生变化或你选择再次显示。",
       "conflictingBackupsTitle": "冲突的备份副本",
       "conflictingBackupsAbout": "此壁纸在两个备份库中都有副本，而且内容不同。WeRePKG 不会自动删除或替换其中任何一个。",
+      "conflictingBackupsIgnoredAbout": "这些冲突的备份副本已被忽略。程序不会自动删除或替换任何副本；当备份依据发生变化或你选择再次显示时，此检测会重新出现。",
       "comparisonUnavailableTitle": "无法完成比较",
       "comparisonUnavailableAbout": "WeRePKG 无法安全确认此实时壁纸与备份是否仍然一致。在重新扫描能够完成比较之前，不会提供自动操作。"
     },
@@ -114,7 +116,8 @@
       "restoreTitle": "恢复壁纸？",
       "recycleTitle": "移除空文件夹或垃圾文件夹？",
       "ignoreUpdateTitle": "忽略更新？",
-      "showAgainTitle": "取消忽略更新？",
+      "ignoreReconcileTitle": "忽略检测？",
+      "showAgainTitle": "再次显示已忽略的检测？",
       "backUpOne": "将此实时壁纸复制到对应的备份文件夹？现有备份文件会更新，不会删除任何文件。",
       "backUpMany": "备份这 {count} 个实时壁纸？现有备份文件会更新，不会删除任何文件。",
       "updateOne": "将此壁纸的备份更新到最新状态，并同步到对应的备份库？只有在对应备份成功创建后，才会将放错位置的备份移到回收站。",
@@ -125,8 +128,10 @@
       "recycleMany": "将这 {count} 个壁纸的空文件夹或垃圾文件夹移到回收站？每个目标都会再次检查。",
       "ignoreUpdateOne": "将此内容更新移到“已忽略”？不会修改任何壁纸文件。实时版本变化后会自动重新出现。",
       "ignoreUpdateMany": "将这 {count} 个内容更新移到“已忽略”？不会修改任何壁纸文件。每个项目在实时版本变化后都会自动重新出现。",
-      "showAgainOne": "取消忽略此更新，使其再次显示在“更新 / 同步”中？不会更改壁纸文件。",
-      "showAgainMany": "取消忽略这 {count} 个更新，使其再次显示在“更新 / 同步”中？不会更改壁纸文件。",
+      "ignoreReconcileOne": "将此壁纸可忽略的“需要协调”检测移到“已忽略”？不会修改任何壁纸文件。检测依据变化后会自动重新出现。",
+      "showReconcileAgainOne": "将此壁纸已忽略的“需要协调”检测重新显示在“需要协调”中？不会修改任何壁纸文件。",
+      "showAgainOne": "再次显示此已忽略的检测？不会修改任何壁纸文件。",
+      "showAgainMany": "再次显示这 {count} 个已忽略的检测？不会修改任何壁纸文件。",
       "wallpaper": "壁纸",
       "all": "{action}全部 {count} 个",
       "done": "已完成 {count} 个",
@@ -150,6 +155,11 @@
       "detailsEmpty": "此项目被判定为真正的空文件夹：对应的可丢弃文件夹中没有任何文件。",
       "detailsShader": "此项目被判定为仅着色器缓存：其中只有可重新生成的着色器数据，没有壁纸主体文件。",
       "detailsMixed": "此项目对应多个可丢弃文件夹，其中同时包含真正的空文件夹和仅着色器缓存的文件夹。"
+    },
+    "ignoredGroup": {
+      "updateTitle": "更新",
+      "updateAbout": "已忽略的内容更新。必须执行的同步（Sync）仍会保持活动状态。",
+      "reconcileAbout": "已忽略的“需要协调”检测。没有修改任何壁纸文件。"
     }
   },
   "integrity": {

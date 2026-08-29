@@ -228,11 +228,17 @@ class BackupCopyDifference {
     this.differentSize = const <String>[],
     this.onlyWorkshop = const <String>[],
     this.onlyMyProjects = const <String>[],
+    this.evidenceFingerprint,
   });
 
   final List<String> differentSize;
   final List<String> onlyWorkshop;
   final List<String> onlyMyProjects;
+
+  /// Cheap scan evidence used only to decide whether an ignored conflict is
+  /// still the same detection. It contains paths and observed sizes, never file
+  /// contents, so adding it does not make the broad scan more expensive.
+  final String? evidenceFingerprint;
 
   int get total =>
       differentSize.length + onlyWorkshop.length + onlyMyProjects.length;
@@ -261,6 +267,8 @@ class ReconcileEntry {
     required this.backupWorkshop,
     required this.backupMyProjects,
     this.additionalReasons = const <BackupReconcileReason>{},
+    this.ignoredReasons = const <BackupReconcileReason>{},
+    this.issueFingerprints = const <BackupReconcileReason, String>{},
     this.backupDifference,
   });
 
@@ -268,10 +276,25 @@ class ReconcileEntry {
   final BackupReconcileReason reason;
   final Set<BackupReconcileReason> additionalReasons;
 
+  /// Reasons the user moved to Ignored while their evidence still matches.
+  final Set<BackupReconcileReason> ignoredReasons;
+
+  /// Stable scan evidence for reasons that can be ignored.
+  final Map<BackupReconcileReason, String> issueFingerprints;
+
   Set<BackupReconcileReason> get reasons => <BackupReconcileReason>{
     reason,
     ...additionalReasons,
   };
+
+  Set<BackupReconcileReason> get activeReasons =>
+      reasons.difference(ignoredReasons);
+
+  BackupReconcileReason? get activePrimaryReason =>
+      _primaryReconcileReason(activeReasons);
+
+  BackupReconcileReason? get ignoredPrimaryReason =>
+      _primaryReconcileReason(ignoredReasons);
 
   /// What each live copy would read as an ordinary card, one entry per live
   /// library. Carried here so a wallpaper waiting to be reconciled still shows
@@ -286,7 +309,7 @@ class ReconcileEntry {
   bool get liveMyProjects => states.containsKey(WallpaperLibrary.myProjects);
 
   BackupIssueEvidence get evidence => BackupIssueEvidence(
-    reconcileReasons: reasons,
+    reconcileReasons: activeReasons,
     states: states,
     liveWorkshop: liveWorkshop,
     liveMyProjects: liveMyProjects,
@@ -321,6 +344,8 @@ class ReconcileEntry {
       other.name == name &&
       other.reason == reason &&
       setEquals(other.additionalReasons, additionalReasons) &&
+      setEquals(other.ignoredReasons, ignoredReasons) &&
+      mapEquals(other.issueFingerprints, issueFingerprints) &&
       other.backupWorkshop == backupWorkshop &&
       other.backupMyProjects == backupMyProjects &&
       other.backupDifference == backupDifference &&
@@ -338,6 +363,24 @@ class ReconcileEntry {
         (BackupReconcileReason a, BackupReconcileReason b) =>
             a.index.compareTo(b.index),
       ),
+    ),
+    Object.hashAll(
+      ignoredReasons.toList()..sort(
+        (BackupReconcileReason a, BackupReconcileReason b) =>
+            a.index.compareTo(b.index),
+      ),
+    ),
+    Object.hashAll(
+      (issueFingerprints.entries.toList()..sort(
+            (
+              MapEntry<BackupReconcileReason, String> a,
+              MapEntry<BackupReconcileReason, String> b,
+            ) => a.key.index.compareTo(b.key.index),
+          ))
+          .map(
+            (MapEntry<BackupReconcileReason, String> entry) =>
+                Object.hash(entry.key, entry.value),
+          ),
     ),
     backupWorkshop,
     backupMyProjects,
@@ -357,10 +400,40 @@ class ReconcileEntry {
 /// Versions are opaque: Steam's manifest for a Workshop item, a size and mtime
 /// digest for a myprojects one. Comparing them needs no idea which is which.
 class BackupRecord {
-  const BackupRecord({this.backedUpVersion, this.dismissedVersion});
+  const BackupRecord({
+    this.backedUpVersion,
+    this.dismissedVersion,
+    this.ignoredReconcileIssues = const <BackupReconcileReason, String>{},
+  });
 
   final String? backedUpVersion;
   final String? dismissedVersion;
+  final Map<BackupReconcileReason, String> ignoredReconcileIssues;
+}
+
+/// Metadata key for name-level Reconcile ignores. Normal card records include
+/// a library, so this namespace cannot collide with them.
+String reconcileIgnoreRecordId(String name) =>
+    '@reconcile/${name.toLowerCase()}';
+
+bool reconcileReasonCanBeIgnored(BackupReconcileReason reason) =>
+    reason == BackupReconcileReason.duplicateLiveCopies ||
+    reason == BackupReconcileReason.conflictingBackupCopies;
+
+const List<BackupReconcileReason> _reconcileReasonPriority =
+    <BackupReconcileReason>[
+      BackupReconcileReason.duplicateLiveCopies,
+      BackupReconcileReason.conflictingBackupCopies,
+      BackupReconcileReason.comparisonUnavailable,
+    ];
+
+BackupReconcileReason? _primaryReconcileReason(
+  Set<BackupReconcileReason> reasons,
+) {
+  for (final BackupReconcileReason reason in _reconcileReasonPriority) {
+    if (reasons.contains(reason)) return reason;
+  }
+  return null;
 }
 
 /// A file sitting directly in a wallpaper folder.
@@ -627,6 +700,29 @@ BackupDiffResult backupDiff({
     ...backupM.keys,
   };
 
+  String token(String? value) =>
+      value == null ? '-1:' : '${value.length}:$value';
+
+  String? issueFingerprint(
+    BackupReconcileReason reason, {
+    required String key,
+  }) {
+    switch (reason) {
+      case BackupReconcileReason.duplicateLiveCopies:
+        return 'duplicate-live:${token(versionsW[key])}${token(versionsM[key])}';
+      case BackupReconcileReason.conflictingBackupCopies:
+        final BackupCopyDifference? difference = differences[key];
+        if (difference == null) return null;
+        return difference.evidenceFingerprint ??
+            'conflicting-backups:'
+                'size=${difference.differentSize.join('|')};'
+                'workshop=${difference.onlyWorkshop.join('|')};'
+                'myprojects=${difference.onlyMyProjects.join('|')}';
+      case BackupReconcileReason.comparisonUnavailable:
+        return null;
+    }
+  }
+
   for (final String key in keys) {
     final String? lw = liveW[key];
     final String? lm = liveM[key];
@@ -703,13 +799,32 @@ BackupDiffResult backupDiff({
     }
 
     if (rule == BackupRuleKind.reconcile) {
+      final String name = lw ?? lm!;
+      final Map<BackupReconcileReason, String> fingerprints =
+          <BackupReconcileReason, String>{
+            for (final BackupReconcileReason reason
+                in decision.reconcileReasons)
+              if (reconcileReasonCanBeIgnored(reason))
+                if (issueFingerprint(reason, key: key) case final String value)
+                  reason: value,
+          };
+      final Map<BackupReconcileReason, String> stored =
+          byId[reconcileIgnoreRecordId(name)]?.ignoredReconcileIssues ??
+          const <BackupReconcileReason, String>{};
+      final Set<BackupReconcileReason> ignoredReasons = <BackupReconcileReason>{
+        for (final MapEntry<BackupReconcileReason, String> entry
+            in fingerprints.entries)
+          if (stored[entry.key] == entry.value) entry.key,
+      };
       reconcile.add(
         ReconcileEntry(
-          name: lw ?? lm!,
+          name: name,
           reason: decision.reconcileReason!,
           additionalReasons: decision.reconcileReasons.difference(
             <BackupReconcileReason>{decision.reconcileReason!},
           ),
+          ignoredReasons: ignoredReasons,
+          issueFingerprints: fingerprints,
           states: states,
           backupWorkshop: bw != null,
           backupMyProjects: bm != null,

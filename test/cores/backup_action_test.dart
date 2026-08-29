@@ -270,6 +270,73 @@ void main() {
     expect(other.existsSync(), isTrue);
   });
 
+  test('reconcile ignored detections can be restored independently', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Map<BackupReconcileReason, String> fingerprints =
+        <BackupReconcileReason, String>{
+          BackupReconcileReason.duplicateLiveCopies: 'live-fingerprint',
+          BackupReconcileReason.conflictingBackupCopies: 'backup-fingerprint',
+        };
+
+    BackupActionResult result = await ignoreReconcileIssues(
+      name: 'demo',
+      fingerprints: fingerprints,
+      backupRoot: backupRoot.path,
+    );
+    BackupRecord record = (await readBackupRecords(
+      backupRoot.path,
+    ))[reconcileIgnoreRecordId('demo')]!;
+    expect(result, (changed: true, error: null));
+    expect(record.ignoredReconcileIssues, fingerprints);
+
+    result = await showReconcileIssuesAgain(
+      name: 'demo',
+      reasons: const <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+      },
+      backupRoot: backupRoot.path,
+    );
+    record = (await readBackupRecords(
+      backupRoot.path,
+    ))[reconcileIgnoreRecordId('demo')]!;
+    expect(result, (changed: true, error: null));
+    expect(record.ignoredReconcileIssues, const <BackupReconcileReason, String>{
+      BackupReconcileReason.conflictingBackupCopies: 'backup-fingerprint',
+    });
+
+    result = await showReconcileIssuesAgain(
+      name: 'demo',
+      reasons: const <BackupReconcileReason>{
+        BackupReconcileReason.conflictingBackupCopies,
+      },
+      backupRoot: backupRoot.path,
+    );
+    expect(result, (changed: true, error: null));
+    expect(
+      (await readBackupRecords(
+        backupRoot.path,
+      )).containsKey(reconcileIgnoreRecordId('demo')),
+      isFalse,
+    );
+  });
+
+  test('comparison-unavailable cannot be saved as ignored', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+
+    final BackupActionResult result = await ignoreReconcileIssues(
+      name: 'demo',
+      fingerprints: const <BackupReconcileReason, String>{
+        BackupReconcileReason.comparisonUnavailable: 'not-stable-evidence',
+      },
+      backupRoot: backupRoot.path,
+    );
+
+    expect(result, (changed: false, error: null));
+    expect(await readBackupRecords(backupRoot.path), isEmpty);
+  });
+
   test('show update again clears only the dismissal', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
       ..createSync();

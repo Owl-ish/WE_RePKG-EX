@@ -31,13 +31,15 @@
     "reconcile": "Needs reconciling",
     "reconcileAbout": "These names need your decision. The live source may be ambiguous, backup copies may conflict, or a required comparison could not finish safely. Automatic cleanup stops here rather than guessing.",
     "ignored": "Ignored",
-    "ignoredAbout": "Content updates you chose to ignore. Files remain unchanged, and an update returns automatically when its live wallpaper changes or when you show it again.",
+    "ignoredAbout": "Detections you chose to ignore. Files remain unchanged; detections return when their evidence changes or when you show them again.",
     "reconcileReason": {
       "duplicateLiveTitle": "Duplicate live copies",
       "duplicateLiveAbout": "This wallpaper exists in both Live {location1} and {location2} folders. WeRePKG will not guess which live copy should be authoritative.",
       "duplicateLiveGroupAbout": "The same wallpaper was detected in more than one live folder. Open Details to review the detected locations.",
+      "duplicateLiveIgnoredAbout": "This wallpaper exists in both Live {location1} and {location2} folders. This detection is ignored until the live copies change or you show it again.",
       "conflictingBackupsTitle": "Conflicting backup copies",
       "conflictingBackupsAbout": "This wallpaper has backup copies in both backup libraries, and those copies differ. WeRePKG will not delete or replace either copy automatically.",
+      "conflictingBackupsIgnoredAbout": "These conflicting backup copies are ignored. Neither copy will be deleted or replaced automatically; the detection returns if the backup evidence changes or you show it again.",
       "comparisonUnavailableTitle": "Comparison unavailable",
       "comparisonUnavailableAbout": "WeRePKG could not safely confirm whether this live wallpaper and its backup still match. No automatic action is offered until a rescan can complete the comparison."
     },
@@ -114,7 +116,8 @@
       "restoreTitle": "Restore wallpaper?",
       "recycleTitle": "Remove empty or junk folders?",
       "ignoreUpdateTitle": "Ignore update?",
-      "showAgainTitle": "Undismiss update?",
+      "ignoreReconcileTitle": "Ignore detection?",
+      "showAgainTitle": "Show ignored detection again?",
       "backUpOne": "Copy this live wallpaper to its matching backup folder? Existing backup files are updated; nothing is deleted.",
       "backUpMany": "Back up these {count} live wallpapers? Existing backup files are updated; nothing is deleted.",
       "updateOne": "Bring this wallpaper's backup up to date and into the matching backup library? A misplaced backup is recycled only after the matching backup is created successfully.",
@@ -125,8 +128,10 @@
       "recycleMany": "Move empty or junk folders for these {count} wallpapers to the Recycle Bin? Each target will be checked again first.",
       "ignoreUpdateOne": "Move this content update to Ignored? No wallpaper files will change. It returns automatically when the live version changes.",
       "ignoreUpdateMany": "Move these {count} content updates to Ignored? No wallpaper files will change. Each returns automatically when its live version changes.",
-      "showAgainOne": "Undismiss this update so it appears under Update / Sync again? No wallpaper files will change.",
-      "showAgainMany": "Undismiss these {count} updates so they appear under Update / Sync again? No wallpaper files will change.",
+      "ignoreReconcileOne": "Move the ignorable Reconcile detection(s) for this wallpaper to Ignored? No wallpaper files will change. A detection returns automatically if its evidence changes.",
+      "showReconcileAgainOne": "Return this wallpaper's ignored Reconcile detection to Needs reconciling? No wallpaper files will change.",
+      "showAgainOne": "Show this ignored detection again? No wallpaper files will change.",
+      "showAgainMany": "Show these {count} ignored detections again? No wallpaper files will change.",
       "wallpaper": "Wallpaper",
       "all": "{action} all {count}",
       "done": "Completed {count}",
@@ -150,6 +155,11 @@
       "detailsEmpty": "This tile is truly empty: its disposable folder contains no files.",
       "detailsShader": "This tile is shader cache only: it contains rebuildable shader data and no wallpaper payload.",
       "detailsMixed": "This tile represents multiple disposable folders, including both truly empty and shader-cache-only folders."
+    },
+    "ignoredGroup": {
+      "updateTitle": "Updates",
+      "updateAbout": "Ignored content updates. Required Sync work still stays active.",
+      "reconcileAbout": "Ignored Reconcile detections. No wallpaper files were changed."
     }
   },
   "integrity": {
