@@ -790,6 +790,23 @@ typedef _FolderComparison = ({
   _FolderDifference? difference,
 });
 
+/// Exact file-level differences between two wallpaper folders.
+///
+/// Broad backup scans compare names and sizes for speed. Detail views use this
+/// result when the user explicitly asks to inspect file contents.
+typedef FolderFileChanges = ({
+  List<String> modified,
+  List<String> onlyFirst,
+  List<String> onlySecond,
+});
+
+/// Update-facing names for an exact live-to-backup comparison.
+typedef BackupFileChanges = ({
+  List<String> modified,
+  List<String> onlyLive,
+  List<String> onlyBackup,
+});
+
 Future<_BackupCopyComparisons> _compareDuplicateBackups({
   required String? workshopPath,
   required String? myProjectsPath,
@@ -1196,6 +1213,78 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
   } on FileSystemException {
     return null;
   }
+}
+
+/// Compares two complete wallpaper folders, including same-size file contents.
+///
+/// The comparison streams file contents in fixed-size chunks and returns null
+/// when either tree cannot be read reliably.
+Future<FolderFileChanges?> compareFolderFileChanges({
+  required String firstFolder,
+  required String secondFolder,
+}) async {
+  final Directory first = Directory(firstFolder);
+  final Directory second = Directory(secondFolder);
+  final (
+    Map<String, ({String display, int size})>? firstFiles,
+    Map<String, ({String display, int size})>? secondFiles,
+  ) = await (
+    _backupFileManifest(first),
+    _backupFileManifest(second),
+  ).wait;
+  if (firstFiles == null || secondFiles == null) return null;
+
+  final List<String> modified = <String>[];
+  final List<String> onlyFirst = <String>[];
+  final List<String> onlySecond = <String>[];
+  final Set<String> keys = <String>{...firstFiles.keys, ...secondFiles.keys};
+  for (final String key in keys) {
+    final ({String display, int size})? firstFile = firstFiles[key];
+    final ({String display, int size})? secondFile = secondFiles[key];
+    if (firstFile == null) {
+      onlySecond.add(secondFile!.display);
+      continue;
+    }
+    if (secondFile == null) {
+      onlyFirst.add(firstFile.display);
+      continue;
+    }
+    if (firstFile.size != secondFile.size) {
+      modified.add(firstFile.display);
+      continue;
+    }
+    final bool? same = await filesHaveSameContents(
+      File(path.join(first.path, firstFile.display)),
+      File(path.join(second.path, secondFile.display)),
+    );
+    if (same == null) return null;
+    if (!same) modified.add(firstFile.display);
+  }
+
+  void sortPaths(List<String> paths) => paths.sort(
+    (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+  );
+  sortPaths(modified);
+  sortPaths(onlyFirst);
+  sortPaths(onlySecond);
+  return (modified: modified, onlyFirst: onlyFirst, onlySecond: onlySecond);
+}
+
+/// Compares the live wallpaper with the backup that Update will replace.
+Future<BackupFileChanges?> compareBackupFileChanges({
+  required String liveFolder,
+  required String backupFolder,
+}) async {
+  final FolderFileChanges? changes = await compareFolderFileChanges(
+    firstFolder: liveFolder,
+    secondFolder: backupFolder,
+  );
+  if (changes == null) return null;
+  return (
+    modified: changes.modified,
+    onlyLive: changes.onlyFirst,
+    onlyBackup: changes.onlySecond,
+  );
 }
 
 /// Compares two files in fixed-size chunks without buffering whole payloads.

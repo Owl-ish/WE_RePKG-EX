@@ -1016,6 +1016,7 @@ class _GridState extends ConsumerState<_Grid> {
             key: ValueKey<String>(ids[index]),
             width: geometry.tile,
             tile: tile,
+            backupRoot: backupRoot,
             folders: cardFolders(
               library: tile.card.library,
               name: tile.card.name,
@@ -1193,6 +1194,7 @@ class _GridState extends ConsumerState<_Grid> {
                     width: geometry.tile,
                     tile: tile,
                     junkKind: kind,
+                    backupRoot: backupRoot,
                     folders: cardFolders(
                       library: tile.card.library,
                       name: tile.card.name,
@@ -1271,6 +1273,7 @@ class _GridState extends ConsumerState<_Grid> {
               width: width,
               tile: tile,
               updatePlan: scan.updates[tile.card],
+              backupRoot: backupRoot,
               folders: cardFolders(
                 library: tile.card.library,
                 name: tile.card.name,

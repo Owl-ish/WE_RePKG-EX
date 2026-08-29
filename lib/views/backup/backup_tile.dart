@@ -62,6 +62,7 @@ class BackupTileView extends StatelessWidget {
     this.onAction,
     this.junkKind,
     this.updatePlan,
+    this.backupRoot,
   });
 
   final double width;
@@ -74,6 +75,7 @@ class BackupTileView extends StatelessWidget {
   final VoidCallback? onAction;
   final WallpaperJunkKind? junkKind;
   final BackupUpdatePlan? updatePlan;
+  final String? backupRoot;
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +121,7 @@ class BackupTileView extends StatelessWidget {
       onAction: onAction,
       junkKind: junkKind,
       updatePlan: plan,
+      backupRoot: backupRoot,
       backupCard: tile.card,
       detailText: _stateDetailText(tile.state),
       badges: <TileBadgeData>[
@@ -350,6 +353,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     return libraryPath == null ? null : path.join(libraryPath, name);
   }
 
+  String? _updateBackupFolder() {
+    final BackupUpdatePlan? plan = widget.updatePlan;
+    final BackupCard? card = widget.backupCard;
+    if (plan == null || !plan.updateContent || card == null) return null;
+    if (widget.folders.backup case final String existing) return existing;
+    final WallpaperLibrary library = plan.sync?.from ?? card.library;
+    return _backupFolderFor(library, card.name);
+  }
+
   _ReconcileFolders _reconcileFolders(ReconcileEntry entry) {
     final BackupIssueEvidence evidence = entry.evidence;
     return (
@@ -410,6 +422,11 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final _ReconcileFolders? reconcileFolders = reconcileEntry == null
         ? null
         : _reconcileFolders(reconcileEntry);
+    final String? updateBackupFolder = _updateBackupFolder();
+    final bool updateNeedsFocus =
+        widget.updatePlan?.updateContent == true &&
+        widget.folders.live != null &&
+        updateBackupFolder != null;
     await showWallpaperDetail(
       context,
       wallpaper,
@@ -419,7 +436,9 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       layout: widget.junkKind != null
           ? const DetailDialogLayout()
           : _backupDetailLayout(
-              extraCanFocus: reconcileNeedsFocus,
+              extraCanFocus: reconcileEntry != null
+                  ? reconcileNeedsFocus
+                  : updateNeedsFocus,
               hasSecondAction:
                   reconcileEntry != null &&
                   (widget.reconcileIgnored ||
@@ -458,12 +477,21 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               onRequestFocus: requestFocus,
             )
           : widget.updatePlan != null && widget.backupCard != null
-          ? (BuildContext context, Color foreground, bool _, VoidCallback _) =>
-                UpdatePlanDetailContent(
-                  plan: widget.updatePlan!,
-                  card: widget.backupCard!,
-                  foreground: foreground,
-                )
+          ? (
+              BuildContext context,
+              Color foreground,
+              bool focused,
+              VoidCallback requestFocus,
+            ) => UpdatePlanDetailContent(
+              plan: widget.updatePlan!,
+              card: widget.backupCard!,
+              liveFolder: widget.folders.live,
+              backupFolder: updateBackupFolder,
+              foreground: foreground,
+              focused: focused,
+              needsFocus: updateNeedsFocus,
+              onRequestFocus: requestFocus,
+            )
           : widget.detailText == null
           ? null
           : (BuildContext context, Color foreground, bool _, VoidCallback _) =>

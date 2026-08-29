@@ -225,6 +225,18 @@ class AppI10n {
   static const String backupDetailOnlyWorkshop = 'backup.detail.onlyWorkshop';
   static const String backupDetailOnlyMyProjects =
       'backup.detail.onlyMyProjects';
+  static const String backupDetailModified = 'backup.detail.modified';
+  static const String backupDetailFileChanges = 'backup.detail.fileChanges';
+  static const String backupDetailExpandFileChanges =
+      'backup.detail.expandFileChanges';
+  static const String backupDetailComparingFiles =
+      'backup.detail.comparingFiles';
+  static const String backupDetailFileComparisonUnavailable =
+      'backup.detail.fileComparisonUnavailable';
+  static const String backupDetailNoFileDifferences =
+      'backup.detail.noFileDifferences';
+  static const String backupDetailAddedFiles = 'backup.detail.addedFiles';
+  static const String backupDetailRemovedFiles = 'backup.detail.removedFiles';
   static const String backupDetailUpdateToLive = 'backup.detail.updateToLive';
   static const String backupDetailSyncWillMove = 'backup.detail.syncWillMove';
   static const String backupDetailSyncWillKeep = 'backup.detail.syncWillKeep';
