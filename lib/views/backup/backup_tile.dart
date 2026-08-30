@@ -10,6 +10,7 @@ import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/backup.dart';
@@ -301,9 +302,9 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  List<DetailAction> _actions() => <DetailAction>[
+  List<DetailAction> _actions({VoidCallback? primaryAction}) => <DetailAction>[
     if (widget.action case final BackupAction action)
-      if (widget.onAction case final VoidCallback onAction)
+      if (primaryAction ?? widget.onAction case final VoidCallback onAction)
         DetailAction(
           label: widget.actionLabelOverride ?? backupActionLabel(action),
           onPressed: onAction,
@@ -446,80 +447,118 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         widget.updatePlan?.updateContent == true &&
         widget.folders.live != null &&
         updateBackupFolder != null;
-    await showWallpaperDetail(
-      context,
-      wallpaper,
-      origin: origin,
-      actions: _actions(),
-      includePreview: widget.junkKind == null,
-      layout: widget.junkKind != null
-          ? const DetailDialogLayout()
-          : _backupDetailLayout(
-              extraCanFocus: reconcileEntry != null
-                  ? reconcileNeedsFocus || comparesDuplicateLive
-                  : updateNeedsFocus,
-              hasSecondAction:
-                  reconcileEntry != null &&
-                  (widget.reconcileIgnored ||
-                      reconcileEntry.activeReasons.any(
-                        (BackupReconcileReason reason) =>
-                            reconcileReasonCanBeIgnored(reason) &&
-                            reconcileEntry.issueFingerprints.containsKey(
-                              reason,
-                            ),
-                      )),
-            ),
-      extraContentBuilder: widget.junkKind != null
-          ? (BuildContext context, Color foreground, bool _, VoidCallback _) =>
-                JunkDetailContent(
-                  folderPath: folder,
-                  kind: widget.junkKind!,
-                  library: widget.backupCard!.library,
-                  foreground: foreground,
-                )
-          : widget.reconcileEntry != null
-          ? (
-              BuildContext context,
-              Color foreground,
-              bool _,
-              VoidCallback requestFocus,
-            ) => ReconcileDetailContent(
-              entry: widget.reconcileEntry!,
-              primaryReasonOverride: widget.reconcileReasonOverride,
-              foreground: foreground,
-              needsFocus: reconcileNeedsFocus,
-              ignoredMode: widget.reconcileIgnored,
-              workshopLiveFolder: reconcileWorkshopLive,
-              myProjectsLiveFolder: reconcileMyProjectsLive,
-              workshopBackupFolder: reconcileFolders?.workshopBackup,
-              myProjectsBackupFolder: reconcileFolders?.myProjectsBackup,
-              loadDuplicateLiveChanges: loadDuplicateLiveChanges,
-              onRequestFocus: requestFocus,
-            )
-          : widget.updatePlan != null && widget.backupCard != null
-          ? (
-              BuildContext context,
-              Color foreground,
-              bool focused,
-              VoidCallback requestFocus,
-            ) => UpdatePlanDetailContent(
-              plan: widget.updatePlan!,
-              card: widget.backupCard!,
-              liveFolder: widget.folders.live,
+    final BackupUpdateSelection? updateSelection = updateNeedsFocus
+        ? BackupUpdateSelection(
+            compareBackupFileChanges(
+              liveFolder: widget.folders.live!,
               backupFolder: updateBackupFolder,
-              foreground: foreground,
-              focused: focused,
-              needsFocus: updateNeedsFocus,
-              onRequestFocus: requestFocus,
-            )
-          : widget.detailText == null
-          ? null
-          : (BuildContext context, Color foreground, bool _, VoidCallback _) =>
-                BackupDetailContent(
-                  text: widget.detailText!,
-                  foreground: foreground,
-                ),
-    );
+            ),
+          )
+        : null;
+    VoidCallback? detailPrimaryAction;
+    if (updateSelection != null &&
+        widget.action == BackupAction.update &&
+        widget.backupCard != null) {
+      detailPrimaryAction = () async {
+        final BackupSelectiveUpdatePlan? selection = await updateSelection
+            .buildPlan();
+        if (!mounted) return;
+        if (selection == null) {
+          showErrorToast(tr(AppI10n.backupDetailFileComparisonUnavailable));
+          return;
+        }
+        await applyBackupAction(context, BackupAction.update, <BackupCard>[
+          widget.backupCard!,
+        ], selectiveUpdate: selection);
+      };
+    }
+    try {
+      await showWallpaperDetail(
+        context,
+        wallpaper,
+        origin: origin,
+        actions: _actions(primaryAction: detailPrimaryAction),
+        includePreview: widget.junkKind == null,
+        layout: widget.junkKind != null
+            ? const DetailDialogLayout()
+            : _backupDetailLayout(
+                extraCanFocus: reconcileEntry != null
+                    ? reconcileNeedsFocus || comparesDuplicateLive
+                    : updateNeedsFocus,
+                hasSecondAction:
+                    reconcileEntry != null &&
+                    (widget.reconcileIgnored ||
+                        reconcileEntry.activeReasons.any(
+                          (BackupReconcileReason reason) =>
+                              reconcileReasonCanBeIgnored(reason) &&
+                              reconcileEntry.issueFingerprints.containsKey(
+                                reason,
+                              ),
+                        )),
+              ),
+        extraContentBuilder: widget.junkKind != null
+            ? (
+                BuildContext context,
+                Color foreground,
+                bool _,
+                VoidCallback _,
+              ) => JunkDetailContent(
+                folderPath: folder,
+                kind: widget.junkKind!,
+                library: widget.backupCard!.library,
+                foreground: foreground,
+              )
+            : widget.reconcileEntry != null
+            ? (
+                BuildContext context,
+                Color foreground,
+                bool _,
+                VoidCallback requestFocus,
+              ) => ReconcileDetailContent(
+                entry: widget.reconcileEntry!,
+                primaryReasonOverride: widget.reconcileReasonOverride,
+                foreground: foreground,
+                needsFocus: reconcileNeedsFocus,
+                ignoredMode: widget.reconcileIgnored,
+                workshopLiveFolder: reconcileWorkshopLive,
+                myProjectsLiveFolder: reconcileMyProjectsLive,
+                workshopBackupFolder: reconcileFolders?.workshopBackup,
+                myProjectsBackupFolder: reconcileFolders?.myProjectsBackup,
+                loadDuplicateLiveChanges: loadDuplicateLiveChanges,
+                onRequestFocus: requestFocus,
+              )
+            : widget.updatePlan != null && widget.backupCard != null
+            ? (
+                BuildContext context,
+                Color foreground,
+                bool focused,
+                VoidCallback requestFocus,
+              ) => UpdatePlanDetailContent(
+                plan: widget.updatePlan!,
+                card: widget.backupCard!,
+                liveFolder: widget.folders.live,
+                backupFolder: updateBackupFolder,
+                foreground: foreground,
+                focused: focused,
+                needsFocus: updateNeedsFocus,
+                selection: updateSelection,
+                onRequestFocus: requestFocus,
+              )
+            : widget.detailText == null
+            ? null
+            : (
+                BuildContext context,
+                Color foreground,
+                bool _,
+                VoidCallback _,
+              ) => BackupDetailContent(
+                text: widget.detailText!,
+                foreground: foreground,
+              ),
+      );
+    } finally {
+      updateSelection?.dispose();
+    }
   }
 
   Widget _actionButton(BackupAction action, VoidCallback onAction) {

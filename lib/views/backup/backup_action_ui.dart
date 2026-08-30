@@ -117,6 +117,7 @@ Future<void> applyBackupAction(
   BackupAction action,
   List<BackupCard> cards, {
   BackupActionRunner? runAction,
+  BackupSelectiveUpdatePlan? selectiveUpdate,
 }) async {
   if (cards.isEmpty) return;
   final ProviderContainer container = ProviderScope.containerOf(
@@ -131,7 +132,9 @@ Future<void> applyBackupAction(
   final bool confirmed = await showConfirmDialog(
     title: tr(_title(action)),
     message: tr(
-      _message(action, targets.length == 1),
+      selectiveUpdate != null
+          ? AppI10n.backupActionSelectiveUpdateOne
+          : _message(action, targets.length == 1),
       namedArgs: <String, String>{'count': '${targets.length}'},
     ),
     confirmLabel: tr(_label(action)),
@@ -155,7 +158,12 @@ Future<void> applyBackupAction(
     for (final List<BackupCard> target in targets) {
       final BackupActionResult result = runAction != null
           ? await runAction(action, target)
-          : await _runOne(container, action, target);
+          : await _runOne(
+              container,
+              action,
+              target,
+              selectiveUpdate: selectiveUpdate,
+            );
       mutated = mutated || result.changed;
       if (result.error != null) {
         errors.add('${target.first.name}: ${result.error}');
@@ -198,8 +206,9 @@ Future<void> applyBackupAction(
 Future<BackupActionResult> _runOne(
   ProviderContainer container,
   BackupAction action,
-  List<BackupCard> cards,
-) => switch (action) {
+  List<BackupCard> cards, {
+  BackupSelectiveUpdatePlan? selectiveUpdate,
+}) => switch (action) {
   BackupAction.backUp || BackupAction.update => backUpWallpaper(
     card: cards.single,
     backupRoot: container.read(backupRootProvider),
@@ -207,6 +216,7 @@ Future<BackupActionResult> _runOne(
     liveMyProjectsPath: container.read(myProjectsLibraryProvider),
     acfPath: container.read(acfPathProvider),
     mirror: action == BackupAction.update,
+    selectiveUpdate: action == BackupAction.update ? selectiveUpdate : null,
   ),
   BackupAction.restore => restoreVanishedWallpaper(
     cards: cards,

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
+import 'package:we_repkg/views/backup/details/backup_update_selection.dart';
 import 'package:we_repkg/views/backup/details/detail_layout.dart';
 import 'package:we_repkg/views/backup/details/sync_details.dart';
 import 'package:we_repkg/views/backup/details/update_file_changes.dart';
@@ -18,6 +19,7 @@ class UpdatePlanDetailContent extends StatelessWidget {
     this.liveFolder,
     this.backupFolder,
     this.loadFileChanges,
+    this.selection,
     this.onRequestFocus,
   });
 
@@ -29,6 +31,7 @@ class UpdatePlanDetailContent extends StatelessWidget {
   final String? liveFolder;
   final String? backupFolder;
   final BackupFileChangesLoader? loadFileChanges;
+  final BackupUpdateSelection? selection;
   final VoidCallback? onRequestFocus;
 
   String _backupLabel(WallpaperLibrary library) {
@@ -102,6 +105,7 @@ class UpdatePlanDetailContent extends StatelessWidget {
               backupFolder: backupFolder!,
               foreground: foreground,
               loader: loadFileChanges,
+              selection: selection,
             ),
           ),
         if (!plan.updateContent && syncDetail != null)

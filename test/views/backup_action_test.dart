@@ -101,6 +101,39 @@ void main() {
     expect(calls, 0);
   });
 
+  testWidgets('selective update explains that only chosen changes apply', (
+    tester,
+  ) async {
+    final BuildContext context = await show(tester);
+    int calls = 0;
+    final BackupSelectiveUpdatePlan selection = BackupSelectiveUpdatePlan(
+      expectedChanges: (
+        modified: const <String>['project.json'],
+        onlyLive: const <String>[],
+        onlyBackup: const <String>['legacy.txt'],
+      ),
+      keptBackupFiles: const <String>{'legacy.txt'},
+    );
+    final Future<void> action = applyBackupAction(
+      context,
+      BackupAction.update,
+      const <BackupCard>[BackupCard(WallpaperLibrary.workshop, 'demo')],
+      selectiveUpdate: selection,
+      runAction: (BackupAction action, List<BackupCard> cards) async {
+        calls++;
+        return (changed: true, error: null);
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(AppI10n.backupActionSelectiveUpdateOne), findsOneWidget);
+    await tester.tap(find.text(AppI10n.backupActionUpdate));
+    await tester.pumpAndSettle();
+    await action;
+
+    expect(calls, 1);
+  });
+
   testWidgets('same-name vanished cards are restored as one target', (
     tester,
   ) async {

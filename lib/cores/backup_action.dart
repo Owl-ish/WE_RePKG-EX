@@ -17,9 +17,9 @@ typedef BackupTrash = Future<String?> Function(String folder);
 
 /// Copies a live wallpaper into its matching backup library.
 ///
-/// [mirror] is explicit so ordinary Back up remains non-destructive while
-/// Update can remove files that no longer exist in live. Cleanup happens only
-/// after copies finish and the source is still stable.
+/// Detailed Update can preserve selected old files. [mirror] is explicit so
+/// ordinary Back up remains non-destructive; Update/Sync enables it. Cleanup
+/// happens only after selected copies finish and the source is still stable.
 Future<BackupActionResult> backUpWallpaper({
   required BackupCard card,
   required String? backupRoot,
@@ -27,6 +27,7 @@ Future<BackupActionResult> backUpWallpaper({
   required String? liveMyProjectsPath,
   required String? acfPath,
   bool mirror = false,
+  BackupSelectiveUpdatePlan? selectiveUpdate,
   BackupTrash? trashFolder,
 }) async {
   final String? liveRoot = switch (card.library) {
@@ -81,6 +82,27 @@ Future<BackupActionResult> backUpWallpaper({
         !await backupFoldersEquivalent(destination, otherBackup)) {
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
+
+    final BackupSelectiveUpdatePlan? selection = selectiveUpdate;
+    if (selection != null) {
+      final Directory? comparisonBackup = destinationExisted
+          ? destination
+          : otherBackupExisted
+          ? otherBackup
+          : null;
+      if (comparisonBackup == null) {
+        return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+      }
+      final BackupFileChanges? current = await compareBackupFileChanges(
+        liveFolder: source.path,
+        backupFolder: comparisonBackup.path,
+      );
+      if (current == null ||
+          !backupFileChangesEqual(current, selection.expectedChanges)) {
+        return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+      }
+    }
+
     final String? before = await liveBackupVersion(
       card,
       liveFolder: source.path,
@@ -89,7 +111,22 @@ Future<BackupActionResult> backUpWallpaper({
     // A thrown copy can still have published files, so failures after this
     // point refresh instead of claiming the filesystem stayed unchanged.
     filesystemMayHaveChanged = true;
-    changed = await _copyFolderIncrementally(source, destination);
+
+    // A wrong-tree selective update needs the old backup as its starting point
+    // so files marked Keep survive the relocation into the canonical tree.
+    if (selection?.isPartial == true &&
+        !destinationExisted &&
+        otherBackupExisted) {
+      changed =
+          await _copyFolderIncrementally(otherBackup, destination) || changed;
+    }
+    changed =
+        await _copyFolderIncrementally(
+          source,
+          destination,
+          skippedRelativePaths: selection?.skippedCopies ?? const <String>{},
+        ) ||
+        changed;
     final String? afterCopies = await liveBackupVersion(
       card,
       liveFolder: source.path,
@@ -104,6 +141,7 @@ Future<BackupActionResult> backUpWallpaper({
           await _removeMirrorResidue(
             source: source,
             destination: destination,
+            keptRelativePaths: selection?.keptBackupFiles ?? const <String>{},
           ) ||
           changed;
     }
@@ -120,10 +158,16 @@ Future<BackupActionResult> backUpWallpaper({
       backupRoot,
     );
     final BackupRecord previous = records[card.id] ?? const BackupRecord();
-    records[card.id] = BackupRecord(
-      backedUpVersion: version ?? previous.backedUpVersion,
-      ignoredReconcileIssues: previous.ignoredReconcileIssues,
-    );
+    if (selection?.isPartial != true) {
+      final BackupRecord next = BackupRecord(
+        backedUpVersion: version ?? previous.backedUpVersion,
+      );
+      changed =
+          changed ||
+          next.backedUpVersion != previous.backedUpVersion ||
+          next.dismissedVersion != previous.dismissedVersion;
+      records[card.id] = next;
+    }
 
     // The matching copy and stable source are established before any
     // opposite-library backup is recycled.
@@ -134,6 +178,7 @@ Future<BackupActionResult> backUpWallpaper({
         trashFolder: trashFolder,
       );
       if (syncError == null) {
+        changed = true;
         final WallpaperLibrary otherLibrary = switch (card.library) {
           WallpaperLibrary.workshop => WallpaperLibrary.myProjects,
           WallpaperLibrary.myProjects => WallpaperLibrary.workshop,
@@ -142,7 +187,7 @@ Future<BackupActionResult> backUpWallpaper({
       }
     }
     await writeBackupRecords(backupRoot, records);
-    return (changed: true, error: syncError);
+    return (changed: changed, error: syncError);
   } catch (error) {
     return (changed: changed || filesystemMayHaveChanged, error: '$error');
   }
@@ -586,23 +631,26 @@ Future<Directory?> _preferredRestoreSource(
   return sources.isEmpty ? null : sources.first.folder;
 }
 
-/// Copies meaningful files without deleting residue already in the destination.
+/// Copies selected meaningful files without touching destination-only files.
 ///
-/// Rebuilt shaders are skipped, links are rejected, and unchanged files are
-/// left in place. Copied files keep the source modification time so reruns can
-/// skip them safely.
+/// Cleanup is a separate phase so a failed copy cannot delete the old backup
+/// first. Copied files keep source modification time for cheap reruns.
 Future<bool> _copyFolderIncrementally(
   Directory source,
-  Directory destination,
-) async {
-  bool changed = !await destination.exists();
+  Directory destination, {
+  Set<String> skippedRelativePaths = const <String>{},
+}) async {
   await destination.create(recursive: true);
+  final Set<String> skipped = _normalisedPaths(skippedRelativePaths);
+  bool changed = false;
   await for (final FileSystemEntity entity in source.list(
     recursive: true,
     followLinks: false,
   )) {
     final String relative = path.relative(entity.path, from: source.path);
-    if (isRebuiltShaderPath(relative)) continue;
+    if (isRebuiltShaderPath(relative) || skipped.contains(_pathKey(relative))) {
+      continue;
+    }
     if (entity is Link) {
       throw FileSystemException(tr(AppI10n.backupActionLinkFound), entity.path);
     }
@@ -625,8 +673,10 @@ Future<bool> _copyFolderIncrementally(
 Future<bool> _removeMirrorResidue({
   required Directory source,
   required Directory destination,
+  Set<String> keptRelativePaths = const <String>{},
 }) async {
   if (!await destination.exists()) return false;
+  final Set<String> kept = _normalisedPaths(keptRelativePaths);
   final Set<String> liveFiles = <String>{};
   await for (final FileSystemEntity entity in source.list(
     recursive: true,
@@ -655,7 +705,9 @@ Future<bool> _removeMirrorResidue({
     if (entity is Link) {
       throw FileSystemException(tr(AppI10n.backupActionLinkFound), entity.path);
     }
-    if (entity is! File || liveFiles.contains(_pathKey(relative))) continue;
+    if (entity is! File) continue;
+    final String key = _pathKey(relative);
+    if (liveFiles.contains(key) || kept.contains(key)) continue;
     await entity.delete();
     changed = true;
   }
@@ -675,6 +727,10 @@ Future<bool> _removeMirrorResidue({
   }
   return changed;
 }
+
+Set<String> _normalisedPaths(Iterable<String> paths) => <String>{
+  for (final String relative in paths) _pathKey(relative),
+};
 
 String _pathKey(String relative) =>
     relative.toLowerCase().replaceAll('/', r'\');

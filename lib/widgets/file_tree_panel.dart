@@ -262,3 +262,69 @@ class FileTreeGroup extends StatelessWidget {
     ),
   );
 }
+
+/// Two-way choice shown at the far right of a file row or group.
+///
+/// The tree owns presentation only. Callers define what reject and accept mean
+/// and provide their accessible descriptions.
+class FileTreeRowChoice extends StatelessWidget {
+  const FileTreeRowChoice({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+    required this.rejectTooltip,
+    required this.acceptTooltip,
+    required this.foreground,
+    this.rejectKey,
+    this.acceptKey,
+  });
+
+  final bool? selected;
+  final ValueChanged<bool> onChanged;
+  final String rejectTooltip;
+  final String acceptTooltip;
+  final Color foreground;
+  final Key? rejectKey;
+  final Key? acceptKey;
+
+  Widget _button({
+    required bool value,
+    required IconData icon,
+    required String tooltip,
+    required Key? key,
+  }) => SizedBox.square(
+    dimension: 28,
+    child: FileTreeTooltip(
+      message: tooltip,
+      child: IconButton(
+        key: key,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        onPressed: () => onChanged(value),
+        color: selected == value
+            ? foreground
+            : foreground.withValues(alpha: .35),
+        icon: Icon(icon, size: 17),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      _button(
+        value: false,
+        icon: Icons.close_rounded,
+        tooltip: rejectTooltip,
+        key: rejectKey,
+      ),
+      _button(
+        value: true,
+        icon: Icons.check_rounded,
+        tooltip: acceptTooltip,
+        key: acceptKey,
+      ),
+    ],
+  );
+}

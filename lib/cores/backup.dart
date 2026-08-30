@@ -816,6 +816,29 @@ typedef BackupFileChanges = ({
   List<String> onlyBackup,
 });
 
+/// Per-file exceptions chosen from one detailed Update comparison.
+///
+/// An empty exception set keeps the existing full-mirror behavior. The core
+/// rechecks [expectedChanges] immediately before applying these exceptions.
+class BackupSelectiveUpdatePlan {
+  const BackupSelectiveUpdatePlan({
+    required this.expectedChanges,
+    this.skippedCopies = const <String>{},
+    this.keptBackupFiles = const <String>{},
+  });
+
+  final BackupFileChanges expectedChanges;
+  final Set<String> skippedCopies;
+  final Set<String> keptBackupFiles;
+
+  bool get isPartial => skippedCopies.isNotEmpty || keptBackupFiles.isNotEmpty;
+}
+
+bool backupFileChangesEqual(BackupFileChanges a, BackupFileChanges b) =>
+    listEquals(a.modified, b.modified) &&
+    listEquals(a.onlyLive, b.onlyLive) &&
+    listEquals(a.onlyBackup, b.onlyBackup);
+
 Future<_BackupCopyComparisons> _compareDuplicateBackups({
   required String? workshopPath,
   required String? myProjectsPath,

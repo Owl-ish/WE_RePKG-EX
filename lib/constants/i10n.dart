@@ -248,6 +248,16 @@ class AppI10n {
       'backup.detail.noFileDifferences';
   static const String backupDetailAddedFiles = 'backup.detail.addedFiles';
   static const String backupDetailRemovedFiles = 'backup.detail.removedFiles';
+  static const String backupDetailApplyChange = 'backup.detail.applyChange';
+  static const String backupDetailKeepOld = 'backup.detail.keepOld';
+  static const String backupDetailRemoveBackupFile =
+      'backup.detail.removeBackupFile';
+  static const String backupDetailKeepBackupFile =
+      'backup.detail.keepBackupFile';
+  static const String backupDetailWillRemove = 'backup.detail.willRemove';
+  static const String backupDetailWillKeep = 'backup.detail.willKeep';
+  static const String backupDetailSelectAll = 'backup.detail.selectAll';
+  static const String backupDetailDeselectAll = 'backup.detail.deselectAll';
   static const String backupDetailUpdateToLive = 'backup.detail.updateToLive';
   static const String backupDetailSyncWillMove = 'backup.detail.syncWillMove';
   static const String backupDetailSyncWillKeep = 'backup.detail.syncWillKeep';
@@ -305,6 +315,8 @@ class AppI10n {
   static const String backupActionBackUpMany = 'backup.action.backUpMany';
   static const String backupActionUpdateOne = 'backup.action.updateOne';
   static const String backupActionUpdateMany = 'backup.action.updateMany';
+  static const String backupActionSelectiveUpdateOne =
+      'backup.action.selectiveUpdateOne';
   static const String backupActionRestoreOne = 'backup.action.restoreOne';
   static const String backupActionRestoreMany = 'backup.action.restoreMany';
   static const String backupActionRecycleOne = 'backup.action.recycleOne';

@@ -190,6 +190,223 @@ void main() {
     );
   });
 
+  test(
+    'selective update preserves rejected copies and kept removals',
+    () async {
+      final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
+        ..createSync();
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory live = Directory(path.join(liveRoot.path, 'demo'))
+        ..createSync();
+      File(
+        path.join(live.path, 'project.json'),
+      ).writeAsStringSync('{"new":true}');
+      File(path.join(live.path, 'new.txt')).writeAsStringSync('new');
+      final Directory backup = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(
+        path.join(backup.path, 'project.json'),
+      ).writeAsStringSync('{"old":true}');
+      File(path.join(backup.path, 'legacy.txt')).writeAsStringSync('keep me');
+      await writeBackupRecords(backupRoot.path, <String, BackupRecord>{
+        'myprojects/demo': const BackupRecord(
+          backedUpVersion: 'old-baseline',
+          dismissedVersion: 'old-dismissal',
+        ),
+      });
+      final BackupFileChanges expected = (await compareBackupFileChanges(
+        liveFolder: live.path,
+        backupFolder: backup.path,
+      ))!;
+
+      final result = await backUpWallpaper(
+        card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+        backupRoot: backupRoot.path,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveRoot.path,
+        acfPath: null,
+        mirror: true,
+        selectiveUpdate: BackupSelectiveUpdatePlan(
+          expectedChanges: expected,
+          skippedCopies: const <String>{'project.json'},
+          keptBackupFiles: const <String>{'legacy.txt'},
+        ),
+      );
+
+      expect(result, (changed: true, error: null));
+      expect(
+        File(path.join(backup.path, 'project.json')).readAsStringSync(),
+        '{"old":true}',
+      );
+      expect(File(path.join(backup.path, 'new.txt')).readAsStringSync(), 'new');
+      expect(
+        File(path.join(backup.path, 'legacy.txt')).readAsStringSync(),
+        'keep me',
+      );
+      final BackupRecord record = (await readBackupRecords(
+        backupRoot.path,
+      ))['myprojects/demo']!;
+      expect(record.backedUpVersion, 'old-baseline');
+      expect(record.dismissedVersion, 'old-dismissal');
+    },
+  );
+
+  test(
+    'selective update rejects a stale detail plan before mutation',
+    () async {
+      final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
+        ..createSync();
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory live = Directory(path.join(liveRoot.path, 'demo'))
+        ..createSync();
+      File(path.join(live.path, 'project.json')).writeAsStringSync('new');
+      final Directory backup = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(path.join(backup.path, 'project.json')).writeAsStringSync('old');
+      final BackupFileChanges expected = (await compareBackupFileChanges(
+        liveFolder: live.path,
+        backupFolder: backup.path,
+      ))!;
+      File(
+        path.join(live.path, 'added-after-details.txt'),
+      ).writeAsStringSync('later');
+
+      final result = await backUpWallpaper(
+        card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+        backupRoot: backupRoot.path,
+        liveWorkshopPath: null,
+        liveMyProjectsPath: liveRoot.path,
+        acfPath: null,
+        mirror: true,
+        selectiveUpdate: BackupSelectiveUpdatePlan(expectedChanges: expected),
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(
+        File(path.join(backup.path, 'project.json')).readAsStringSync(),
+        'old',
+      );
+      expect(
+        File(path.join(backup.path, 'added-after-details.txt')).existsSync(),
+        isFalse,
+      );
+    },
+  );
+
+  test('the whole scene.pkg can be kept without repacking it', () async {
+    final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
+      ..createSync();
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory live = Directory(path.join(liveRoot.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'scene.pkg')).writeAsStringSync('new package');
+    final Directory backup = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(backup.path, 'scene.pkg')).writeAsStringSync('old package');
+    final BackupFileChanges expected = (await compareBackupFileChanges(
+      liveFolder: live.path,
+      backupFolder: backup.path,
+    ))!;
+
+    final result = await backUpWallpaper(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: null,
+      liveMyProjectsPath: liveRoot.path,
+      acfPath: null,
+      mirror: true,
+      selectiveUpdate: BackupSelectiveUpdatePlan(
+        expectedChanges: expected,
+        skippedCopies: const <String>{'scene.pkg'},
+      ),
+    );
+
+    expect(result, (changed: false, error: null));
+    expect(
+      File(path.join(backup.path, 'scene.pkg')).readAsStringSync(),
+      'old package',
+    );
+  });
+
+  test(
+    'selective sync seeds the aligned backup before applying exceptions',
+    () async {
+      final Directory liveWorkshop = Directory(
+        path.join(temporary.path, 'live-workshop'),
+      )..createSync();
+      final Directory liveMyProjects = Directory(
+        path.join(temporary.path, 'live-myprojects'),
+      )..createSync();
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+        ..createSync();
+      File(
+        path.join(live.path, 'project.json'),
+      ).writeAsStringSync('new project');
+      File(path.join(live.path, 'new.txt')).writeAsStringSync('new file');
+      final Directory misplaced = Directory(
+        path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(
+        path.join(misplaced.path, 'project.json'),
+      ).writeAsStringSync('old project');
+      File(
+        path.join(misplaced.path, 'legacy.txt'),
+      ).writeAsStringSync('keep me');
+      final BackupFileChanges expected = (await compareBackupFileChanges(
+        liveFolder: live.path,
+        backupFolder: misplaced.path,
+      ))!;
+
+      final result = await backUpWallpaper(
+        card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+        backupRoot: backupRoot.path,
+        liveWorkshopPath: liveWorkshop.path,
+        liveMyProjectsPath: liveMyProjects.path,
+        acfPath: null,
+        mirror: true,
+        selectiveUpdate: BackupSelectiveUpdatePlan(
+          expectedChanges: expected,
+          skippedCopies: const <String>{'project.json'},
+          keptBackupFiles: const <String>{'legacy.txt'},
+        ),
+        trashFolder: (String claimed) async {
+          await Directory(claimed).delete(recursive: true);
+          return null;
+        },
+      );
+
+      final Directory aligned = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      );
+      expect(result, (changed: true, error: null));
+      expect(misplaced.existsSync(), isFalse);
+      expect(
+        File(path.join(aligned.path, 'project.json')).readAsStringSync(),
+        'old project',
+      );
+      expect(
+        File(path.join(aligned.path, 'legacy.txt')).readAsStringSync(),
+        'keep me',
+      );
+      expect(
+        File(path.join(aligned.path, 'new.txt')).readAsStringSync(),
+        'new file',
+      );
+    },
+  );
+
   test('update syncs a misplaced backup into the live library tree', () async {
     final Directory liveWorkshop = Directory(
       path.join(temporary.path, 'live-workshop'),

@@ -163,6 +163,56 @@ void main() {
     expect(find.byType(FileTreeCompareBar), findsNothing);
   });
 
+  testWidgets('Update choices keep rejected copies and backup-only files', (
+    WidgetTester tester,
+  ) async {
+    final BackupUpdateSelection selection = BackupUpdateSelection(
+      Future<BackupFileChanges?>.value((
+        modified: <String>['project.json'],
+        onlyLive: <String>['materials/new.tex'],
+        onlyBackup: <String>['legacy.txt'],
+      )),
+    );
+    addTearDown(selection.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: SizedBox(
+            width: 520,
+            height: 420,
+            child: UpdatePlanDetailContent(
+              plan: const BackupUpdatePlan(updateContent: true),
+              card: const BackupCard(WallpaperLibrary.workshop, 'updated'),
+              liveFolder: 'live',
+              backupFolder: 'backup',
+              foreground: Colors.white,
+              focused: true,
+              needsFocus: true,
+              selection: selection,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(FileTreeRowChoice), findsNWidgets(6));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('backup-update-group-reject-modified')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('backup-update-reject-legacy.txt')),
+    );
+    await tester.pump();
+
+    final BackupSelectiveUpdatePlan plan = (await selection.buildPlan())!;
+    expect(plan.skippedCopies, const <String>{'project.json'});
+    expect(plan.keptBackupFiles, const <String>{'legacy.txt'});
+    expect(find.text(AppI10n.backupDetailWillKeep), findsOneWidget);
+  });
+
   testWidgets('Update file inspection distinguishes empty and unavailable', (
     WidgetTester tester,
   ) async {
