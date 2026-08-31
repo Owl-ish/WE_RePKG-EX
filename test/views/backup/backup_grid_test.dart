@@ -664,6 +664,34 @@ void main() {
       );
     });
 
+    testWidgets(
+      'the Reconcile grid ignores entries whose warnings are already ignored',
+      (tester) async {
+        const ReconcileTile ignoredOnly = (
+          entry: ReconcileEntry(
+            name: 'already-ignored',
+            reason: BackupReconcileReason.duplicateLiveCopies,
+            ignoredReasons: <BackupReconcileReason>{
+              BackupReconcileReason.duplicateLiveCopies,
+            },
+            states: <WallpaperLibrary, BackupState>{
+              WallpaperLibrary.workshop: BackupState.synced,
+            },
+            backupWorkshop: false,
+            backupMyProjects: false,
+          ),
+          face: null,
+        );
+        await pumpPills(tester, reconcile: const <ReconcileTile>[ignoredOnly]);
+
+        container.read(backupStateFilterProvider.notifier).showReconcile();
+        await settle(tester);
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('already-ignored'), findsNothing);
+      },
+    );
+
     testWidgets('ignored groups each detection independently in one pill', (
       tester,
     ) async {

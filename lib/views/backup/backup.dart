@@ -815,7 +815,9 @@ class _GridState extends ConsumerState<_Grid> {
                     reason: <ReconcileTile>[],
                 };
             for (final ReconcileTile tile in value) {
-              groups[tile.entry.activePrimaryReason]!.add(tile);
+              final BackupReconcileReason? reason =
+                  tile.entry.activePrimaryReason;
+              if (reason != null) groups[reason]!.add(tile);
             }
             final List<ReconcileTile> grouped = <ReconcileTile>[
               for (final BackupReconcileReason reason
@@ -883,6 +885,7 @@ class _GridState extends ConsumerState<_Grid> {
                       backupRoot: backupRoot,
                       liveWorkshopRoot: workshop,
                       liveMyProjectsRoot: myProjects,
+                      ignored: false,
                       onTap: () => _click(ref, ids, index),
                     );
                   },
