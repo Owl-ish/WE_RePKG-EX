@@ -89,6 +89,16 @@ void main() {
         find.descendant(of: compareAction, matching: find.byType(Tooltip)),
         findsNothing,
       );
+      final Finder compareSemantics = find.descendant(
+        of: compareAction,
+        matching: find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Compare files' &&
+              widget.properties.button == true,
+        ),
+      );
+      expect(compareSemantics, findsOneWidget);
       await tester.tap(compareAction);
       await tester.pump();
       final Finder jsonContent = find.byKey(
