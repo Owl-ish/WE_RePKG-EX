@@ -10,8 +10,7 @@ import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
-import 'package:we_repkg/views/backup/details/detail_layout.dart';
-import 'package:we_repkg/views/backup/details/file_difference_tree.dart';
+import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/widgets/input_controls.dart';
 

@@ -20,6 +20,7 @@ import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';
+import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';

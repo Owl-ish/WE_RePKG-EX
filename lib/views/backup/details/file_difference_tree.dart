@@ -1,10 +1,4 @@
-import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/material.dart';
-import 'package:we_repkg/config/theme_extensions.dart';
-import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/cores/backup.dart';
-import 'package:we_repkg/utils/backup_diff.dart';
-import 'package:we_repkg/widgets/file_tree_panel.dart';
+part of 'content_details.dart';
 
 /// Backup-specific wrapper around the shared read-only difference tree.
 class BackupDifferenceFileTree extends StatelessWidget {

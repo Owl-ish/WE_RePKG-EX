@@ -1,11 +1,4 @@
-import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/material.dart';
-import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/utils/backup_diff.dart';
-import 'package:we_repkg/views/backup/details/backup_update_selection.dart';
-import 'package:we_repkg/views/backup/details/detail_layout.dart';
-import 'package:we_repkg/views/backup/details/sync_details.dart';
-import 'package:we_repkg/views/backup/details/update_file_changes.dart';
+part of 'content_details.dart';
 
 /// Presents the content refresh and placement work in an Update plan.
 class UpdatePlanDetailContent extends StatelessWidget {
