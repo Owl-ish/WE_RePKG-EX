@@ -1,3 +1,9 @@
+// Backup grid tile/card presentation and detail-dialog entry points.
+//
+// Owns tile badges, selection/context interactions, and choosing the correct
+// detail view. Content/package, Sync, and diagnostic detail implementations live
+// in the dedicated details modules rather than accumulating in this file.
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +13,9 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
-import 'package:we_repkg/cores/context_menu.dart';
-import 'package:we_repkg/cores/base.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/cores/context_menu.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/wallpaper.dart';
@@ -19,13 +25,13 @@ import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/double_click.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
+import 'package:we_repkg/views/backup/backup_action_ui.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
 import 'package:we_repkg/widgets/image_view.dart';
 import 'package:we_repkg/widgets/tile_overlays.dart';
-import 'package:we_repkg/views/backup/backup_action_ui.dart';
 
 /// The two folders a tile stands for, either of which may not be there. The
 /// details open on whichever exists; the menu offers each one it has.
@@ -40,20 +46,54 @@ typedef _ReconcileFolders = ({
 
 DetailDialogLayout _backupDetailLayout({
   bool extraCanFocus = false,
-  bool hasSecondAction = false,
 }) => DetailDialogLayout(
   // Keep Backup only modestly taller than the ordinary 500px detail card.
-  // Dense sections scroll/focus inside this footprint instead of inflating
-  // the whole modal.
+  // Dense sections scroll/focus inside this footprint instead of inflating the
+  // whole modal.
   maxHeightFactor: .84,
-  // An added Reconcile Ignore/Show Again action needs one more control row.
-  // Reserve its eight pixels up front so focusing the file pane stays stable.
-  maxHeight: hasSecondAction ? 568 : 560,
+  maxHeight: 560,
   extraFillsPanel: true,
   extraCanFocus: extraCanFocus,
 );
 
-/// One wallpaper in the backup grid, with the badge saying where it stands.
+/// Maps a Backup state to its semantic status color and localization key.
+({Color colour, String label}) backupStateLook(
+  BuildContext context,
+  BackupState state,
+) {
+  final StatusPalette colours = Theme.of(context).status;
+  return switch (state) {
+    BackupState.vanished => (
+      colour: colours.bad,
+      label: AppI10n.backupStateVanished,
+    ),
+    BackupState.emptyBackup => (
+      colour: colours.hollow,
+      label: AppI10n.backupStateEmptyBackup,
+    ),
+    BackupState.notBackedUp => (
+      colour: colours.warn,
+      label: AppI10n.backupStateNotBackedUp,
+    ),
+    BackupState.updateAvailable => (
+      colour: colours.note,
+      label: AppI10n.backupStateUpdateAvailable,
+    ),
+    BackupState.updateDismissed => (
+      colour: colours.muted,
+      label: AppI10n.backupStateUpdateDismissed,
+    ),
+    BackupState.synced => (
+      colour: colours.good,
+      label: AppI10n.backupStateSynced,
+    ),
+  };
+}
+
+/// Renders a normal Backup wallpaper card with its state and library badges.
+///
+/// Selection, detail opening, and state actions are delegated to the shared tile
+/// frame so ordinary Backup and Reconcile cards keep the same interactions.
 class BackupTileView extends StatelessWidget {
   const BackupTileView({
     super.key,
@@ -140,7 +180,10 @@ class BackupTileView extends StatelessWidget {
   }
 }
 
-/// One name waiting to be reconciled, in the same grid behind its own pill.
+/// Renders a Reconcile card for a wallpaper whose authoritative copy is unclear.
+///
+/// The card stays diagnostic: it exposes the reason and opens Reconcile details
+/// but does not choose which live or backup copy should win.
 class ReconcileTileView extends StatelessWidget {
   const ReconcileTileView({
     super.key,
@@ -201,8 +244,10 @@ class ReconcileTileView extends StatelessWidget {
   }
 }
 
-/// The picture, the title strip, the badges and the selection tint, plus the
-/// three things a click can mean. Shared, so the two tiles cannot drift apart.
+/// Shared visual and interaction shell for Backup and Reconcile cards.
+///
+/// Owns preview/title/badges/selection tint plus normal selection, detail opening,
+/// and the explicit card action without duplicating those behaviors per card type.
 class _TileFrame extends ConsumerStatefulWidget {
   const _TileFrame({
     required this.width,
@@ -303,49 +348,49 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  List<DetailAction> _actions({VoidCallback? primaryAction}) => <DetailAction>[
-    if (widget.action case final BackupAction action)
-      if (primaryAction ?? widget.onAction case final VoidCallback onAction)
-        DetailAction(
-          label: widget.actionLabelOverride ?? backupActionLabel(action),
-          onPressed: onAction,
-          destructive: backupActionIsDestructive(action),
-        ),
-    if (widget.reconcileEntry == null &&
-        widget.updatePlan?.updateContent == true)
-      if (widget.backupCard case final BackupCard card)
-        DetailAction(
-          label: backupActionLabel(BackupAction.ignoreUpdate),
-          onPressed: () => applyBackupAction(
-            context,
-            BackupAction.ignoreUpdate,
-            <BackupCard>[card],
-          ),
-        ),
-    if (widget.reconcileEntry != null && !widget.reconcileIgnored)
-      if (widget.reconcileEntry case final ReconcileEntry entry)
-        if (entry.activeReasons.any(
-          (BackupReconcileReason reason) =>
-              reconcileReasonCanBeIgnored(reason) &&
-              entry.issueFingerprints.containsKey(reason),
-        ))
+  List<DetailAction> _actions({VoidCallback? primaryAction}) {
+    final bool reconcile = widget.reconcileEntry != null;
+    return <DetailAction>[
+      if (widget.action case final BackupAction action)
+        if (primaryAction ?? widget.onAction case final VoidCallback onAction)
           DetailAction(
-            label: tr(AppI10n.backupActionIgnore),
-            onPressed: () => ignoreReconcileDetections(context, entry),
+            label: widget.actionLabelOverride ?? backupActionLabel(action),
+            onPressed: onAction,
+            destructive: backupActionIsDestructive(action),
           ),
-    if (widget.reconcileEntry == null)
-      if (widget.folders.live case final String live)
-        DetailAction(
-          label: tr(AppI10n.backupOpenLiveFolder),
-          onPressed: () => browserFolder(live),
-        ),
-    if (widget.reconcileEntry == null)
-      if (widget.folders.backup case final String backup)
-        DetailAction(
-          label: tr(AppI10n.backupOpenBackupFolder),
-          onPressed: () => browserFolder(backup),
-        ),
-  ];
+      if (!reconcile && widget.updatePlan?.updateContent == true)
+        if (widget.backupCard case final BackupCard card)
+          DetailAction(
+            label: backupActionLabel(BackupAction.ignoreUpdate),
+            onPressed: () => applyBackupAction(
+              context,
+              BackupAction.ignoreUpdate,
+              <BackupCard>[card],
+            ),
+          ),
+      if (reconcile && !widget.reconcileIgnored)
+        if (widget.reconcileEntry case final ReconcileEntry entry)
+          if (entry.activeReasons.any(reconcileReasonCanBeIgnored))
+            DetailAction(
+              label: tr(AppI10n.backupActionIgnore),
+              onPressed: () => ignoreReconcileDetections(context, entry),
+            ),
+      // Reconcile details expose only the concrete locations relevant to the
+      // detected reason. Generic folder buttons would hide which copy is opened.
+      if (!reconcile)
+        if (widget.folders.live case final String live)
+          DetailAction(
+            label: tr(AppI10n.backupOpenLiveFolder),
+            onPressed: () => browserFolder(live),
+          ),
+      if (!reconcile)
+        if (widget.folders.backup case final String backup)
+          DetailAction(
+            label: tr(AppI10n.backupOpenBackupFolder),
+            onPressed: () => browserFolder(backup),
+          ),
+    ];
+  }
 
   String? _backupFolderFor(WallpaperLibrary library, String name) {
     final String? libraryPath = switch (library) {
@@ -359,27 +404,33 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final BackupUpdatePlan? plan = widget.updatePlan;
     final BackupCard? card = widget.backupCard;
     if (plan == null || !plan.updateContent || card == null) return null;
-    if (widget.folders.backup case final String existing) return existing;
-    final WallpaperLibrary library = plan.sync?.from ?? card.library;
+    final WallpaperLibrary library = widget.folders.backup != null
+        ? card.library
+        : plan.sync?.from ?? card.library;
     return _backupFolderFor(library, card.name);
   }
 
   _ReconcileFolders _reconcileFolders(ReconcileEntry entry) {
     final BackupIssueEvidence evidence = entry.evidence;
+    final String? workshopLive =
+        evidence.liveWorkshop && widget.liveWorkshopRoot != null
+        ? path.join(widget.liveWorkshopRoot!, entry.name)
+        : null;
+    final String? myProjectsLive =
+        evidence.liveMyProjects && widget.liveMyProjectsRoot != null
+        ? path.join(widget.liveMyProjectsRoot!, entry.name)
+        : null;
+    final String? workshopBackup = evidence.backupWorkshop
+        ? _backupFolderFor(WallpaperLibrary.workshop, entry.name)
+        : null;
+    final String? myProjectsBackup = evidence.backupMyProjects
+        ? _backupFolderFor(WallpaperLibrary.myProjects, entry.name)
+        : null;
     return (
-      workshopLive: evidence.liveWorkshop && widget.liveWorkshopRoot != null
-          ? path.join(widget.liveWorkshopRoot!, entry.name)
-          : null,
-      myProjectsLive:
-          evidence.liveMyProjects && widget.liveMyProjectsRoot != null
-          ? path.join(widget.liveMyProjectsRoot!, entry.name)
-          : null,
-      workshopBackup: evidence.backupWorkshop
-          ? _backupFolderFor(WallpaperLibrary.workshop, entry.name)
-          : null,
-      myProjectsBackup: evidence.backupMyProjects
-          ? _backupFolderFor(WallpaperLibrary.myProjects, entry.name)
-          : null,
+      workshopLive: workshopLive,
+      myProjectsLive: myProjectsLive,
+      workshopBackup: workshopBackup,
+      myProjectsBackup: myProjectsBackup,
     );
   }
 
@@ -393,6 +444,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           (label: tr(AppI10n.backupOpenBackupFolder), path: backup),
       ];
     }
+
+    // Reconcile has up to four concrete copies. Derive both the menu and the
+    // detail pane from the same location resolver so neither can silently hide
+    // a copy that the other one knows about.
     final _ReconcileFolders folders = _reconcileFolders(entry);
     return <BackupFolderMenuTarget>[
       if (folders.workshopLive case final String folder)
@@ -430,8 +485,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final _ReconcileFolders? reconcileFolders = reconcileEntry == null
         ? null
         : _reconcileFolders(reconcileEntry);
+    final String? reconcileWorkshopBackup = reconcileFolders?.workshopBackup;
+    final String? reconcileMyProjectsBackup =
+        reconcileFolders?.myProjectsBackup;
     final String? reconcileWorkshopLive = reconcileFolders?.workshopLive;
     final String? reconcileMyProjectsLive = reconcileFolders?.myProjectsLive;
+
+    // Duplicate-live exact comparison is explicitly user-requested. Opening the
+    // detail card itself stays cheap; the recursive comparison is created only
+    // after the user focuses the live-copy comparison pane.
     final bool comparesDuplicateLive =
         reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
         reconcileWorkshopLive != null &&
@@ -443,12 +505,21 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             secondFolder: reconcileMyProjectsLive,
           )
         : null;
+
     final String? updateBackupFolder = _updateBackupFolder();
+    final BackupUpdatePlan? updatePlan = widget.updatePlan;
+    final bool hasUpdateDetails =
+        updatePlan != null && widget.backupCard != null;
     final bool updateNeedsFocus =
-        widget.updatePlan?.updateContent == true &&
+        hasUpdateDetails &&
+        updatePlan.updateContent &&
         widget.folders.live != null &&
         updateBackupFolder != null;
-    final BackupUpdateSelection? updateSelection = updateNeedsFocus
+    final bool updateHasContent = hasUpdateDetails && updatePlan.updateContent;
+    final BackupUpdateSelection? updateSelection =
+        updateHasContent &&
+            widget.folders.live != null &&
+            updateBackupFolder != null
         ? BackupUpdateSelection(
             compareBackupFileChanges(
               liveFolder: widget.folders.live!,
@@ -480,22 +551,14 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         origin: origin,
         actions: _actions(primaryAction: detailPrimaryAction),
         includePreview: widget.junkKind == null,
+        // Every preview-backed Backup state uses one inspector shell. Callers
+        // only tune how much room their content needs inside that shared shell.
         layout: widget.junkKind != null
             ? const DetailDialogLayout()
             : _backupDetailLayout(
-                extraCanFocus: reconcileEntry != null
+                extraCanFocus: widget.reconcileEntry != null
                     ? reconcileNeedsFocus || comparesDuplicateLive
                     : updateNeedsFocus,
-                hasSecondAction:
-                    reconcileEntry != null &&
-                    (widget.reconcileIgnored ||
-                        reconcileEntry.activeReasons.any(
-                          (BackupReconcileReason reason) =>
-                              reconcileReasonCanBeIgnored(reason) &&
-                              reconcileEntry.issueFingerprints.containsKey(
-                                reason,
-                              ),
-                        )),
               ),
         extraContentBuilder: widget.junkKind != null
             ? (
@@ -513,29 +576,30 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             ? (
                 BuildContext context,
                 Color foreground,
-                bool _,
+                bool focused,
                 VoidCallback requestFocus,
               ) => ReconcileDetailContent(
                 entry: widget.reconcileEntry!,
                 primaryReasonOverride: widget.reconcileReasonOverride,
                 foreground: foreground,
-                needsFocus: reconcileNeedsFocus,
+                focused: focused,
                 ignoredMode: widget.reconcileIgnored,
+                needsFocus: reconcileNeedsFocus,
                 workshopLiveFolder: reconcileWorkshopLive,
                 myProjectsLiveFolder: reconcileMyProjectsLive,
-                workshopBackupFolder: reconcileFolders?.workshopBackup,
-                myProjectsBackupFolder: reconcileFolders?.myProjectsBackup,
+                workshopBackupFolder: reconcileWorkshopBackup,
+                myProjectsBackupFolder: reconcileMyProjectsBackup,
                 loadDuplicateLiveChanges: loadDuplicateLiveChanges,
                 onRequestFocus: requestFocus,
               )
-            : widget.updatePlan != null && widget.backupCard != null
+            : hasUpdateDetails
             ? (
                 BuildContext context,
                 Color foreground,
                 bool focused,
                 VoidCallback requestFocus,
               ) => UpdatePlanDetailContent(
-                plan: widget.updatePlan!,
+                plan: updatePlan,
                 card: widget.backupCard!,
                 liveFolder: widget.folders.live,
                 backupFolder: updateBackupFolder,
@@ -563,19 +627,19 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   }
 
   Widget _actionButton(BackupAction action, VoidCallback onAction) {
-    final ActionButtonTheme colors = Theme.of(context).actionButtons;
+    final ActionButtonTheme colours = Theme.of(context).actionButtons;
     final bool destructive = backupActionIsDestructive(action);
     return _BackupTileActionButton(
       id: widget.id,
       icon: backupActionIcon(action),
       label: widget.actionLabelOverride ?? backupActionLabel(action),
       background: destructive
-          ? colors.destructiveBackground
-          : colors.primaryBackground,
+          ? colours.destructiveBackground
+          : colours.primaryBackground,
       foreground: destructive
-          ? colors.destructiveForeground
-          : colors.primaryForeground,
-      border: destructive ? colors.destructiveBorder : colors.primaryBorder,
+          ? colours.destructiveForeground
+          : colours.primaryForeground,
+      border: destructive ? colours.destructiveBorder : colours.primaryBorder,
       onPressed: onAction,
     );
   }
@@ -747,19 +811,6 @@ String _stateDetailText(BackupState state) => switch (state) {
   BackupState.emptyBackup => AppI10n.backupEmptyJunkAbout,
 };
 
-String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
-    switch (reason) {
-      BackupReconcileReason.duplicateLiveCopies => tr(
-        AppI10n.backupTileDuplicateLive,
-      ),
-      BackupReconcileReason.conflictingBackupCopies => tr(
-        AppI10n.backupTileBackupsConflict,
-      ),
-      BackupReconcileReason.comparisonUnavailable => tr(
-        AppI10n.backupTileComparisonUnavailable,
-      ),
-    };
-
 List<TileBadgeData> _reconcileBadges(
   BuildContext context,
   ReconcileEntry entry, {
@@ -771,10 +822,14 @@ List<TileBadgeData> _reconcileBadges(
               ? (ignored ? entry.ignoredReasons : entry.activeReasons)
               : <BackupReconcileReason>{reasonOverride})
           .toList()
-        ..sort((a, b) => a.index.compareTo(b.index));
+        ..sort(
+          (BackupReconcileReason a, BackupReconcileReason b) =>
+              a.index.compareTo(b.index),
+        );
   final List<BackupState> states = entry.evidence.attentionStates.toList()
     ..sort(
-      (a, b) => (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),
+      (BackupState a, BackupState b) =>
+          (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),
     );
   return <TileBadgeData>[
     for (final BackupReconcileReason reason in reasons)
@@ -790,36 +845,15 @@ List<TileBadgeData> _reconcileBadges(
   ];
 }
 
-/// Presentation for one backup state, using the active semantic palette.
-({Color colour, String label}) backupStateLook(
-  BuildContext context,
-  BackupState state,
-) {
-  final StatusPalette colours = Theme.of(context).status;
-  return switch (state) {
-    BackupState.vanished => (
-      colour: colours.bad,
-      label: AppI10n.backupStateVanished,
-    ),
-    BackupState.emptyBackup => (
-      colour: colours.hollow,
-      label: AppI10n.backupStateEmptyBackup,
-    ),
-    BackupState.notBackedUp => (
-      colour: colours.warn,
-      label: AppI10n.backupStateNotBackedUp,
-    ),
-    BackupState.updateAvailable => (
-      colour: colours.note,
-      label: AppI10n.backupStateUpdateAvailable,
-    ),
-    BackupState.updateDismissed => (
-      colour: colours.muted,
-      label: AppI10n.backupStateUpdateDismissed,
-    ),
-    BackupState.synced => (
-      colour: colours.good,
-      label: AppI10n.backupStateSynced,
-    ),
-  };
-}
+String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
+    switch (reason) {
+      BackupReconcileReason.duplicateLiveCopies => tr(
+        AppI10n.backupTileDuplicateLive,
+      ),
+      BackupReconcileReason.conflictingBackupCopies => tr(
+        AppI10n.backupTileBackupsConflict,
+      ),
+      BackupReconcileReason.comparisonUnavailable => tr(
+        AppI10n.backupTileComparisonUnavailable,
+      ),
+    };

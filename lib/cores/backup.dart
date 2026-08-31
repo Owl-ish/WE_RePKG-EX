@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
@@ -33,8 +34,8 @@ enum BackupFolder { liveWorkshop, liveMyProjects, backupRoot }
 
 /// What the scan is doing, for the tab to say so instead of spinning silently.
 ///
-/// [comparing] is the long one: it checks whether live files are still covered
-/// by their backups. [finishing] covers the short tail while the lightweight
+/// [comparing] is the long one: it checks whether live and backup still mirror
+/// each other. [finishing] covers the short tail while the lightweight
 /// junk checks finish. [reading] has no useful total. [details] remains for
 /// callers that want counted face reads; [preparing] covers the final handoff.
 enum BackupScanPhase { reading, comparing, finishing, details, preparing }
@@ -107,12 +108,8 @@ Future<BackupScan> scanBackup({
   final Set<String> liveMyProjects = myProjects.names;
 
   // Mirror checks compare every shared folder. Workshop stays shallow because
-  // scene.pkg carries most payload, but a saved version cannot prove that stale
-  // files do not remain only in the backup.
-  final Map<String, BackupRecord> byId = <String, BackupRecord>{
-    for (final MapEntry<String, BackupRecord> entry in records.entries)
-      entry.key.toLowerCase(): entry.value,
-  };
+  // scene.pkg carries most payload, but saved version records cannot answer
+  // whether stale files remain only in the backup.
   final Set<String> sharedWorkshop = _shared(liveWorkshop, backupWorkshop);
   final Set<String> sharedMyProjects = _shared(
     liveMyProjects,
@@ -170,7 +167,7 @@ Future<BackupScan> scanBackup({
   workshopStandingFuture = copyStandings(
     livePath: liveWorkshopPath,
     backupPath: backupWorkshopPath(backupRoot),
-    // Workshop wallpapers are packed, so matching-tree coverage only needs the
+    // Workshop wallpapers are packed, so matching-tree mirror check only needs the
     // top-level payload outside the rebuilt shader cache.
     recursive: false,
     shared: sharedWorkshop,
@@ -182,7 +179,7 @@ Future<BackupScan> scanBackup({
         livePath: liveMyProjectsPath,
         backupPath: backupMyProjectsPath(backupRoot),
         // MyProjects wallpapers are usually unpacked, so edits can land in
-        // subfolders and require recursive coverage.
+        // subfolders and require recursive mirror comparison.
         recursive: true,
         shared: sharedMyProjects,
         compare: sharedMyProjects,
@@ -275,10 +272,8 @@ Future<BackupScan> scanBackup({
         liveMyProjects: validLiveMyProjects,
         backupWorkshop: validBackupWorkshop,
         backupMyProjects: validBackupMyProjects,
-        workshopVersions: acf.byId,
         workshopStanding: workshopStanding,
         myProjectsStanding: myProjectsStanding,
-        records: byId,
       );
 
   final BackupDiffResult diff = backupDiff(
@@ -739,19 +734,14 @@ Set<String> _unavailableContentComparisons({
   required Set<String> liveMyProjects,
   required Set<String> backupWorkshop,
   required Set<String> backupMyProjects,
-  required Map<String, String> workshopVersions,
   required Map<String, CopyStanding> workshopStanding,
   required Map<String, CopyStanding> myProjectsStanding,
-  required Map<String, BackupRecord> records,
 }) {
   final Set<String> sharedWorkshop = _shared(liveWorkshop, backupWorkshop);
   final Set<String> sharedMyProjects = _shared(
     liveMyProjects,
     backupMyProjects,
   );
-  final Set<String> versionKeys = <String>{
-    for (final String name in workshopVersions.keys) name.toLowerCase(),
-  };
   final Set<String> workshopCompared = <String>{
     for (final String name in workshopStanding.keys) name.toLowerCase(),
   };
@@ -761,10 +751,7 @@ Set<String> _unavailableContentComparisons({
 
   return <String>{
     for (final String name in sharedWorkshop)
-      if (!(versionKeys.contains(name) &&
-              records['workshop/$name']?.backedUpVersion != null) &&
-          !workshopCompared.contains(name))
-        'workshop/$name',
+      if (!workshopCompared.contains(name)) 'workshop/$name',
     for (final String name in sharedMyProjects)
       if (!myProjectsCompared.contains(name)) 'myprojects/$name',
   };
@@ -792,8 +779,8 @@ typedef _FolderComparison = ({
 
 /// Exact file-level differences between two wallpaper folders.
 ///
-/// Broad backup scans compare names and sizes for speed. Detail views use this
-/// result when the user explicitly asks to inspect file contents.
+/// The normal library scan only needs names and sizes. Detail views pay for
+/// content reads so same-size modified files are still detected.
 typedef FolderFileChanges = ({
   List<String> modified,
   List<String> onlyFirst,
@@ -803,23 +790,24 @@ typedef FolderFileChanges = ({
 /// Exact comparison result for detail views that also need proof of equality.
 ///
 /// [matching] contains relative paths that existed on both sides and whose
-/// contents were confirmed equal.
+/// contents were confirmed equal. The ordinary Update flow only consumes
+/// [changes], so retaining this evidence does not change its public contract.
 typedef FolderFileComparison = ({
   FolderFileChanges changes,
   List<String> matching,
 });
 
-/// Update-facing names for an exact live-to-backup comparison.
+/// Update-facing names for the same exact comparison semantics.
 typedef BackupFileChanges = ({
   List<String> modified,
   List<String> onlyLive,
   List<String> onlyBackup,
 });
 
-/// Per-file exceptions chosen from one detailed Update comparison.
+/// Optional per-file overrides for a detailed Update.
 ///
-/// An empty exception set keeps the existing full-mirror behavior. The core
-/// rechecks [expectedChanges] immediately before applying these exceptions.
+/// The default plan is the same full mirror used by bulk Update. Exceptions
+/// preserve selected old backup files or skip selected live replacements.
 class BackupSelectiveUpdatePlan {
   const BackupSelectiveUpdatePlan({
     required this.expectedChanges,
@@ -1203,7 +1191,6 @@ Future<_FolderComparison> _compareBackupFolders(
         return '$key:${firstFile?.size ?? -1}:${secondFile?.size ?? -1}';
       })
       .join('|');
-
   final _FolderDifference difference = (
     differentSize: differentSize,
     onlyFirst: onlyFirst,
@@ -1232,7 +1219,6 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
       recursive: recursive,
       followLinks: false,
     )) {
-      if (entity is Link) return null;
       if (entity is! File) continue;
       final String relative = path.relative(entity.path, from: folder.path);
       if (isRebuiltShaderPath(relative)) continue;
@@ -1247,10 +1233,11 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
   }
 }
 
-/// Compares two complete wallpaper folders, including same-size file contents.
+/// Compares two complete wallpaper folders exactly and retains equality proof.
 ///
-/// The comparison streams file contents in fixed-size chunks and returns null
-/// when either tree cannot be read reliably.
+/// This is deliberately more exact than the normal scan: same-size matching
+/// files are compared in chunks without loading whole wallpaper files into
+/// memory. Returns null when either tree cannot be read.
 Future<FolderFileComparison?> compareFolderFilesDetailed({
   required String firstFolder,
   required String secondFolder,
@@ -1272,8 +1259,8 @@ Future<FolderFileComparison?> compareFolderFilesDetailed({
   final List<String> matching = <String>[];
   final Set<String> keys = <String>{...firstFiles.keys, ...secondFiles.keys};
   for (final String key in keys) {
-    final ({String display, int size})? firstFile = firstFiles[key];
-    final ({String display, int size})? secondFile = secondFiles[key];
+    final firstFile = firstFiles[key];
+    final secondFile = secondFiles[key];
     if (firstFile == null) {
       onlySecond.add(secondFile!.display);
       continue;
@@ -1323,7 +1310,7 @@ Future<FolderFileChanges?> compareFolderFileChanges({
   return comparison?.changes;
 }
 
-/// Compares the live wallpaper with the backup that Update will replace.
+/// Update-facing wrapper for the shared exact folder comparison.
 Future<BackupFileChanges?> compareBackupFileChanges({
   required String liveFolder,
   required String backupFolder,
@@ -1338,6 +1325,124 @@ Future<BackupFileChanges?> compareBackupFileChanges({
     onlyLive: changes.onlyFirst,
     onlyBackup: changes.onlySecond,
   );
+}
+
+/// One leaf-level semantic change inside a JSON file.
+///
+/// Presence is kept separately from the value because JSON `null` is a real
+/// value and must not be confused with a field or list item that was added or
+/// removed.
+typedef BackupJsonFieldChange = ({
+  String field,
+  Object? before,
+  Object? after,
+  bool beforePresent,
+  bool afterPresent,
+});
+
+/// Compares any two JSON files structurally by relative path.
+///
+/// File-byte comparison decides whether a JSON file changed. This slower parse
+/// is intentionally on-demand for detail views that need field-level meaning.
+Future<List<BackupJsonFieldChange>?> compareBackupJsonChanges({
+  required String beforeFolder,
+  required String afterFolder,
+  required String relativePath,
+}) async {
+  final File beforeFile = File(path.join(beforeFolder, relativePath));
+  final File afterFile = File(path.join(afterFolder, relativePath));
+  try {
+    if (!await beforeFile.exists() || !await afterFile.exists()) return null;
+    final Object? beforeJson = jsonDecode(await beforeFile.readAsString());
+    final Object? afterJson = jsonDecode(await afterFile.readAsString());
+    final List<BackupJsonFieldChange> changes = <BackupJsonFieldChange>[];
+    _collectJsonChanges(
+      beforeJson,
+      afterJson,
+      field: '',
+      beforePresent: true,
+      afterPresent: true,
+      changes: changes,
+    );
+    changes.sort(
+      (BackupJsonFieldChange a, BackupJsonFieldChange b) =>
+          a.field.toLowerCase().compareTo(b.field.toLowerCase()),
+    );
+    return changes;
+  } on FileSystemException {
+    return null;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Compatibility helper for callers that still ask specifically for project.json.
+Future<List<BackupJsonFieldChange>?> compareBackupProjectJsonChanges({
+  required String liveFolder,
+  required String backupFolder,
+}) => compareBackupJsonChanges(
+  beforeFolder: backupFolder,
+  afterFolder: liveFolder,
+  relativePath: WallpaperFiles.project,
+);
+
+void _collectJsonChanges(
+  Object? before,
+  Object? after, {
+  required String field,
+  required bool beforePresent,
+  required bool afterPresent,
+  required List<BackupJsonFieldChange> changes,
+}) {
+  if (beforePresent && afterPresent && before is Map && after is Map) {
+    final Set<String> keys = <String>{
+      ...before.keys.map((Object? key) => '$key'),
+      ...after.keys.map((Object? key) => '$key'),
+    };
+    final List<String> ordered = keys.toList()
+      ..sort(
+        (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+      );
+    for (final String key in ordered) {
+      final bool hasBefore = before.containsKey(key);
+      final bool hasAfter = after.containsKey(key);
+      _collectJsonChanges(
+        hasBefore ? before[key] : null,
+        hasAfter ? after[key] : null,
+        field: field.isEmpty ? key : '$field.$key',
+        beforePresent: hasBefore,
+        afterPresent: hasAfter,
+        changes: changes,
+      );
+    }
+    return;
+  }
+
+  if (beforePresent && afterPresent && before is List && after is List) {
+    final int length = max(before.length, after.length);
+    for (int index = 0; index < length; index++) {
+      final bool hasBefore = index < before.length;
+      final bool hasAfter = index < after.length;
+      _collectJsonChanges(
+        hasBefore ? before[index] : null,
+        hasAfter ? after[index] : null,
+        field: '$field[$index]',
+        beforePresent: hasBefore,
+        afterPresent: hasAfter,
+        changes: changes,
+      );
+    }
+    return;
+  }
+
+  if (beforePresent == afterPresent && before == after) return;
+  changes.add((
+    field: field.isEmpty ? r'$' : field,
+    before: before,
+    after: after,
+    beforePresent: beforePresent,
+    afterPresent: afterPresent,
+  ));
 }
 
 /// Compares two files in fixed-size chunks without buffering whole payloads.
@@ -1367,32 +1472,18 @@ Future<bool?> filesHaveSameContents(File first, File second) async {
 
 /// Whether two backup folders hold exactly the same meaningful files.
 ///
-/// The normal scan compares paths and sizes for speed. This guard runs before
-/// destructive reconciliation, so same-size files are verified byte-for-byte.
+/// This guard is used immediately before destructive reconciliation. The normal
+/// library scan intentionally compares only names and sizes for speed, but a
+/// destructive decision must also verify same-size file contents byte-for-byte.
 Future<bool> backupFoldersEquivalent(Directory first, Directory second) async {
-  final (
-    Map<String, ({String display, int size})>? firstFiles,
-    Map<String, ({String display, int size})>? secondFiles,
-  ) = await (
-    _backupFileManifest(first),
-    _backupFileManifest(second),
-  ).wait;
-  if (firstFiles == null ||
-      secondFiles == null ||
-      firstFiles.length != secondFiles.length) {
-    return false;
-  }
-  for (final MapEntry<String, ({String display, int size})> entry
-      in firstFiles.entries) {
-    final ({String display, int size})? other = secondFiles[entry.key];
-    if (other == null || other.size != entry.value.size) return false;
-    final bool? same = await filesHaveSameContents(
-      File(path.join(first.path, entry.value.display)),
-      File(path.join(second.path, other.display)),
-    );
-    if (same != true) return false;
-  }
-  return true;
+  final FolderFileChanges? changes = await compareFolderFileChanges(
+    firstFolder: first.path,
+    secondFolder: second.path,
+  );
+  return changes != null &&
+      changes.modified.isEmpty &&
+      changes.onlyFirst.isEmpty &&
+      changes.onlySecond.isEmpty;
 }
 
 /// Where each backup folder stands against its live counterpart.

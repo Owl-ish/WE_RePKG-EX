@@ -32,6 +32,7 @@ class FileTreeRow extends StatelessWidget {
     this.disclosure,
     this.subtitle,
     this.trailing,
+    this.choice,
     this.iconColor,
     this.onTap,
     this.onSelectionTap,
@@ -47,6 +48,7 @@ class FileTreeRow extends StatelessWidget {
   final String label;
   final String? subtitle;
   final Widget? trailing;
+  final FileTreeRowChoice? choice;
   final Color foreground;
   final Color? iconColor;
   final VoidCallback? onTap;
@@ -81,6 +83,7 @@ class FileTreeRow extends StatelessWidget {
       ],
     );
 
+    final bool hasRightSide = trailing != null || choice != null;
     Widget surface = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
       child: Row(
@@ -98,7 +101,7 @@ class FileTreeRow extends StatelessWidget {
           ),
           Icon(icon, size: 16, color: rowIcon),
           const SizedBox(width: 6),
-          if (trailing == null)
+          if (!hasRightSide)
             labelWidget
           else
             Flexible(fit: FlexFit.loose, child: labelWidget),
@@ -106,6 +109,7 @@ class FileTreeRow extends StatelessWidget {
             const SizedBox(width: 8),
             trailing!,
           ],
+          if (choice != null) ...<Widget>[const SizedBox(width: 4), choice!],
         ],
       ),
     );
@@ -129,9 +133,11 @@ class FileTreeRow extends StatelessWidget {
               ]),
             );
           };
-
     final bool showsHover =
-        effectiveTap != null || secondaryTap != null || trailing != null;
+        effectiveTap != null ||
+        secondaryTap != null ||
+        trailing != null ||
+        choice != null;
     if (showsHover) {
       surface = _FileTreeRowInteractiveSurface(
         foreground: foreground,

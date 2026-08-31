@@ -51,26 +51,27 @@ class SyncMoveDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _SyncMoveHeading(foreground: foreground),
-          const SizedBox(height: 2),
-          ReadOnlyPathBox(path: fromPath),
-          const SizedBox(height: 1),
-          Center(
-            child: Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: foreground.withValues(alpha: .72),
-              size: 18,
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          key: const ValueKey<String>('backup-sync-move-heading'),
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _SyncMoveHeading(foreground: foreground),
+        ),
+        ReadOnlyPathBox(path: fromPath),
+        const SizedBox(height: 1),
+        Center(
+          child: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: foreground.withValues(alpha: .72),
+            size: 18,
           ),
-          const SizedBox(height: 1),
-          ReadOnlyPathBox(path: toPath),
-        ],
-      ),
+        ),
+        const SizedBox(height: 1),
+        ReadOnlyPathBox(path: toPath),
+      ],
     );
   }
 }
@@ -89,32 +90,28 @@ class SyncDuplicateDetail extends StatelessWidget {
   final Color foreground;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(
-            tr(AppI10n.backupTileSync),
-            style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            tr(AppI10n.backupDetailSyncWillKeep),
-            style: TextStyle(color: foreground),
-          ),
-          const SizedBox(height: 4),
-          ReadOnlyPathBox(path: keepPath),
-          const SizedBox(height: 6),
-          Text(
-            tr(AppI10n.backupDetailSyncWillRemove),
-            style: TextStyle(color: foreground),
-          ),
-          const SizedBox(height: 4),
-          ReadOnlyPathBox(path: removePath),
-        ],
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      Text(
+        tr(AppI10n.backupTileSync),
+        style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
       ),
-    );
-  }
+      const SizedBox(height: 6),
+      Text(
+        tr(AppI10n.backupDetailSyncWillKeep),
+        style: TextStyle(color: foreground),
+      ),
+      const SizedBox(height: 4),
+      ReadOnlyPathBox(path: keepPath),
+      const SizedBox(height: 6),
+      Text(
+        tr(AppI10n.backupDetailSyncWillRemove),
+        style: TextStyle(color: foreground),
+      ),
+      const SizedBox(height: 4),
+      ReadOnlyPathBox(path: removePath),
+    ],
+  );
 }

@@ -173,6 +173,7 @@ class PathActionBox extends StatelessWidget {
     this.openTooltip,
     this.onOpen,
     this.foreground,
+    this.compact = false,
   });
 
   final String path;
@@ -180,12 +181,22 @@ class PathActionBox extends StatelessWidget {
   final String? openTooltip;
   final FutureOr<void> Function()? onOpen;
   final Color? foreground;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final Color resolvedForeground = foreground ?? theme.colorScheme.onSurface;
-    final bool tooltipsAvailable = Overlay.maybeOf(context) != null;
+    final bool tooltipsAvailable =
+        TooltipVisibility.of(context) && Overlay.maybeOf(context) != null;
+    final double minHeight = compact ? 32 : 42;
+    final double actionSize = compact ? 24 : 30;
+    final double iconSize = compact ? 14 : 17;
+    final double actionIconSize = compact ? 14 : 16;
+    final double fontSize = compact ? 11 : 12;
+    final EdgeInsets padding = compact
+        ? const EdgeInsets.only(left: 8, right: 2, top: 2, bottom: 2)
+        : const EdgeInsets.only(left: 10, right: 3, top: 3, bottom: 3);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool bounded = constraints.hasBoundedWidth;
@@ -195,27 +206,31 @@ class PathActionBox extends StatelessWidget {
           style: theme.textTheme.bodyMedium?.copyWith(
             color: resolvedForeground,
             fontFamily: 'Consolas',
-            fontSize: 12,
+            fontSize: fontSize,
           ),
         );
         return Container(
           width: bounded ? double.infinity : null,
-          constraints: const BoxConstraints(minHeight: 42),
-          padding: const EdgeInsets.only(left: 10, right: 3, top: 3, bottom: 3),
+          constraints: BoxConstraints(minHeight: minHeight),
+          padding: padding,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: .48)),
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .58),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: .48),
+            ),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: .58,
+            ),
           ),
           child: Row(
             mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
             children: <Widget>[
               Icon(
                 Icons.folder_outlined,
-                size: 17,
+                size: iconSize,
                 color: resolvedForeground.withValues(alpha: .62),
               ),
-              const SizedBox(width: 7),
+              SizedBox(width: compact ? 6 : 7),
               if (bounded)
                 Expanded(child: pathText)
               else
@@ -226,11 +241,14 @@ class PathActionBox extends StatelessWidget {
                 icon: Icon(
                   Icons.copy_rounded,
                   semanticLabel: tooltipsAvailable ? null : copyTooltip,
-                  size: 16,
+                  size: actionIconSize,
                   color: resolvedForeground.withValues(alpha: .72),
                 ),
                 visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                constraints: BoxConstraints.tightFor(
+                  width: actionSize,
+                  height: actionSize,
+                ),
                 padding: EdgeInsets.zero,
               ),
               if (onOpen != null)
@@ -240,11 +258,14 @@ class PathActionBox extends StatelessWidget {
                   icon: Icon(
                     Icons.folder_open_rounded,
                     semanticLabel: tooltipsAvailable ? null : openTooltip,
-                    size: 16,
+                    size: actionIconSize,
                     color: resolvedForeground.withValues(alpha: .72),
                   ),
                   visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                  constraints: BoxConstraints.tightFor(
+                    width: actionSize,
+                    height: actionSize,
+                  ),
                   padding: EdgeInsets.zero,
                 ),
             ],

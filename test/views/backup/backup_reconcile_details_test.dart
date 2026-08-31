@@ -47,6 +47,7 @@ void main() {
             child: ReconcileDetailContent(
               entry: entry,
               foreground: Colors.black,
+              focused: false,
               needsFocus: false,
               workshopLiveFolder: r'C:\workshop\double-live',
               myProjectsLiveFolder: r'C:\myprojects\double-live',
@@ -140,6 +141,7 @@ void main() {
             child: ReconcileDetailContent(
               entry: entry,
               foreground: Colors.black,
+              focused: false,
               needsFocus: false,
               workshopLiveFolder: r'C:\workshop\same-double-live',
               myProjectsLiveFolder: r'C:\myprojects\same-double-live',
@@ -376,7 +378,20 @@ void main() {
         const ValueKey<String>('backup-reconcile-expand-differences'),
       );
       expect(expandPrompt, findsOneWidget);
-      expect(find.text(AppI10n.backupDetailExpandDifferences), findsOneWidget);
+      expect(
+        find.descendant(
+          of: expandPrompt,
+          matching: find.text(AppI10n.backupDetailCompareFiles),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: expandPrompt,
+          matching: find.text(AppI10n.backupDetailCompareFilesHint),
+        ),
+        findsOneWidget,
+      );
       expect(tester.getSize(expandPrompt).height, greaterThanOrEqualTo(48));
       final WallpaperDetailDialog detailDialog = tester.widget(
         find.byType(WallpaperDetailDialog),

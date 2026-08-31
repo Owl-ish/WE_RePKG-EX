@@ -91,7 +91,10 @@ void main() {
   ) async {
     final Completer<BackupFileChanges?> comparison =
         Completer<BackupFileChanges?>();
-    int loads = 0;
+    final BackupUpdateSelection selection = BackupUpdateSelection(
+      comparison.future,
+    );
+    addTearDown(selection.dispose);
     bool focused = false;
 
     await tester.pumpWidget(
@@ -114,10 +117,7 @@ void main() {
                     foreground: Colors.white,
                     focused: focused,
                     needsFocus: true,
-                    loadFileChanges: () {
-                      loads++;
-                      return comparison.future;
-                    },
+                    selection: selection,
                     onRequestFocus: () => setState(() => focused = true),
                   ),
             ),
@@ -134,12 +134,9 @@ void main() {
       find.byKey(const ValueKey<String>('backup-update-file-tree')),
       findsNothing,
     );
-    expect(loads, 0);
-
     await tester.tap(prompt);
     await tester.pump();
 
-    expect(loads, 1);
     expect(find.text(AppI10n.backupDetailComparingFiles), findsOneWidget);
 
     comparison.complete((
@@ -158,9 +155,9 @@ void main() {
       findsNWidgets(3),
     );
     expect(find.text('project.json'), findsOneWidget);
-    expect(find.text('materials/new.tex'), findsOneWidget);
+    expect(find.text('materials  ›  new.tex'), findsOneWidget);
     expect(find.text('legacy.txt'), findsOneWidget);
-    expect(find.byType(FileTreeCompareBar), findsNothing);
+    expect(find.byType(FileTreeCompareBar), findsOneWidget);
   });
 
   testWidgets('Update choices keep rejected copies and backup-only files', (
@@ -216,27 +213,38 @@ void main() {
   testWidgets('Update file inspection distinguishes empty and unavailable', (
     WidgetTester tester,
   ) async {
-    Future<void> show(Future<BackupFileChanges?> result) => tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: Scaffold(
-          body: SizedBox(
-            width: 520,
-            height: 420,
-            child: UpdatePlanDetailContent(
-              plan: const BackupUpdatePlan(updateContent: true),
-              card: const BackupCard(WallpaperLibrary.workshop, 'updated'),
-              liveFolder: 'live',
-              backupFolder: 'backup',
-              foreground: Colors.white,
-              focused: true,
-              needsFocus: true,
-              loadFileChanges: () => result,
+    final List<BackupUpdateSelection> selections = <BackupUpdateSelection>[];
+    addTearDown(() {
+      for (final BackupUpdateSelection selection in selections) {
+        selection.dispose();
+      }
+    });
+
+    Future<void> show(Future<BackupFileChanges?> result) {
+      final BackupUpdateSelection selection = BackupUpdateSelection(result);
+      selections.add(selection);
+      return tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: SizedBox(
+              width: 520,
+              height: 420,
+              child: UpdatePlanDetailContent(
+                plan: const BackupUpdatePlan(updateContent: true),
+                card: const BackupCard(WallpaperLibrary.workshop, 'updated'),
+                liveFolder: 'live',
+                backupFolder: 'backup',
+                foreground: Colors.white,
+                focused: true,
+                needsFocus: true,
+                selection: selection,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
 
     await show(
       Future<BackupFileChanges?>.value((

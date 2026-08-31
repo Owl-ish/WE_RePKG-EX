@@ -1,7 +1,8 @@
-// Backup diagnostic detail presentation.
+// Backup diagnostic and non-content detail presentation.
 //
-// Owns Junk and Reconcile explanations and evidence rendering. Classification
-// and filesystem decisions remain in the Backup core and differ layers.
+// Owns explanatory, Empty/Junk, and Reconcile views. File-level Reconcile
+// differences reuse the shared content explorer; scanning and disk mutations
+// remain outside this UI module.
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/widgets/input_controls.dart';
 
+/// Displays a localized explanatory message for a simple Backup detail state.
 class BackupDetailContent extends StatelessWidget {
   const BackupDetailContent({
     super.key,
@@ -34,6 +36,54 @@ FileTreeLibrary _fileTreeLibrary(WallpaperLibrary library) => switch (library) {
   WallpaperLibrary.myProjects => FileTreeLibrary.myProjects,
 };
 
+String _reconcileReasonExplanationKey(
+  BackupReconcileReason reason, {
+  required bool ignored,
+}) => switch (reason) {
+  BackupReconcileReason.duplicateLiveCopies =>
+    ignored
+        ? AppI10n.backupReconcileDuplicateLiveIgnoredAbout
+        : AppI10n.backupReconcileDuplicateLiveAbout,
+  BackupReconcileReason.conflictingBackupCopies =>
+    ignored
+        ? AppI10n.backupReconcileConflictingBackupsIgnoredAbout
+        : AppI10n.backupReconcileConflictingBackupsAbout,
+  BackupReconcileReason.comparisonUnavailable =>
+    AppI10n.backupReconcileComparisonUnavailableAbout,
+};
+
+String _reconcileReasonExplanationText(
+  ReconcileEntry entry,
+  BackupReconcileReason reason, {
+  required bool ignored,
+}) {
+  final Map<String, String> args = <String, String>{};
+  if (reason == BackupReconcileReason.duplicateLiveCopies) {
+    final List<String> locations = <String>[
+      if (entry.liveWorkshop) tr(AppI10n.homeLibraryWorkshop),
+      if (entry.liveMyProjects) tr(AppI10n.homeLibraryMyProjects),
+    ];
+    if (locations.length >= 2) {
+      args['location1'] = locations[0];
+      args['location2'] = locations[1];
+    }
+  }
+  return tr(
+    _reconcileReasonExplanationKey(reason, ignored: ignored),
+    namedArgs: args,
+  );
+}
+
+String _reconcileStateLabel(BackupState state) => switch (state) {
+  BackupState.synced => AppI10n.backupStateSynced,
+  BackupState.notBackedUp => AppI10n.backupStateNotBackedUp,
+  BackupState.vanished => AppI10n.backupStateVanished,
+  BackupState.updateAvailable => AppI10n.backupStateUpdateAvailable,
+  BackupState.updateDismissed => AppI10n.backupStateUpdateDismissed,
+  BackupState.emptyBackup => AppI10n.backupStateEmptyBackup,
+};
+
+/// Explains why a folder is disposable and shows the files that produced it.
 class JunkDetailContent extends StatelessWidget {
   const JunkDetailContent({
     super.key,
@@ -76,17 +126,17 @@ class JunkDetailContent extends StatelessWidget {
   }
 }
 
+/// Decides whether a Reconcile difference tree is dense enough to defer until focus.
 bool reconcileNeedsFileFocus(
   ReconcileEntry? entry, {
   bool ignored = false,
   BackupReconcileReason? reasonOverride,
 }) {
-  final BackupReconcileReason? reason = entry == null
-      ? null
-      : reasonOverride ??
-            (ignored ? entry.ignoredPrimaryReason : entry.activePrimaryReason);
+  final BackupReconcileReason? primary =
+      reasonOverride ??
+      (ignored ? entry?.ignoredPrimaryReason : entry?.activePrimaryReason);
   if (entry == null ||
-      reason != BackupReconcileReason.conflictingBackupCopies) {
+      primary != BackupReconcileReason.conflictingBackupCopies) {
     return false;
   }
   final BackupCopyDifference? difference = entry.backupDifference;
@@ -108,46 +158,6 @@ bool reconcileNeedsFileFocus(
   return difference.total + groups > 4 || longest > 58;
 }
 
-String _reconcileExplanation(
-  ReconcileEntry entry,
-  BackupReconcileReason reason, {
-  bool ignored = false,
-}) {
-  final String key = switch (reason) {
-    BackupReconcileReason.duplicateLiveCopies =>
-      ignored
-          ? AppI10n.backupReconcileDuplicateLiveIgnoredAbout
-          : AppI10n.backupReconcileDuplicateLiveAbout,
-    BackupReconcileReason.conflictingBackupCopies =>
-      ignored
-          ? AppI10n.backupReconcileConflictingBackupsIgnoredAbout
-          : AppI10n.backupReconcileConflictingBackupsAbout,
-    BackupReconcileReason.comparisonUnavailable =>
-      AppI10n.backupReconcileComparisonUnavailableAbout,
-  };
-  final List<String> locations = <String>[
-    if (entry.liveWorkshop) tr(AppI10n.homeLibraryWorkshop),
-    if (entry.liveMyProjects) tr(AppI10n.homeLibraryMyProjects),
-  ];
-  return tr(
-    key,
-    namedArgs:
-        reason == BackupReconcileReason.duplicateLiveCopies &&
-            locations.length >= 2
-        ? <String, String>{'location1': locations[0], 'location2': locations[1]}
-        : const <String, String>{},
-  );
-}
-
-String _reconcileStateLabel(BackupState state) => switch (state) {
-  BackupState.synced => AppI10n.backupStateSynced,
-  BackupState.notBackedUp => AppI10n.backupStateNotBackedUp,
-  BackupState.vanished => AppI10n.backupStateVanished,
-  BackupState.updateAvailable => AppI10n.backupStateUpdateAvailable,
-  BackupState.updateDismissed => AppI10n.backupStateUpdateDismissed,
-  BackupState.emptyBackup => AppI10n.backupStateEmptyBackup,
-};
-
 class _DetectedFolderCopy extends StatelessWidget {
   const _DetectedFolderCopy({
     super.key,
@@ -165,41 +175,119 @@ class _DetectedFolderCopy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? folder = this.folder;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(
-            label,
-            style: TextStyle(
-              color: foreground,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          label,
+          style: TextStyle(
+            color: foreground,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
           ),
-          if (folder != null) ...<Widget>[
-            const SizedBox(height: 4),
-            PathActionBox(
-              path: folder,
-              copyTooltip: tr(AppI10n.backupDetailCopyFolderPath),
-              openTooltip: tr(openTooltip),
-              onOpen: () => browserFolder(folder),
-              foreground: foreground,
-            ),
-          ],
+        ),
+        if (folder != null) ...<Widget>[
+          const SizedBox(height: 4),
+          PathActionBox(
+            path: folder,
+            copyTooltip: tr(AppI10n.backupDetailCopyFolderPath),
+            openTooltip: tr(openTooltip),
+            onOpen: () => browserFolder(folder),
+            foreground: foreground,
+            compact: true,
+          ),
         ],
-      ),
+      ],
     );
   }
 }
 
+typedef _DeferredFolderComparisonBuilder =
+    Widget Function(
+      FolderFileComparison? comparison,
+      bool comparing,
+      bool comparisonFailed,
+    );
+
+/// Starts an exact folder comparison only after the user presses Compare Files.
+/// Expanding the surrounding detail pane alone never starts disk work. The result
+/// is retained while that dialog is open, so restoring the preview does not rescan.
+class _DeferredFolderComparison extends StatefulWidget {
+  const _DeferredFolderComparison({
+    required this.active,
+    required this.load,
+    required this.builder,
+  });
+
+  final bool active;
+  final Future<FolderFileComparison?> Function()? load;
+  final _DeferredFolderComparisonBuilder builder;
+
+  @override
+  State<_DeferredFolderComparison> createState() =>
+      _DeferredFolderComparisonState();
+}
+
+class _DeferredFolderComparisonState extends State<_DeferredFolderComparison> {
+  Future<FolderFileComparison?>? _comparison;
+
+  void _startIfNeeded() {
+    if (!widget.active || _comparison != null) return;
+    final Future<FolderFileComparison?> Function()? load = widget.load;
+    if (load != null) _comparison = load();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _startIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeferredFolderComparison oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _startIfNeeded();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) {
+      return widget.builder(null, false, false);
+    }
+    final Future<FolderFileComparison?>? comparison = _comparison;
+    if (comparison == null) {
+      return widget.builder(null, false, true);
+    }
+    return FutureBuilder<FolderFileComparison?>(
+      future: comparison,
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<FolderFileComparison?> snapshot,
+          ) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return widget.builder(null, true, false);
+            }
+            if (snapshot.hasError || snapshot.data == null) {
+              return widget.builder(null, false, true);
+            }
+            return widget.builder(snapshot.data, false, false);
+          },
+    );
+  }
+}
+
+/// Presents the safe diagnostic detail for one unresolved Reconcile state.
+///
+/// Reconcile remains view-only here; this widget does not choose or mutate an
+/// authoritative copy when the filesystem state is ambiguous.
 class ReconcileDetailContent extends StatefulWidget {
   const ReconcileDetailContent({
     super.key,
     required this.entry,
     this.primaryReasonOverride,
     required this.foreground,
+    required this.focused,
     required this.needsFocus,
     required this.workshopLiveFolder,
     required this.myProjectsLiveFolder,
@@ -213,6 +301,7 @@ class ReconcileDetailContent extends StatefulWidget {
   final ReconcileEntry entry;
   final BackupReconcileReason? primaryReasonOverride;
   final Color foreground;
+  final bool focused;
   final bool needsFocus;
   final String? workshopLiveFolder;
   final String? myProjectsLiveFolder;
@@ -227,28 +316,21 @@ class ReconcileDetailContent extends StatefulWidget {
 }
 
 class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
-  bool _differencesRequested = false;
-  Future<FolderFileComparison?>? _duplicateLiveComparison;
+  bool _compareRequested = false;
 
-  BackupReconcileReason get _primaryReason =>
-      widget.primaryReasonOverride ??
-      (widget.ignoredMode
-          ? widget.entry.ignoredPrimaryReason
-          : widget.entry.activePrimaryReason) ??
-      widget.entry.reason;
+  ReconcileEntry get entry => widget.entry;
+  Color get foreground => widget.foreground;
+  bool get needsFocus => widget.needsFocus;
+  String? get workshopLiveFolder => widget.workshopLiveFolder;
+  String? get myProjectsLiveFolder => widget.myProjectsLiveFolder;
+  String? get workshopBackupFolder => widget.workshopBackupFolder;
+  String? get myProjectsBackupFolder => widget.myProjectsBackupFolder;
+  Future<FolderFileComparison?> Function()? get loadDuplicateLiveChanges =>
+      widget.loadDuplicateLiveChanges;
 
-  void _requestDifferences() {
-    if (_differencesRequested) return;
-    final Future<FolderFileComparison?> Function()? load =
-        _primaryReason == BackupReconcileReason.duplicateLiveCopies
-        ? widget.loadDuplicateLiveChanges
-        : null;
-    setState(() {
-      _differencesRequested = true;
-      _duplicateLiveComparison = load == null
-          ? null
-          : Future<FolderFileComparison?>.sync(load);
-    });
+  void _requestComparison() {
+    if (_compareRequested) return;
+    setState(() => _compareRequested = true);
     widget.onRequestFocus?.call();
   }
 
@@ -258,59 +340,64 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
     if (oldWidget.entry.name != widget.entry.name ||
         oldWidget.entry.reason != widget.entry.reason ||
         oldWidget.ignoredMode != widget.ignoredMode ||
-        oldWidget.primaryReasonOverride != widget.primaryReasonOverride ||
-        oldWidget.loadDuplicateLiveChanges != widget.loadDuplicateLiveChanges) {
-      _differencesRequested = false;
-      _duplicateLiveComparison = null;
+        oldWidget.primaryReasonOverride != widget.primaryReasonOverride) {
+      _compareRequested = false;
     }
   }
 
+  bool _hasDuplicateLiveDifferences(FolderFileChanges? changes) =>
+      changes != null &&
+      (changes.modified.isNotEmpty ||
+          changes.onlyFirst.isNotEmpty ||
+          changes.onlySecond.isNotEmpty);
+
   @override
   Widget build(BuildContext context) {
+    final BackupIssueEvidence evidence = entry.evidence;
     final Set<BackupReconcileReason> displayReasons =
         widget.primaryReasonOverride == null
-        ? (widget.ignoredMode
-              ? widget.entry.ignoredReasons
-              : widget.entry.activeReasons)
+        ? (widget.ignoredMode ? entry.ignoredReasons : entry.activeReasons)
         : <BackupReconcileReason>{widget.primaryReasonOverride!};
-    final BackupReconcileReason primary = _primaryReason;
+    final BackupReconcileReason primary =
+        widget.primaryReasonOverride ??
+        (widget.ignoredMode
+            ? entry.ignoredPrimaryReason
+            : entry.activePrimaryReason) ??
+        entry.reason;
     final List<BackupReconcileReason> secondaryReasons =
         displayReasons.difference(<BackupReconcileReason>{primary}).toList()
-          ..sort((a, b) => a.index.compareTo(b.index));
-    final List<BackupState> attentionStates =
-        widget.entry.evidence.attentionStates.toList()..sort(
-          (a, b) => (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),
-        );
+          ..sort(
+            (BackupReconcileReason a, BackupReconcileReason b) =>
+                a.index.compareTo(b.index),
+          );
+    final List<BackupState> attentionStates = evidence.attentionStates.toList()
+      ..sort(
+        (BackupState a, BackupState b) =>
+            (backupSeverity[a] ?? 0).compareTo(backupSeverity[b] ?? 0),
+      );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Text(
-          _reconcileExplanation(
-            widget.entry,
+          _reconcileReasonExplanationText(
+            entry,
             primary,
             ignored: widget.ignoredMode,
           ),
-          style: TextStyle(color: widget.foreground, height: 1.35),
+          style: TextStyle(color: foreground, height: 1.35),
         ),
-        if (secondaryReasons.isNotEmpty || attentionStates.isNotEmpty) ...[
+        if (secondaryReasons.isNotEmpty ||
+            attentionStates.isNotEmpty) ...<Widget>[
           const SizedBox(height: 8),
           for (final BackupReconcileReason reason in secondaryReasons)
             Text(
-              '• ${_reconcileExplanation(widget.entry, reason, ignored: widget.ignoredMode)}',
-              style: TextStyle(
-                color: widget.foreground,
-                height: 1.3,
-                fontSize: 12,
-              ),
+              '• ${_reconcileReasonExplanationText(entry, reason, ignored: widget.ignoredMode)}',
+              style: TextStyle(color: foreground, height: 1.3, fontSize: 12),
             ),
           for (final BackupState state in attentionStates)
             Text(
               '• ${tr(_reconcileStateLabel(state))}',
-              style: TextStyle(
-                color: widget.foreground,
-                height: 1.3,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: foreground, height: 1.3, fontSize: 12),
             ),
         ],
         const SizedBox(height: 12),
@@ -320,295 +407,319 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
   }
 
   Widget _details(BuildContext context) {
-    final BackupReconcileReason primary = _primaryReason;
+    final BackupReconcileReason primary =
+        widget.primaryReasonOverride ??
+        (widget.ignoredMode
+            ? entry.ignoredPrimaryReason
+            : entry.activePrimaryReason) ??
+        entry.reason;
     return switch (primary) {
-      BackupReconcileReason.duplicateLiveCopies => _duplicateLiveDetails(),
-      BackupReconcileReason.comparisonUnavailable => SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _detectedLocations(includeLive: true, includeBackup: true),
-            BackupDetailGroup(
-              title: tr(AppI10n.backupDetailComparisonFailed),
-              items: <String>[tr(AppI10n.backupDetailRescanAdvice)],
-              foreground: widget.foreground,
-            ),
-          ],
-        ),
-      ),
+      BackupReconcileReason.duplicateLiveCopies => _duplicateLiveAsyncDetails(),
+      BackupReconcileReason.comparisonUnavailable =>
+        _comparisonUnavailableDetails(),
       BackupReconcileReason.conflictingBackupCopies
-          when widget.needsFocus && !_differencesRequested =>
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _detectedLocations(includeLive: false, includeBackup: true),
-            Semantics(
-              button: true,
-              label: tr(AppI10n.backupDetailExpandDifferences),
-              onTap: _requestDifferences,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  excludeFromSemantics: true,
-                  onTap: _requestDifferences,
-                  child: FileTreeSurface(
-                    key: const ValueKey<String>(
-                      'backup-reconcile-expand-differences',
-                    ),
-                    foreground: widget.foreground,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 14,
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          Icon(
-                            Icons.unfold_more_rounded,
-                            size: 18,
-                            color: widget.foreground.withValues(alpha: .75),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              tr(AppI10n.backupDetailExpandDifferences),
-                              textAlign: TextAlign.center,
-                              softWrap: true,
-                              style: TextStyle(
-                                color: widget.foreground,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      BackupReconcileReason.conflictingBackupCopies => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _detectedLocations(includeLive: false, includeBackup: true),
-          Expanded(
-            child: BackupDifferenceFileTree(
-              difference: widget.entry.backupDifference,
-              foreground: widget.foreground,
-            ),
-          ),
-        ],
-      ),
+          when needsFocus && !_compareRequested =>
+        _conflictingBackupDetails(showTree: false),
+      BackupReconcileReason.conflictingBackupCopies =>
+        _conflictingBackupDetails(showTree: true),
     };
   }
 
-  Widget _duplicateLiveDetails() {
-    final Future<FolderFileComparison?> Function()? load =
-        widget.loadDuplicateLiveChanges;
-    if (!_differencesRequested || load == null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
+  List<Widget> _detectedLocationCards({
+    required bool includeLive,
+    required bool includeBackup,
+  }) {
+    final BackupIssueEvidence evidence = entry.evidence;
+    return <Widget>[
+      if (includeLive && evidence.liveWorkshop)
+        _DetectedFolderCopy(
+          key: const ValueKey<String>('backup-reconcile-live-workshop'),
+          label: tr(AppI10n.backupDetailWorkshopLive),
+          folder: workshopLiveFolder,
+          foreground: foreground,
+          openTooltip: AppI10n.backupOpenLiveFolder,
+        ),
+      if (includeLive && evidence.liveMyProjects)
+        _DetectedFolderCopy(
+          key: const ValueKey<String>('backup-reconcile-live-myprojects'),
+          label: tr(AppI10n.backupDetailMyProjectsLive),
+          folder: myProjectsLiveFolder,
+          foreground: foreground,
+          openTooltip: AppI10n.backupOpenLiveFolder,
+        ),
+      if (includeBackup && evidence.backupWorkshop)
+        _DetectedFolderCopy(
+          key: const ValueKey<String>('backup-reconcile-backup-workshop'),
+          label: tr(AppI10n.backupFolderBackupWorkshop),
+          folder: workshopBackupFolder,
+          foreground: foreground,
+          openTooltip: AppI10n.backupOpenBackupFolder,
+        ),
+      if (includeBackup && evidence.backupMyProjects)
+        _DetectedFolderCopy(
+          key: const ValueKey<String>('backup-reconcile-backup-myprojects'),
+          label: tr(AppI10n.backupFolderBackupMyProjects),
+          folder: myProjectsBackupFolder,
+          foreground: foreground,
+          openTooltip: AppI10n.backupOpenBackupFolder,
+        ),
+    ];
+  }
+
+  Widget _compareFilesPrompt(Key key) => BackupDetailExpandPrompt(
+    key: key,
+    title: tr(AppI10n.backupDetailCompareFiles),
+    subtitle: tr(AppI10n.backupDetailCompareFilesHint),
+    foreground: foreground,
+    onPressed: _requestComparison,
+  );
+
+  /// Keeps the shared Compare Files control visible while longer location lists
+  /// scroll above it. Three-copy Reconcile states should not hide the action just
+  /// because they carry more evidence than a two-copy conflict.
+  Widget _locationsWithComparePrompt(
+    List<Widget> copies, {
+    required Key promptKey,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (copies.isNotEmpty)
           Expanded(
             child: BackupDetailScrollView(
               padding: const EdgeInsets.only(right: 10),
-              child: _detectedLocations(includeLive: true, includeBackup: true),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  for (
+                    int index = 0;
+                    index < copies.length;
+                    index++
+                  ) ...<Widget>[
+                    copies[index],
+                    if (index != copies.length - 1) const SizedBox(height: 5),
+                  ],
+                ],
+              ),
             ),
           ),
-          if (load != null) ...<Widget>[
-            const SizedBox(height: 8),
-            BackupDetailExpandPrompt(
-              key: const ValueKey<String>(
-                'backup-reconcile-expand-live-differences',
-              ),
-              title: tr(AppI10n.backupDetailCompareFiles),
-              subtitle: tr(AppI10n.backupDetailCompareFilesHint),
-              foreground: widget.foreground,
-              onPressed: _requestDifferences,
-            ),
-          ],
-        ],
-      );
-    }
+        if (copies.isNotEmpty) const SizedBox(height: 8),
+        _compareFilesPrompt(promptKey),
+      ],
+    );
+  }
 
-    return FutureBuilder<FolderFileComparison?>(
-      future: _duplicateLiveComparison,
+  Widget _duplicateLiveAsyncDetails() {
+    final Future<FolderFileComparison?> Function()? load =
+        loadDuplicateLiveChanges;
+    return _DeferredFolderComparison(
+      active: _compareRequested,
+      load: load,
       builder:
           (
-            BuildContext context,
-            AsyncSnapshot<FolderFileComparison?> snapshot,
+            FolderFileComparison? comparison,
+            bool comparing,
+            bool comparisonFailed,
           ) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return _duplicateLiveMessage(
-                tr(AppI10n.backupDetailComparingFiles),
-                progress: true,
-              );
+            if (comparing) {
+              return _duplicateLiveOverview(comparing: true);
             }
-            final FolderFileComparison? comparison = snapshot.data;
-            if (snapshot.hasError || comparison == null) {
-              return _duplicateLiveMessage(
-                tr(AppI10n.backupDetailFileComparisonUnavailable),
-              );
+            if (comparisonFailed) {
+              return _duplicateLiveOverview(comparisonFailed: true);
             }
-            final FolderFileChanges changes = comparison.changes;
-            final bool hasDifferences =
-                changes.modified.isNotEmpty ||
-                changes.onlyFirst.isNotEmpty ||
-                changes.onlySecond.isNotEmpty;
-            if (!hasDifferences) {
-              return BackupDetailScrollView(
-                padding: const EdgeInsets.only(right: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    _detectedLocations(includeLive: true, includeBackup: true),
-                    const SizedBox(height: 10),
-                    BackupDetailGroup(
-                      key: const ValueKey<String>(
-                        'backup-duplicate-live-matching-files',
-                      ),
-                      title: tr(AppI10n.backupDetailMatchingFiles),
-                      items: comparison.matching.isEmpty
-                          ? <String>[tr(AppI10n.backupDetailSame)]
-                          : <String>[
-                              for (final String filePath in comparison.matching)
-                                '✓ $filePath',
-                            ],
-                      foreground: widget.foreground,
-                    ),
-                  ],
-                ),
-              );
+            if (!_compareRequested) {
+              return _duplicateLiveOverview(showComparePrompt: load != null);
             }
-
-            final bool hasBackup =
-                widget.entry.evidence.backupWorkshop ||
-                widget.entry.evidence.backupMyProjects;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                if (hasBackup) ...<Widget>[
-                  _detectedLocations(includeLive: false, includeBackup: true),
-                  const SizedBox(height: 10),
-                ],
-                Expanded(
-                  child: FolderDifferenceFileTree(
-                    key: const ValueKey<String>(
-                      'backup-duplicate-live-file-tree',
-                    ),
-                    changes: changes,
-                    modifiedTitle: tr(AppI10n.backupDetailModified),
-                    firstOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
-                    secondOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
-                    semanticLabel: tr(AppI10n.backupDetailLiveDifferences),
-                    unavailableText: tr(
-                      AppI10n.backupDetailFileComparisonUnavailable,
-                    ),
-                    keyBase: 'backup-duplicate-live',
-                    foreground: widget.foreground,
-                  ),
-                ),
-              ],
+            return _duplicateLiveDetails(
+              comparison: comparison,
+              showTree: _hasDuplicateLiveDifferences(comparison?.changes),
             );
           },
     );
   }
 
-  Widget _duplicateLiveMessage(String message, {bool progress = false}) =>
-      BackupDetailScrollView(
-        padding: const EdgeInsets.only(right: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _detectedLocations(includeLive: true, includeBackup: true),
-            const SizedBox(height: 10),
-            FileTreeSurface(
-              foreground: widget.foreground,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  key: progress
-                      ? const ValueKey<String>(
-                          'backup-duplicate-live-comparison-progress',
-                        )
-                      : null,
-                  children: <Widget>[
-                    if (progress) ...<Widget>[
-                      SizedBox.square(
-                        dimension: 15,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: widget.foreground.withValues(alpha: .7),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        message,
-                        style: TextStyle(color: widget.foreground, height: 1.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+  Widget _duplicateLiveOverview({
+    FolderFileComparison? comparison,
+    bool comparing = false,
+    bool comparisonFailed = false,
+    bool showComparePrompt = false,
+  }) {
+    final List<Widget> copies = _detectedLocationCards(
+      includeLive: true,
+      includeBackup: true,
+    );
+    if (showComparePrompt) {
+      return _locationsWithComparePrompt(
+        copies,
+        promptKey: const ValueKey<String>(
+          'backup-reconcile-expand-live-differences',
         ),
       );
+    }
 
-  Widget _detectedLocations({
-    required bool includeLive,
-    required bool includeBackup,
+    final FolderFileChanges? changes = comparison?.changes;
+    final bool hasDifferences = _hasDuplicateLiveDifferences(changes);
+    return BackupDetailScrollView(
+      padding: const EdgeInsets.only(right: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (int index = 0; index < copies.length; index++) ...<Widget>[
+            copies[index],
+            if (index != copies.length - 1) const SizedBox(height: 5),
+          ],
+          if (comparing) ...<Widget>[
+            if (copies.isNotEmpty) const SizedBox(height: 12),
+            Row(
+              key: const ValueKey<String>(
+                'backup-duplicate-live-comparison-progress',
+              ),
+              children: <Widget>[
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: foreground,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr(AppI10n.backupDetailComparingFiles),
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (comparisonFailed) ...<Widget>[
+            if (copies.isNotEmpty) const SizedBox(height: 12),
+            BackupDetailGroup(
+              title: tr(AppI10n.backupDetailFileChanges),
+              items: <String>[
+                tr(AppI10n.backupDetailFileComparisonUnavailable),
+              ],
+              foreground: foreground,
+            ),
+          ] else if (comparison != null && !hasDifferences) ...<Widget>[
+            if (copies.isNotEmpty) const SizedBox(height: 10),
+            BackupDetailGroup(
+              key: const ValueKey<String>(
+                'backup-duplicate-live-matching-files',
+              ),
+              title: tr(AppI10n.backupDetailMatchingFiles),
+              items: comparison.matching.isEmpty
+                  ? <String>[tr(AppI10n.backupDetailSame)]
+                  : <String>[
+                      for (final String filePath in comparison.matching)
+                        '✓ $filePath',
+                    ],
+              foreground: foreground,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _duplicateLiveDetails({
+    required FolderFileComparison? comparison,
+    required bool showTree,
   }) {
-    final BackupIssueEvidence evidence = widget.entry.evidence;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Text(
-          tr(AppI10n.backupDetailDetectedCopies),
-          style: TextStyle(
-            color: widget.foreground,
-            fontWeight: FontWeight.w600,
+    final FolderFileChanges? changes = comparison?.changes;
+    if (showTree && changes != null) {
+      final String workshopLabel =
+          '${tr(AppI10n.backupDetailWorkshopLive)} / ${entry.name}';
+      final String myProjectsLabel =
+          '${tr(AppI10n.backupDetailMyProjectsLive)} / ${entry.name}';
+      final Widget tree = FolderDifferenceFileTree(
+        key: const ValueKey<String>('backup-duplicate-live-file-tree'),
+        changes: changes,
+        firstFolder: workshopLiveFolder,
+        secondFolder: myProjectsLiveFolder,
+        firstLabel: workshopLabel,
+        secondLabel: myProjectsLabel,
+        modifiedTitle: tr(AppI10n.backupDetailModified),
+        firstOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
+        secondOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
+        semanticLabel: tr(AppI10n.backupDetailLiveDifferences),
+        unavailableText: tr(AppI10n.backupDetailFileComparisonUnavailable),
+        openFolderTooltip: tr(AppI10n.backupOpenLiveFolder),
+        keyBase: 'backup-duplicate-live',
+        firstSideId: 'duplicate-live-workshop',
+        secondSideId: 'duplicate-live-myprojects',
+        firstFolderActionKey: 'backup-duplicate-live-workshop-button',
+        secondFolderActionKey: 'backup-duplicate-live-myprojects-button',
+        foreground: foreground,
+      );
+      final List<Widget> backupCopies = _detectedLocationCards(
+        includeLive: false,
+        includeBackup: true,
+      );
+      if (backupCopies.isEmpty) return tree;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (int index = 0; index < backupCopies.length; index++) ...<Widget>[
+            backupCopies[index],
+            if (index != backupCopies.length - 1) const SizedBox(height: 5),
+          ],
+          const SizedBox(height: 10),
+          Expanded(child: tree),
+        ],
+      );
+    }
+
+    return _duplicateLiveOverview(comparison: comparison);
+  }
+
+  Widget _comparisonUnavailableDetails() {
+    final List<Widget> copies = _detectedLocationCards(
+      includeLive: true,
+      includeBackup: true,
+    );
+    return BackupDetailScrollView(
+      padding: const EdgeInsets.only(right: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (int index = 0; index < copies.length; index++) ...<Widget>[
+            copies[index],
+            if (index != copies.length - 1) const SizedBox(height: 6),
+          ],
+          if (copies.isNotEmpty) const SizedBox(height: 12),
+          BackupDetailGroup(
+            title: tr(AppI10n.backupDetailComparisonFailed),
+            items: <String>[tr(AppI10n.backupDetailRescanAdvice)],
+            foreground: foreground,
           ),
-        ),
-        const SizedBox(height: 6),
-        if (includeLive && evidence.liveWorkshop)
-          _DetectedFolderCopy(
-            key: const ValueKey<String>('backup-reconcile-live-workshop'),
-            label: tr(AppI10n.backupDetailWorkshopLive),
-            folder: widget.workshopLiveFolder,
-            foreground: widget.foreground,
-            openTooltip: AppI10n.backupOpenWorkshopLiveFolder,
-          ),
-        if (includeLive && evidence.liveMyProjects)
-          _DetectedFolderCopy(
-            key: const ValueKey<String>('backup-reconcile-live-myprojects'),
-            label: tr(AppI10n.backupDetailMyProjectsLive),
-            folder: widget.myProjectsLiveFolder,
-            foreground: widget.foreground,
-            openTooltip: AppI10n.backupOpenMyProjectsLiveFolder,
-          ),
-        if (includeBackup && evidence.backupWorkshop)
-          _DetectedFolderCopy(
-            key: const ValueKey<String>('backup-reconcile-backup-workshop'),
-            label: tr(AppI10n.backupFolderBackupWorkshop),
-            folder: widget.workshopBackupFolder,
-            foreground: widget.foreground,
-            openTooltip: AppI10n.backupOpenWorkshopBackupFolder,
-          ),
-        if (includeBackup && evidence.backupMyProjects)
-          _DetectedFolderCopy(
-            key: const ValueKey<String>('backup-reconcile-backup-myprojects'),
-            label: tr(AppI10n.backupFolderBackupMyProjects),
-            folder: widget.myProjectsBackupFolder,
-            foreground: widget.foreground,
-            openTooltip: AppI10n.backupOpenMyProjectsBackupFolder,
-          ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _conflictingBackupDetails({required bool showTree}) {
+    if (showTree) {
+      return BackupDifferenceFileTree(
+        wallpaperName: entry.name,
+        difference: entry.backupDifference,
+        workshopBackupFolder: workshopBackupFolder,
+        myProjectsBackupFolder: myProjectsBackupFolder,
+        foreground: foreground,
+      );
+    }
+
+    final List<Widget> copies = _detectedLocationCards(
+      includeLive: false,
+      includeBackup: true,
+    );
+    return _locationsWithComparePrompt(
+      copies,
+      promptKey: const ValueKey<String>('backup-reconcile-expand-differences'),
     );
   }
 }

@@ -14,32 +14,24 @@ class BackupDetailGroup extends StatelessWidget {
   final Color foreground;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            title,
-            style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          for (final String item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                '• $item',
-                style: TextStyle(color: foreground, height: 1.3),
-              ),
-            ),
-        ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text(
+        title,
+        style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
       ),
-    );
-  }
+      const SizedBox(height: 5),
+      for (final String item in items)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: Text(item, style: TextStyle(color: foreground, height: 1.3)),
+        ),
+    ],
+  );
 }
 
-/// Explicit action that reveals denser detail work only when requested.
+/// Explicit action prompt used to reveal or start denser detail work.
 class BackupDetailExpandPrompt extends StatelessWidget {
   const BackupDetailExpandPrompt({
     super.key,
@@ -113,7 +105,9 @@ class BackupDetailExpandPrompt extends StatelessWidget {
   );
 }
 
-/// Backup-detail scroll view with an explicit controller for its scrollbar.
+/// Backup-detail scroll view whose thumb stays visible whenever there is actual
+/// overflow. The explicit controller keeps the thumb attached to the intended
+/// viewport instead of relying on an ambient primary scroll controller.
 class BackupDetailScrollView extends StatefulWidget {
   const BackupDetailScrollView({
     super.key,

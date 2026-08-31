@@ -212,8 +212,8 @@ class AppI10n {
       'backup.detail.myProjectsLive';
   static const String backupDetailLiveDifferences =
       'backup.detail.liveDifferences';
-  static const String backupDetailCopyFolderPath =
-      'backup.detail.copyFolderPath';
+  static const String backupDetailExpandLiveDifferences =
+      'backup.detail.expandLiveDifferences';
   static const String backupDetailComparisonFailed =
       'backup.detail.comparisonFailed';
   static const String backupDetailRescanAdvice = 'backup.detail.rescanAdvice';
@@ -224,10 +224,11 @@ class AppI10n {
   static const String backupDetailDifferenceUnavailable =
       'backup.detail.differenceUnavailable';
   static const String backupDetailDifferentSize = 'backup.detail.differentSize';
-  static const String backupDetailOnlyWorkshop = 'backup.detail.onlyWorkshop';
-  static const String backupDetailOnlyMyProjects =
-      'backup.detail.onlyMyProjects';
   static const String backupDetailModified = 'backup.detail.modified';
+  static const String backupDetailInWorkshopBackup =
+      'backup.detail.inWorkshopBackup';
+  static const String backupDetailInMyProjectsBackup =
+      'backup.detail.inMyProjectsBackup';
   static const String backupDetailInWorkshopLive =
       'backup.detail.inWorkshopLive';
   static const String backupDetailInMyProjectsLive =
@@ -237,15 +238,74 @@ class AppI10n {
       'backup.detail.expandFileChanges';
   static const String backupDetailComparingFiles =
       'backup.detail.comparingFiles';
-  static const String backupDetailCompareFiles = 'backup.detail.compareFiles';
   static const String backupDetailCompareFilesHint =
       'backup.detail.compareFilesHint';
   static const String backupDetailMatchingFiles = 'backup.detail.matchingFiles';
-  static const String backupDetailSame = 'backup.detail.same';
   static const String backupDetailFileComparisonUnavailable =
       'backup.detail.fileComparisonUnavailable';
   static const String backupDetailNoFileDifferences =
       'backup.detail.noFileDifferences';
+  static const String backupDetailProjectJsonUnavailable =
+      'backup.detail.projectJsonUnavailable';
+  static const String backupDetailProjectJsonFormattingOnly =
+      'backup.detail.projectJsonFormattingOnly';
+  static const String backupDetailJsonUnavailable =
+      'backup.detail.jsonUnavailable';
+  static const String backupDetailJsonFormattingOnly =
+      'backup.detail.jsonFormattingOnly';
+  static const String backupDetailExpandJson = 'backup.detail.expandJson';
+  static const String backupDetailCollapseJson = 'backup.detail.collapseJson';
+  static const String backupDetailJsonPreviewLimited =
+      'backup.detail.jsonPreviewLimited';
+  static const String backupDetailValueMissing = 'backup.detail.valueMissing';
+  static const String backupDetailCopyFolderPath =
+      'backup.detail.copyFolderPath';
+  static const String backupDetailCompareFiles = 'backup.detail.compareFiles';
+  static const String backupDetailFileUnavailable =
+      'backup.detail.fileUnavailable';
+  static const String backupDetailStructuredJson =
+      'backup.detail.structuredJson';
+  static const String backupDetailTextComparison =
+      'backup.detail.textComparison';
+  static const String backupDetailTextPreviewTruncated =
+      'backup.detail.textPreviewTruncated';
+  static const String backupDetailBinaryComparison =
+      'backup.detail.binaryComparison';
+  static const String backupDetailFileType = 'backup.detail.fileType';
+  static const String backupDetailFileSize = 'backup.detail.fileSize';
+  static const String backupDetailFileModified = 'backup.detail.fileModified';
+  static const String backupDetailSha256 = 'backup.detail.sha256';
+  static const String backupDetailSame = 'backup.detail.same';
+  static const String backupDetailDifferent = 'backup.detail.different';
+  static const String backupDetailNoExtension = 'backup.detail.noExtension';
+  static const String backupDetailCompareImages = 'backup.detail.compareImages';
+  static const String backupDetailPreviewImage = 'backup.detail.previewImage';
+  static const String backupDetailImageUnavailable =
+      'backup.detail.imageUnavailable';
+  static const String backupDetailImageZoomOut = 'backup.detail.imageZoomOut';
+  static const String backupDetailImageResetView =
+      'backup.detail.imageResetView';
+  static const String backupDetailImageZoomIn = 'backup.detail.imageZoomIn';
+  static const String backupDetailImageLinkViews =
+      'backup.detail.imageLinkViews';
+  static const String backupDetailImageUnlinkViews =
+      'backup.detail.imageUnlinkViews';
+  static const String backupDetailImageSideBySide =
+      'backup.detail.imageSideBySide';
+  static const String backupDetailImageOverlay = 'backup.detail.imageOverlay';
+  static const String backupDetailImageBlink = 'backup.detail.imageBlink';
+  static const String backupDetailImageDifference =
+      'backup.detail.imageDifference';
+  static const String backupDetailImageOverlayOpacity =
+      'backup.detail.imageOverlayOpacity';
+  static const String backupDetailImageDifferenceSameHint =
+      'backup.detail.imageDifferenceSameHint';
+  static const String backupDetailImageDifferenceIntensity =
+      'backup.detail.imageDifferenceIntensity';
+  static const String backupDetailImageDifferenceSizeMismatch =
+      'backup.detail.imageDifferenceSizeMismatch';
+  static const String backupDetailOldVersion = 'backup.detail.oldVersion';
+  static const String backupDetailNewVersion = 'backup.detail.newVersion';
   static const String backupDetailAddedFiles = 'backup.detail.addedFiles';
   static const String backupDetailRemovedFiles = 'backup.detail.removedFiles';
   static const String backupDetailApplyChange = 'backup.detail.applyChange';

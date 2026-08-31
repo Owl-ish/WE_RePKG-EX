@@ -201,6 +201,7 @@ void main() {
             child: ReconcileDetailContent(
               entry: entry,
               foreground: Colors.black,
+              focused: false,
               needsFocus: false,
               workshopLiveFolder: folders[0],
               myProjectsLiveFolder: folders[1],
