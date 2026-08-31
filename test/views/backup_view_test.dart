@@ -935,7 +935,7 @@ void main() {
       expect(english['backup']['junk']['emptyTitle'], 'Empty Folders');
       expect(english['backup']['state']['updateAvailable'], 'Update / Sync');
       expect(english['backup']['action']['update'], 'Update / Sync');
-      expect(english['backup']['action']['showAgain'], 'Undismiss');
+      expect(english['backup']['action']['showAgain'], 'Show Again');
       expect(
         english['backup']['action']['recycleAll'],
         'Recycle Bin All ({count})',
@@ -951,25 +951,21 @@ void main() {
       );
       expect(
         english['backup']['action']['showAgainAll'],
-        'Undismiss All ({count})',
+        'Show Again All ({count})',
       );
       expect(chinese['backup']['junk']['emptyTitle'], '空文件夹');
       expect(chinese['backup']['state']['updateAvailable'], '更新 / 同步');
-      expect(chinese['backup']['action']['showAgain'], '取消忽略');
+      expect(chinese['backup']['action']['showAgain'], '再次显示');
       expect(chinese['backup']['action']['recycleAll'], '全部移到回收站（{count}）');
+      expect(english['backup']['ignored'], 'Ignored');
       expect(
         english['backup']['reconcileReason']['duplicateLiveTitle'],
         'Duplicate live copies',
       );
       expect(
         english['backup']['reconcileReason']['duplicateLiveAbout'],
-        'This wallpaper exists in both Live {location1} and {location2} '
-        'folders. WeRePKG will not guess which live copy should be authoritative.',
-      );
-      expect(
-        english['backup']['reconcileReason']['duplicateLiveGroupAbout'],
-        'The same wallpaper was detected in more than one live folder. '
-        'Open Details to review the detected locations.',
+        'This wallpaper exists in both Live {location1} and {location2} folders. '
+        'Please remove one if they are identical, or ignore this detection.',
       );
       expect(
         english['backup']['reconcileReason']['conflictingBackupsTitle'],
@@ -983,6 +979,29 @@ void main() {
       expect(
         english['backup']['detail']['updateToLive'],
         'Updates this backup to mirror the live wallpaper location.',
+      );
+      expect(english['backup']['detail']['fileChanges'], 'File changes');
+      expect(
+        english['backup']['detail']['expandFileChanges'],
+        'Click to expand and inspect changed files',
+      );
+      expect(english['backup']['detail']['modified'], 'Modified Files');
+      expect(english['backup']['detail']['addedFiles'], 'Added Files');
+      expect(english['backup']['detail']['removedFiles'], 'Removed Files');
+      expect(english['backup']['detail']['willRemove'], 'This will be removed');
+      expect(english['backup']['detail']['willKeep'], 'This will be kept');
+      expect(
+        english['backup']['detail']['inWorkshopBackup'],
+        'In Workshop backup',
+      );
+      expect(
+        english['backup']['detail']['inMyProjectsBackup'],
+        'In MyProjects backup',
+      );
+      expect(english['backup']['detail']['inWorkshopLive'], 'In Workshop live');
+      expect(
+        english['backup']['detail']['inMyProjectsLive'],
+        'In MyProjects live',
       );
       expect(english['backup']['detail']['copyFolderPath'], 'Copy folder path');
       expect(

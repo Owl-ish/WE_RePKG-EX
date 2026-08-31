@@ -293,6 +293,7 @@ class ReconcileDetailContent extends StatefulWidget {
     required this.myProjectsLiveFolder,
     required this.workshopBackupFolder,
     required this.myProjectsBackupFolder,
+    required this.rePKGPath,
     this.ignoredMode = false,
     this.loadDuplicateLiveChanges,
     this.onRequestFocus,
@@ -307,6 +308,7 @@ class ReconcileDetailContent extends StatefulWidget {
   final String? myProjectsLiveFolder;
   final String? workshopBackupFolder;
   final String? myProjectsBackupFolder;
+  final String? rePKGPath;
   final bool ignoredMode;
   final Future<FolderFileComparison?> Function()? loadDuplicateLiveChanges;
   final VoidCallback? onRequestFocus;
@@ -325,6 +327,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
   String? get myProjectsLiveFolder => widget.myProjectsLiveFolder;
   String? get workshopBackupFolder => widget.workshopBackupFolder;
   String? get myProjectsBackupFolder => widget.myProjectsBackupFolder;
+  String? get rePKGPath => widget.rePKGPath;
   Future<FolderFileComparison?> Function()? get loadDuplicateLiveChanges =>
       widget.loadDuplicateLiveChanges;
 
@@ -638,6 +641,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
           '${tr(AppI10n.backupDetailMyProjectsLive)} / ${entry.name}';
       final Widget tree = FolderDifferenceFileTree(
         key: const ValueKey<String>('backup-duplicate-live-file-tree'),
+        wallpaperName: entry.name,
         changes: changes,
         firstFolder: workshopLiveFolder,
         secondFolder: myProjectsLiveFolder,
@@ -654,6 +658,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
         secondSideId: 'duplicate-live-myprojects',
         firstFolderActionKey: 'backup-duplicate-live-workshop-button',
         secondFolderActionKey: 'backup-duplicate-live-myprojects-button',
+        rePKGPath: rePKGPath,
         foreground: foreground,
       );
       final List<Widget> backupCopies = _detectedLocationCards(
@@ -709,6 +714,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
         difference: entry.backupDifference,
         workshopBackupFolder: workshopBackupFolder,
         myProjectsBackupFolder: myProjectsBackupFolder,
+        rePKGPath: rePKGPath,
         foreground: foreground,
       );
     }

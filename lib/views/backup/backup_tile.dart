@@ -20,6 +20,7 @@ import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/backup.dart';
+import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/double_click.dart';
@@ -516,6 +517,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         widget.folders.live != null &&
         updateBackupFolder != null;
     final bool updateHasContent = hasUpdateDetails && updatePlan.updateContent;
+    final String? rePKGPath = ref.read(toolPathProvider);
     final BackupUpdateSelection? updateSelection =
         updateHasContent &&
             widget.folders.live != null &&
@@ -537,6 +539,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         if (!mounted) return;
         if (selection == null) {
           showErrorToast(tr(AppI10n.backupDetailFileComparisonUnavailable));
+          return;
+        }
+        if (selection.blockedPackages.isNotEmpty) {
+          showErrorToast(tr(AppI10n.backupActionPackageSelectionBlocked));
           return;
         }
         await applyBackupAction(context, BackupAction.update, <BackupCard>[
@@ -589,6 +595,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 myProjectsLiveFolder: reconcileMyProjectsLive,
                 workshopBackupFolder: reconcileWorkshopBackup,
                 myProjectsBackupFolder: reconcileMyProjectsBackup,
+                rePKGPath: rePKGPath,
                 loadDuplicateLiveChanges: loadDuplicateLiveChanges,
                 onRequestFocus: requestFocus,
               )
@@ -606,6 +613,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 foreground: foreground,
                 focused: focused,
                 needsFocus: updateNeedsFocus,
+                rePKGPath: rePKGPath,
                 selection: updateSelection,
                 onRequestFocus: requestFocus,
               )

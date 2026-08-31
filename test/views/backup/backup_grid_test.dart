@@ -1,5 +1,5 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,7 +40,6 @@ void main() {
       WidgetTester tester, {
       List<BackupTile> tiles = const <BackupTile>[],
       List<ReconcileTile> reconcile = const <ReconcileTile>[],
-      Map<BackupCard, BackupState>? scanCards,
       Map<BackupCard, BackupUpdatePlan> updates =
           const <BackupCard, BackupUpdatePlan>{},
       Set<BackupCard> ignoredUpdates = const <BackupCard>{},
@@ -53,12 +52,9 @@ void main() {
           backupScanProvider.overrideWithValue(
             AsyncValue<BackupScan>.data(
               scanOf(
-                cards:
-                    scanCards ??
-                    <BackupCard, BackupState>{
-                      for (final BackupTile tile in tiles)
-                        tile.card: tile.state,
-                    },
+                cards: <BackupCard, BackupState>{
+                  for (final BackupTile tile in tiles) tile.card: tile.state,
+                },
                 updates: updates,
                 ignoredUpdates: ignoredUpdates,
                 presence: presence,
@@ -144,45 +140,6 @@ void main() {
       await tester.tap(find.text('$label $count'));
       await settle(tester);
     }
-
-    testWidgets('ignored updates use the shared Ignored pill and grid', (
-      tester,
-    ) async {
-      const BackupCard card = BackupCard(
-        WallpaperLibrary.workshop,
-        'ignored-update',
-      );
-      await pumpPills(
-        tester,
-        tiles: const <BackupTile>[
-          (card: card, state: BackupState.updateDismissed, face: null),
-        ],
-        scanCards: const <BackupCard, BackupState>{},
-        ignoredUpdates: <BackupCard>{card},
-        reconcile: <ReconcileTile>[conflict()],
-      );
-
-      final Iterable<CountPill> pills = tester.widgetList<CountPill>(
-        find.byType(CountPill),
-      );
-      expect(
-        pills.where(
-          (CountPill pill) => pill.label == AppI10n.backupStateUpdateDismissed,
-        ),
-        isEmpty,
-      );
-      expect(countOf(AppI10n.backupIgnored, 1), findsOneWidget);
-      expect(container.read(backupStateFilterProvider).reconcile, isTrue);
-
-      await tapPill(tester, AppI10n.backupIgnored, 1);
-
-      expect(container.read(backupStateFilterProvider).ignored, isTrue);
-      expect(
-        find.byKey(const ValueKey<String>('backup-ignored-grid')),
-        findsOneWidget,
-      );
-      expect(find.text('ignored-update'), findsOneWidget);
-    });
 
     Finder arrivingTiles() => find.descendant(
       of: find.byType(SelectionGrid),
@@ -718,9 +675,6 @@ void main() {
         entry: const ReconcileEntry(
           name: 'ignored-reconcile',
           reason: BackupReconcileReason.duplicateLiveCopies,
-          additionalReasons: <BackupReconcileReason>{
-            BackupReconcileReason.conflictingBackupCopies,
-          },
           ignoredReasons: <BackupReconcileReason>{
             BackupReconcileReason.duplicateLiveCopies,
             BackupReconcileReason.conflictingBackupCopies,
@@ -750,6 +704,18 @@ void main() {
         reconcile: <ReconcileTile>[ignoredReconcile],
       );
 
+      final Iterable<CountPill> statePills = tester.widgetList<CountPill>(
+        find.byType(CountPill),
+      );
+      expect(
+        statePills.where(
+          (CountPill pill) => pill.label == AppI10n.backupStateUpdateDismissed,
+        ),
+        isEmpty,
+        reason: 'ignored updates no longer own a separate top-level pill',
+      );
+      expect(container.read(backupStateFilterProvider).ignored, isTrue);
+
       await tapPill(tester, AppI10n.backupIgnored, 3);
 
       final Finder ignoredGrid = find.byKey(
@@ -776,8 +742,13 @@ void main() {
           'ignored-reconcile',
           BackupReconcileReason.conflictingBackupCopies,
         ),
+        reason: 'one wallpaper can own two independently restorable ignores',
       );
       expect(find.text('ignored-update'), findsOneWidget);
+      expect(
+        grid.sections.map((SelectionGridSection section) => section.header),
+        everyElement(isNotNull),
+      );
       expect(
         grid.sections.map(
           (SelectionGridSection section) => section.headerPinned,

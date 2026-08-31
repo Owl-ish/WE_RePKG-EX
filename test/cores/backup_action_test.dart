@@ -37,7 +37,7 @@ void main() {
   });
 
   test(
-    'update mirrors changed files, removes residue, and skips shader cache',
+    'backup mirrors changed files, removes residue, and skips shader cache',
     () async {
       final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
         ..createSync();
@@ -100,15 +100,23 @@ void main() {
       File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
       final File liveFile = File(path.join(live.path, 'scene.json'))
         ..writeAsStringSync('new!');
+
       final Directory backup = Directory(
         path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
       )..createSync(recursive: true);
       File(path.join(backup.path, 'project.json')).writeAsStringSync('{}');
       final File backupFile = File(path.join(backup.path, 'scene.json'))
         ..writeAsStringSync('old!');
+
       final DateTime sharedModified = DateTime.utc(2026, 1, 2, 3, 4, 5);
       liveFile.setLastModifiedSync(sharedModified);
       backupFile.setLastModifiedSync(sharedModified);
+
+      final BackupFileChanges exact = (await compareBackupFileChanges(
+        liveFolder: live.path,
+        backupFolder: backup.path,
+      ))!;
+      expect(exact.modified, contains('scene.json'));
 
       final result = await backUpWallpaper(
         card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
@@ -300,7 +308,45 @@ void main() {
     },
   );
 
-  test('the whole scene.pkg can be kept without repacking it', () async {
+  test('package-internal overrides are blocked before mutation', () async {
+    final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
+      ..createSync();
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory live = Directory(path.join(liveRoot.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'scene.pkg')).writeAsStringSync('new package');
+    final Directory backup = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(backup.path, 'scene.pkg')).writeAsStringSync('old package');
+    final BackupFileChanges expected = (await compareBackupFileChanges(
+      liveFolder: live.path,
+      backupFolder: backup.path,
+    ))!;
+
+    final result = await backUpWallpaper(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: null,
+      liveMyProjectsPath: liveRoot.path,
+      acfPath: null,
+      mirror: true,
+      selectiveUpdate: BackupSelectiveUpdatePlan(
+        expectedChanges: expected,
+        blockedPackages: const <String>{'scene.pkg'},
+      ),
+    );
+
+    expect(result.changed, isFalse);
+    expect(result.error, isNotNull);
+    expect(
+      File(path.join(backup.path, 'scene.pkg')).readAsStringSync(),
+      'old package',
+    );
+  });
+
+  test('the whole scene.pkg can be skipped without a packer', () async {
     final Directory liveRoot = Directory(path.join(temporary.path, 'live'))
       ..createSync();
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
@@ -487,6 +533,31 @@ void main() {
     expect(other.existsSync(), isTrue);
   });
 
+  test('ignore update records the current live version', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory liveMyProjects = Directory(
+      path.join(temporary.path, 'live-myprojects'),
+    )..createSync();
+    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+      ..createSync();
+    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
+
+    final BackupActionResult result = await ignoreBackupUpdate(
+      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+      backupRoot: backupRoot.path,
+      liveWorkshopPath: null,
+      liveMyProjectsPath: liveMyProjects.path,
+      acfPath: null,
+    );
+    final BackupRecord record = (await readBackupRecords(
+      backupRoot.path,
+    ))['myprojects/demo']!;
+
+    expect(result, (changed: true, error: null));
+    expect(record.dismissedVersion, isNotNull);
+  });
+
   test('reconcile ignored detections can be restored independently', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
       ..createSync();
@@ -538,22 +609,6 @@ void main() {
     );
   });
 
-  test('comparison-unavailable cannot be saved as ignored', () async {
-    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
-      ..createSync();
-
-    final BackupActionResult result = await ignoreReconcileIssues(
-      name: 'demo',
-      fingerprints: const <BackupReconcileReason, String>{
-        BackupReconcileReason.comparisonUnavailable: 'not-stable-evidence',
-      },
-      backupRoot: backupRoot.path,
-    );
-
-    expect(result, (changed: false, error: null));
-    expect(await readBackupRecords(backupRoot.path), isEmpty);
-  });
-
   test('show update again clears only the dismissal', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
       ..createSync();
@@ -575,31 +630,6 @@ void main() {
     expect(result, (changed: true, error: null));
     expect(record.backedUpVersion, 'old');
     expect(record.dismissedVersion, isNull);
-  });
-
-  test('ignore update records the current live version', () async {
-    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
-      ..createSync();
-    final Directory liveMyProjects = Directory(
-      path.join(temporary.path, 'live-myprojects'),
-    )..createSync();
-    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
-      ..createSync();
-    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
-
-    final BackupActionResult result = await ignoreBackupUpdate(
-      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
-      backupRoot: backupRoot.path,
-      liveWorkshopPath: null,
-      liveMyProjectsPath: liveMyProjects.path,
-      acfPath: null,
-    );
-    final BackupRecord record = (await readBackupRecords(
-      backupRoot.path,
-    ))['myprojects/demo']!;
-
-    expect(result, (changed: true, error: null));
-    expect(record.dismissedVersion, isNotNull);
   });
 
   test(

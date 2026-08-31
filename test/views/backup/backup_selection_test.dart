@@ -319,8 +319,8 @@ void main() {
       );
     });
 
-    // Its own anchor, held in this grid rather than in the app-wide setting
-    // the extract grid uses, or the two would reach into each other's list.
+    // Both grids keep their own id anchor so selection state remains isolated,
+    // while the shared transition gives them the same Shift semantics.
     testWidgets('shift reaches back to the last click', (tester) async {
       await pump(tester);
 

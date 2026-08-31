@@ -1,52 +1,116 @@
 part of 'content_details.dart';
 
+bool _pathNamed(String filePath, String name) =>
+    path.basename(filePath).toLowerCase() == name.toLowerCase();
+
 FileTreeRowChoice _copyChoice(
   BackupUpdateSelection selection,
   String filePath,
-  Color foreground,
-) => FileTreeRowChoice(
-  selected: selection.copySelected(filePath),
-  onChanged: (bool value) {
-    selection.setCopySelected(filePath, value);
-  },
-  rejectTooltip: tr(AppI10n.backupDetailKeepOld),
-  acceptTooltip: tr(AppI10n.backupDetailApplyChange),
-  foreground: foreground,
-  rejectKey: ValueKey<String>('backup-update-reject-$filePath'),
-  acceptKey: ValueKey<String>('backup-update-accept-$filePath'),
-);
+  Color foreground, {
+  String? packagePath,
+}) {
+  final bool selected = packagePath == null
+      ? selection.copySelected(filePath)
+      : selection.packageChangeSelected(packagePath, filePath, deletion: false);
+  final String keyPath = packagePath == null
+      ? filePath
+      : '$packagePath::$filePath';
+  return FileTreeRowChoice(
+    selected: selected,
+    onChanged: (bool value) {
+      if (packagePath == null) {
+        selection.setCopySelected(filePath, value);
+      } else {
+        selection.setPackageChangeSelected(
+          packagePath,
+          filePath,
+          value,
+          deletion: false,
+        );
+      }
+    },
+    rejectTooltip: tr(AppI10n.backupDetailKeepOld),
+    acceptTooltip: tr(AppI10n.backupDetailApplyChange),
+    foreground: foreground,
+    enabled: packagePath == null,
+    disabledTooltip: packagePath == null
+        ? null
+        : tr(AppI10n.backupDetailRepackingComingSoon),
+    rejectKey: ValueKey<String>('backup-update-reject-$keyPath'),
+    acceptKey: ValueKey<String>('backup-update-accept-$keyPath'),
+  );
+}
 
 FileTreeRowChoice _deletionChoice(
   BackupUpdateSelection selection,
   String filePath,
-  Color foreground,
-) => FileTreeRowChoice(
-  selected: selection.deletionSelected(filePath),
-  onChanged: (bool value) {
-    selection.setDeletionSelected(filePath, value);
-  },
-  rejectTooltip: tr(AppI10n.backupDetailKeepBackupFile),
-  acceptTooltip: tr(AppI10n.backupDetailRemoveBackupFile),
-  foreground: foreground,
-  rejectKey: ValueKey<String>('backup-update-reject-$filePath'),
-  acceptKey: ValueKey<String>('backup-update-accept-$filePath'),
-);
+  Color foreground, {
+  String? packagePath,
+}) {
+  final bool selected = packagePath == null
+      ? selection.deletionSelected(filePath)
+      : selection.packageChangeSelected(packagePath, filePath, deletion: true);
+  final String keyPath = packagePath == null
+      ? filePath
+      : '$packagePath::$filePath';
+  return FileTreeRowChoice(
+    selected: selected,
+    onChanged: (bool value) {
+      if (packagePath == null) {
+        selection.setDeletionSelected(filePath, value);
+      } else {
+        selection.setPackageChangeSelected(
+          packagePath,
+          filePath,
+          value,
+          deletion: true,
+        );
+      }
+    },
+    rejectTooltip: tr(AppI10n.backupDetailKeepBackupFile),
+    acceptTooltip: tr(AppI10n.backupDetailRemoveBackupFile),
+    foreground: foreground,
+    enabled: packagePath == null,
+    disabledTooltip: packagePath == null
+        ? null
+        : tr(AppI10n.backupDetailRepackingComingSoon),
+    rejectKey: ValueKey<String>('backup-update-reject-$keyPath'),
+    acceptKey: ValueKey<String>('backup-update-accept-$keyPath'),
+  );
+}
 
 FileTreeRowChoice _copyGroupChoice(
   BackupUpdateSelection selection,
   Iterable<String> filePaths,
   Color foreground, {
   required String keyBase,
+  String? packagePath,
 }) {
   final List<String> paths = List<String>.from(filePaths);
+  final bool? selected = packagePath == null
+      ? selection.copyGroupSelected(paths)
+      : selection.packageGroupSelected(packagePath, paths, deletion: false);
   return FileTreeRowChoice(
-    selected: selection.copyGroupSelected(paths),
+    selected: selected,
     onChanged: (bool value) {
-      selection.setCopyGroupSelected(paths, value);
+      if (packagePath == null) {
+        selection.setCopyGroupSelected(paths, value);
+      } else {
+        selection.setPackageGroupSelected(
+          packagePath,
+          paths,
+          value,
+          deletion: false,
+        );
+      }
     },
     rejectTooltip: tr(AppI10n.backupDetailDeselectAll),
     acceptTooltip: tr(AppI10n.backupDetailSelectAll),
     foreground: foreground,
+    enabled: packagePath == null,
+    disabledTooltip: packagePath == null
+        ? null
+        : tr(AppI10n.backupDetailRepackingComingSoon),
     rejectKey: ValueKey<String>('backup-update-group-reject-$keyBase'),
     acceptKey: ValueKey<String>('backup-update-group-accept-$keyBase'),
   );
@@ -57,23 +121,46 @@ FileTreeRowChoice _deletionGroupChoice(
   Iterable<String> filePaths,
   Color foreground, {
   required String keyBase,
+  String? packagePath,
 }) {
   final List<String> paths = List<String>.from(filePaths);
+  final bool? selected = packagePath == null
+      ? selection.deletionGroupSelected(paths)
+      : selection.packageGroupSelected(packagePath, paths, deletion: true);
   return FileTreeRowChoice(
-    selected: selection.deletionGroupSelected(paths),
+    selected: selected,
     onChanged: (bool value) {
-      selection.setDeletionGroupSelected(paths, value);
+      if (packagePath == null) {
+        selection.setDeletionGroupSelected(paths, value);
+      } else {
+        selection.setPackageGroupSelected(
+          packagePath,
+          paths,
+          value,
+          deletion: true,
+        );
+      }
     },
     rejectTooltip: tr(AppI10n.backupDetailDeselectAll),
     acceptTooltip: tr(AppI10n.backupDetailSelectAll),
     foreground: foreground,
+    enabled: packagePath == null,
+    disabledTooltip: packagePath == null
+        ? null
+        : tr(AppI10n.backupDetailRepackingComingSoon),
     rejectKey: ValueKey<String>('backup-update-group-reject-$keyBase'),
     acceptKey: ValueKey<String>('backup-update-group-accept-$keyBase'),
   );
 }
 
-String _deletionSubtitle(BackupUpdateSelection selection, String filePath) {
-  final bool selected = selection.deletionSelected(filePath);
+String _deletionSubtitle(
+  BackupUpdateSelection selection,
+  String filePath, {
+  String? packagePath,
+}) {
+  final bool selected = packagePath == null
+      ? selection.deletionSelected(filePath)
+      : selection.packageChangeSelected(packagePath, filePath, deletion: true);
   return tr(
     selected ? AppI10n.backupDetailWillRemove : AppI10n.backupDetailWillKeep,
   );
@@ -161,6 +248,7 @@ class BackupDifferenceFileTree extends StatelessWidget {
     required this.difference,
     required this.workshopBackupFolder,
     required this.myProjectsBackupFolder,
+    required this.rePKGPath,
     required this.foreground,
   });
 
@@ -168,6 +256,7 @@ class BackupDifferenceFileTree extends StatelessWidget {
   final BackupCopyDifference? difference;
   final String? workshopBackupFolder;
   final String? myProjectsBackupFolder;
+  final String? rePKGPath;
   final Color foreground;
 
   @override
@@ -181,6 +270,7 @@ class BackupDifferenceFileTree extends StatelessWidget {
             onlySecond: difference.onlyMyProjects,
           );
     return FolderDifferenceFileTree(
+      wallpaperName: wallpaperName,
       changes: changes,
       firstFolder: workshopBackupFolder,
       secondFolder: myProjectsBackupFolder,
@@ -198,6 +288,7 @@ class BackupDifferenceFileTree extends StatelessWidget {
       secondSideId: 'reconcile-myprojects',
       firstFolderActionKey: 'backup-reconcile-backup-workshop-button',
       secondFolderActionKey: 'backup-reconcile-backup-myprojects-button',
+      rePKGPath: rePKGPath,
       foreground: foreground,
     );
   }
@@ -211,6 +302,7 @@ class BackupDifferenceFileTree extends StatelessWidget {
 class FolderDifferenceFileTree extends StatefulWidget {
   const FolderDifferenceFileTree({
     super.key,
+    required this.wallpaperName,
     required this.changes,
     required this.firstFolder,
     required this.secondFolder,
@@ -227,9 +319,11 @@ class FolderDifferenceFileTree extends StatefulWidget {
     required this.secondSideId,
     required this.firstFolderActionKey,
     required this.secondFolderActionKey,
+    required this.rePKGPath,
     required this.foreground,
   });
 
+  final String wallpaperName;
   final FolderFileChanges? changes;
   final String? firstFolder;
   final String? secondFolder;
@@ -246,6 +340,7 @@ class FolderDifferenceFileTree extends StatefulWidget {
   final String secondSideId;
   final String firstFolderActionKey;
   final String secondFolderActionKey;
+  final String? rePKGPath;
   final Color foreground;
 
   @override
@@ -391,13 +486,17 @@ class _FolderDifferenceFileTreeState extends State<FolderDifferenceFileTree> {
             _ChangedFileGroup(
               title: widget.modifiedTitle,
               paths: current.modified,
+              wallpaperName: widget.wallpaperName,
               leftFolder: widget.firstFolder,
               rightFolder: widget.secondFolder,
               leftLabel: widget.firstLabel,
               rightLabel: widget.secondLabel,
               directionalVisual: false,
+              rePKGPath: widget.rePKGPath,
               colour: colours.warn,
               foreground: widget.foreground,
+              leftOnlyLabel: widget.firstOnlyTitle,
+              rightOnlyLabel: widget.secondOnlyTitle,
             ),
           if (current.onlyFirst.isNotEmpty)
             _pathDifferenceGroup(
@@ -455,26 +554,34 @@ class _ChangedFileGroup extends StatelessWidget {
   const _ChangedFileGroup({
     required this.title,
     required this.paths,
+    required this.wallpaperName,
     required this.leftFolder,
     required this.rightFolder,
     required this.leftLabel,
     required this.rightLabel,
     required this.directionalVisual,
+    required this.rePKGPath,
     required this.colour,
     required this.foreground,
+    this.leftOnlyLabel,
+    this.rightOnlyLabel,
     this.selection,
     this.groupChoiceKey,
   });
 
   final String title;
   final List<String> paths;
+  final String wallpaperName;
   final String? leftFolder;
   final String? rightFolder;
   final String? leftLabel;
   final String? rightLabel;
   final bool directionalVisual;
+  final String? rePKGPath;
   final Color colour;
   final Color foreground;
+  final String? leftOnlyLabel;
+  final String? rightOnlyLabel;
   final BackupUpdateSelection? selection;
   final String? groupChoiceKey;
 
@@ -508,20 +615,39 @@ class _ChangedFileGroup extends StatelessWidget {
             ),
       children: <Widget>[
         for (final String filePath in ordered)
-          _differenceFileEntry(
-            depth: 1,
-            filePath: filePath,
-            colour: colour,
-            foreground: foreground,
-            firstFolder: firstFolder,
-            firstLabel: firstLabel,
-            secondFolder: secondFolder,
-            secondLabel: secondLabel,
-            directional: directionalVisual,
-            choice: selection == null
-                ? null
-                : _copyChoice(selection!, filePath, foreground),
-          ),
+          if (_pathNamed(filePath, WallpaperFiles.packedScene) &&
+              leftFolder != null &&
+              rightFolder != null)
+            _ScenePkgInspector(
+              wallpaperName: wallpaperName,
+              filePath: filePath,
+              leftFolder: leftFolder!,
+              rightFolder: rightFolder!,
+              leftLabel: leftLabel,
+              rightLabel: rightLabel,
+              directionalVisual: directionalVisual,
+              rePKGPath: rePKGPath,
+              foreground: foreground,
+              accent: colour,
+              leftOnlyLabel: leftOnlyLabel,
+              rightOnlyLabel: rightOnlyLabel,
+              selection: selection,
+            )
+          else
+            _differenceFileEntry(
+              depth: 1,
+              filePath: filePath,
+              colour: colour,
+              foreground: foreground,
+              firstFolder: firstFolder,
+              firstLabel: firstLabel,
+              secondFolder: secondFolder,
+              secondLabel: secondLabel,
+              directional: directionalVisual,
+              choice: selection == null
+                  ? null
+                  : _copyChoice(selection!, filePath, foreground),
+            ),
       ],
     );
   }

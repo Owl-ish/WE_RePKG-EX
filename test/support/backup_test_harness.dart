@@ -1,3 +1,4 @@
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,11 @@ Future<void> settle(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 400));
 }
 
+Future<void> settleToast(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 700));
+}
+
 Finder countOf(String label, int count) => find.text('$label $count');
 
 // The tile list is stubbed too, or the grid would go looking for previews
@@ -55,13 +61,18 @@ Future<void> showScan(
   WidgetTester tester,
   BackupScan scan, {
   List<BackupTile> tiles = const <BackupTile>[],
+  String backupRoot = r'C:\backup',
   String? workshopPath,
+  String? myProjectsPath,
+  bool withBotToast = false,
 }) => tester.pumpWidget(
   ProviderScope(
     overrides: [
-      backupRootProvider.overrideWithValue(r'C:\backup'),
+      backupRootProvider.overrideWithValue(backupRoot),
       if (workshopPath != null)
         wallpaperPathProvider.overrideWithValue(workshopPath),
+      if (myProjectsPath != null)
+        myProjectsLibraryProvider.overrideWithValue(myProjectsPath),
       backupScanProvider.overrideWithValue(AsyncValue<BackupScan>.data(scan)),
       backupTilesProvider.overrideWithValue(
         AsyncValue<List<BackupTile>>.data(tiles),
@@ -75,6 +86,10 @@ Future<void> showScan(
     ],
     child: MaterialApp(
       theme: AppTheme.lightTheme,
+      builder: withBotToast ? BotToastInit() : null,
+      navigatorObservers: withBotToast
+          ? <NavigatorObserver>[BotToastNavigatorObserver()]
+          : const <NavigatorObserver>[],
       home: const Scaffold(body: BackupView()),
     ),
   ),

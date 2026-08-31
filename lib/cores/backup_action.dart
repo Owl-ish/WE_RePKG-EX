@@ -15,7 +15,10 @@ import 'package:we_repkg/utils/wallpaper_junk.dart';
 typedef BackupActionResult = ({bool changed, String? error});
 typedef BackupTrash = Future<String?> Function(String folder);
 
-/// Copies a live wallpaper into its matching backup library.
+//====================
+// Backup / Update / Sync
+//====================
+/// Mirrors a live wallpaper into its matching backup library.
 ///
 /// Detailed Update can preserve selected old files. [mirror] is explicit so
 /// ordinary Back up remains non-destructive; Update/Sync enables it. Cleanup
@@ -84,6 +87,12 @@ Future<BackupActionResult> backUpWallpaper({
     }
 
     final BackupSelectiveUpdatePlan? selection = selectiveUpdate;
+    if (selection != null && selection.blockedPackages.isNotEmpty) {
+      return (
+        changed: false,
+        error: tr(AppI10n.backupActionPackageSelectionBlocked),
+      );
+    }
     if (selection != null) {
       final Directory? comparisonBackup = destinationExisted
           ? destination
@@ -127,6 +136,7 @@ Future<BackupActionResult> backUpWallpaper({
           skippedRelativePaths: selection?.skippedCopies ?? const <String>{},
         ) ||
         changed;
+
     final String? afterCopies = await liveBackupVersion(
       card,
       liveFolder: source.path,
@@ -154,6 +164,7 @@ Future<BackupActionResult> backUpWallpaper({
     if (before != version) {
       return (changed: changed, error: tr(AppI10n.backupActionSourceChanged));
     }
+
     final Map<String, BackupRecord> records = await readBackupRecords(
       backupRoot,
     );
@@ -193,6 +204,42 @@ Future<BackupActionResult> backUpWallpaper({
   }
 }
 
+/// Claims a redundant backup before sending it to the Recycle Bin.
+///
+/// If trash cannot be confirmed, the claim is restored so Sync does not leave
+/// the filesystem in a half-cleaned state.
+Future<String?> _recycleSyncedBackup({
+  required Directory target,
+  BackupTrash? trashFolder,
+}) async {
+  if (!await target.exists()) return null;
+  final Directory wrapper = await target.parent.createTemp(
+    WallpaperFiles.emptyBackupStagePrefix,
+  );
+  final Directory claimed = Directory(
+    path.join(wrapper.path, path.basename(target.path)),
+  );
+  try {
+    publishWithoutReplacing(target, claimed.path);
+    final BackupTrash trash =
+        trashFolder ?? (String folder) => deleteToTrash(filePath: folder);
+    final String? error = await trash(claimed.path);
+    if (await claimed.exists()) {
+      await _restoreClaim(claimed, target.path);
+      return error ?? tr(AppI10n.backupActionTrashUnconfirmed);
+    }
+    return error;
+  } catch (error) {
+    if (await claimed.exists()) await _restoreClaim(claimed, target.path);
+    return '$error';
+  } finally {
+    await _deleteEmptyDirectory(wrapper);
+  }
+}
+
+//====================
+// Ignored detections
+//====================
 /// Moves one content-update detection into the shared Ignored view.
 ///
 /// The ignored version is tied to the current live version. A later live
@@ -243,7 +290,7 @@ Future<BackupActionResult> ignoreBackupUpdate({
   }
 }
 
-/// Saves the current evidence for each ignored Reconcile warning.
+/// Persists all currently ignorable Reconcile reasons for one wallpaper.
 Future<BackupActionResult> ignoreReconcileIssues({
   required String name,
   required Map<BackupReconcileReason, String> fingerprints,
@@ -252,13 +299,7 @@ Future<BackupActionResult> ignoreReconcileIssues({
   if (backupRoot == null) {
     return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
   }
-  final Map<BackupReconcileReason, String> supported =
-      <BackupReconcileReason, String>{
-        for (final MapEntry<BackupReconcileReason, String> entry
-            in fingerprints.entries)
-          if (reconcileReasonCanBeIgnored(entry.key)) entry.key: entry.value,
-      };
-  if (supported.isEmpty) return (changed: false, error: null);
+  if (fingerprints.isEmpty) return (changed: false, error: null);
   try {
     final Map<String, BackupRecord> records = await readBackupRecords(
       backupRoot,
@@ -268,7 +309,7 @@ Future<BackupActionResult> ignoreReconcileIssues({
     final Map<BackupReconcileReason, String> ignored =
         <BackupReconcileReason, String>{
           ...previous.ignoredReconcileIssues,
-          ...supported,
+          ...fingerprints,
         };
     if (mapEquals(ignored, previous.ignoredReconcileIssues)) {
       return (changed: false, error: null);
@@ -285,7 +326,10 @@ Future<BackupActionResult> ignoreReconcileIssues({
   }
 }
 
-/// Restores only the requested Reconcile warnings for one wallpaper.
+/// Restores selected ignored Reconcile detections for one wallpaper.
+///
+/// The name-level record can hold more than one ignored reason. Removing only
+/// the requested reasons preserves the other grouped Ignored detections.
 Future<BackupActionResult> showReconcileIssuesAgain({
   required String name,
   required Set<BackupReconcileReason> reasons,
@@ -331,7 +375,7 @@ Future<BackupActionResult> showReconcileIssuesAgain({
   }
 }
 
-/// Restores every ignored content update and Reconcile warning in one write.
+/// Restores every currently ignored Backup/Reconcile detection in one write.
 Future<BackupActionResult> showAllIgnoredIssues({
   required String? backupRoot,
   required Iterable<BackupCard> ignoredUpdates,
@@ -380,6 +424,9 @@ Future<BackupActionResult> showAllIgnoredIssues({
   }
 }
 
+//====================
+// Update Dismissal
+//====================
 /// Clears only the dismissed update marker, preserving the backup baseline.
 Future<BackupActionResult> showBackupUpdateAgain({
   required BackupCard card,
@@ -407,6 +454,9 @@ Future<BackupActionResult> showBackupUpdateAgain({
   }
 }
 
+//====================
+// Junk Cleanup
+//====================
 /// Recycles disposable live or backup remnants after rechecking each target.
 Future<BackupActionResult> recycleBackupJunk({
   required BackupCard card,
@@ -481,39 +531,6 @@ Future<BackupActionResult> recycleBackupJunk({
   return (changed: changed, error: errors.isEmpty ? null : errors.join('\n'));
 }
 
-/// Claims a redundant backup before sending it to the Recycle Bin.
-///
-/// If trash cannot be confirmed, the claim is restored so Sync does not leave
-/// the filesystem in a half-cleaned state.
-Future<String?> _recycleSyncedBackup({
-  required Directory target,
-  BackupTrash? trashFolder,
-}) async {
-  if (!await target.exists()) return null;
-  final Directory wrapper = await target.parent.createTemp(
-    WallpaperFiles.emptyBackupStagePrefix,
-  );
-  final Directory claimed = Directory(
-    path.join(wrapper.path, path.basename(target.path)),
-  );
-  try {
-    publishWithoutReplacing(target, claimed.path);
-    final BackupTrash trash =
-        trashFolder ?? (String folder) => deleteToTrash(filePath: folder);
-    final String? error = await trash(claimed.path);
-    if (await claimed.exists()) {
-      await _restoreClaim(claimed, target.path);
-      return error ?? tr(AppI10n.backupActionTrashUnconfirmed);
-    }
-    return error;
-  } catch (error) {
-    if (await claimed.exists()) await _restoreClaim(claimed, target.path);
-    return '$error';
-  } finally {
-    await _deleteEmptyDirectory(wrapper);
-  }
-}
-
 typedef _JunkCheck = Future<bool> Function(Directory folder);
 
 /// Rechecks junk before and after claiming it so concurrent changes fail safe.
@@ -562,6 +579,9 @@ Future<bool> _isShaderCacheFolder(Directory folder) async =>
         WallpaperDirectories.shaderCache.toLowerCase() &&
     await folder.exists();
 
+//====================
+// Restore
+//====================
 /// Restores one vanished wallpaper into MyProjects through a staging folder.
 ///
 /// Same-name cards share one restore target. Source choice prefers an unpacked
@@ -631,6 +651,9 @@ Future<Directory?> _preferredRestoreSource(
   return sources.isEmpty ? null : sources.first.folder;
 }
 
+//====================
+// Shared Filesystem Helpers
+//====================
 /// Copies selected meaningful files without touching destination-only files.
 ///
 /// Cleanup is a separate phase so a failed copy cannot delete the old backup
@@ -667,9 +690,8 @@ Future<bool> _copyFolderIncrementally(
 
 /// Removes meaningful destination files that no longer exist in live.
 ///
-/// Copy and source verification happen before this cleanup phase, so a failed
-/// copy cannot delete the previous backup first. Empty folders are removed
-/// bottom-up without touching the wallpaper root.
+/// [keptRelativePaths] are explicit selective-update exceptions. Empty folders
+/// left behind by removals are cleaned bottom-up without touching the root.
 Future<bool> _removeMirrorResidue({
   required Directory source,
   required Directory destination,
@@ -746,8 +768,9 @@ Future<bool> _sameFile(File source, File destination) async {
     return false;
   }
 
-  // Metadata is only a fast candidate check. Different payloads can share the
-  // same size and mtime, so it cannot suppress a required Update copy.
+  // Size + mtime is only a fast candidate check. Two different payloads can
+  // legitimately share both values, so never let metadata alone suppress an
+  // Update copy that the exact detail comparison identified as modified.
   return await filesHaveSameContents(source, destination) ?? false;
 }
 

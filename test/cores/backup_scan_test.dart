@@ -84,7 +84,7 @@ void main() {
     });
 
     // The lightweight MyProjects token intentionally watches top-level files
-    // only; recursive content coverage is handled by the backup comparison.
+    // only; recursive mirror equality is handled by the backup comparison.
     test('an asset changed in a subfolder does not move the token', () async {
       final Directory lib = library('myprojects');
       final Directory folder = wallpaper(lib, 'alpha');
@@ -280,6 +280,106 @@ void main() {
         isEmpty,
       );
     });
+
+    test('detail comparison reports exact file changes on demand', () async {
+      final Directory liveFolder = wallpaper(live, 'alpha');
+      final Directory backupFolder = wallpaper(backup, 'alpha');
+      File(p.join(liveFolder.path, 'same.txt')).writeAsStringSync('same');
+      File(p.join(backupFolder.path, 'same.txt')).writeAsStringSync('same');
+      File(p.join(liveFolder.path, 'changed.txt')).writeAsStringSync('newer');
+      File(p.join(backupFolder.path, 'changed.txt')).writeAsStringSync('old');
+      File(p.join(liveFolder.path, 'same-size.txt')).writeAsStringSync('abc');
+      File(p.join(backupFolder.path, 'same-size.txt')).writeAsStringSync('xyz');
+      File(p.join(liveFolder.path, 'materials', 'new.tex'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('new');
+      File(p.join(backupFolder.path, 'legacy.txt')).writeAsStringSync('old');
+      for (final Directory folder in <Directory>[liveFolder, backupFolder]) {
+        File(p.join(folder.path, 'shaders', 'blobsSM40', 'cache.bin'))
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync(folder == liveFolder ? 'live cache' : 'backup');
+      }
+
+      final BackupFileChanges? changes = await compareBackupFileChanges(
+        liveFolder: liveFolder.path,
+        backupFolder: backupFolder.path,
+      );
+
+      expect(changes, isNotNull);
+      expect(changes!.modified, <String>['changed.txt', 'same-size.txt']);
+      expect(changes.onlyLive, <String>[p.join('materials', 'new.tex')]);
+      expect(changes.onlyBackup, <String>['legacy.txt']);
+    });
+
+    test('JSON detail comparison works for any relative JSON file', () async {
+      final Directory liveFolder = wallpaper(live, 'json-live');
+      final Directory backupFolder = wallpaper(backup, 'json-live');
+      final String jsonPath = p.join('effects', 'settings.json');
+      File(p.join(backupFolder.path, jsonPath))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          '{"title":"Old","type":"scene","tags":["Anime"],'
+          '"nested":{"speed":1,"keep":null},"removed":"gone"}',
+        );
+      File(p.join(liveFolder.path, jsonPath))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          '{"title":"New","type":"scene","tags":["Anime","Game"],'
+          '"nested":{"speed":2,"keep":null},"added":true}',
+        );
+
+      final List<BackupJsonFieldChange>? changes =
+          await compareBackupJsonChanges(
+            beforeFolder: backupFolder.path,
+            afterFolder: liveFolder.path,
+            relativePath: jsonPath,
+          );
+
+      expect(changes, isNotNull);
+      final Map<String, BackupJsonFieldChange> byField =
+          <String, BackupJsonFieldChange>{
+            for (final BackupJsonFieldChange change in changes!)
+              change.field: change,
+          };
+      expect(
+        byField.keys,
+        containsAll(<String>[
+          'title',
+          'tags[1]',
+          'nested.speed',
+          'added',
+          'removed',
+        ]),
+      );
+      expect(byField['title']!.before, 'Old');
+      expect(byField['title']!.after, 'New');
+      expect(byField['nested.speed']!.before, 1);
+      expect(byField['nested.speed']!.after, 2);
+      expect(byField['tags[1]']!.beforePresent, isFalse);
+      expect(byField['tags[1]']!.after, 'Game');
+      expect(byField['added']!.beforePresent, isFalse);
+      expect(byField['added']!.after, isTrue);
+      expect(byField['removed']!.before, 'gone');
+      expect(byField['removed']!.afterPresent, isFalse);
+      expect(byField.containsKey('nested.keep'), isFalse);
+      expect(byField.containsKey('type'), isFalse);
+    });
+
+    test(
+      'detail comparison returns null when a folder cannot be read',
+      () async {
+        final Directory liveFolder = wallpaper(live, 'alpha');
+        File(p.join(liveFolder.path, 'project.json')).writeAsStringSync('x');
+
+        expect(
+          await compareBackupFileChanges(
+            liveFolder: liveFolder.path,
+            backupFolder: p.join(backup.path, 'missing'),
+          ),
+          isNull,
+        );
+      },
+    );
 
     // Cross enough batch boundaries to prove every requested folder contributes
     // a result; dropping one could falsely leave a card looking current.
@@ -1005,7 +1105,7 @@ void main() {
       expect(result.reconcile, isEmpty);
     });
 
-    // Coverage comparisons can be long-running, so the scan must report both
+    // Mirror comparisons can be long-running, so the scan must report both
     // its phase and counted progress instead of leaving the UI silent.
     test('the scan reports what it is doing and how far it has got', () async {
       for (int i = 0; i < 30; i++) {
@@ -1267,7 +1367,7 @@ void main() {
     });
 
     // Wallpaper Engine rebuilds shader caches locally, so recursive MyProjects
-    // coverage must ignore them on both sides.
+    // mirror comparison must ignore them on both sides.
     test('rebuilt shaders do not make a backup look stale', () async {
       final Directory live = wallpaper(liveMyProjects, 'alpha');
       final Directory backup = wallpaper(backupMyProjects(), 'alpha');

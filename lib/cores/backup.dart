@@ -813,11 +813,13 @@ class BackupSelectiveUpdatePlan {
     required this.expectedChanges,
     this.skippedCopies = const <String>{},
     this.keptBackupFiles = const <String>{},
+    this.blockedPackages = const <String>{},
   });
 
   final BackupFileChanges expectedChanges;
   final Set<String> skippedCopies;
   final Set<String> keptBackupFiles;
+  final Set<String> blockedPackages;
 
   bool get isPartial => skippedCopies.isNotEmpty || keptBackupFiles.isNotEmpty;
 }

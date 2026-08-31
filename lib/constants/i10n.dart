@@ -258,8 +258,31 @@ class AppI10n {
   static const String backupDetailJsonPreviewLimited =
       'backup.detail.jsonPreviewLimited';
   static const String backupDetailValueMissing = 'backup.detail.valueMissing';
+  static const String backupDetailInspectPackageAction =
+      'backup.detail.inspectPackageAction';
+  static const String backupDetailRepackingComingSoon =
+      'backup.detail.repackingComingSoon';
+  static const String backupDetailInspectPackageTitle =
+      'backup.detail.inspectPackageTitle';
+  static const String backupDetailInspectPackageMessage =
+      'backup.detail.inspectPackageMessage';
+  static const String backupDetailTemporaryFolder =
+      'backup.detail.temporaryFolder';
   static const String backupDetailCopyFolderPath =
       'backup.detail.copyFolderPath';
+  static const String backupDetailCopyTemporaryFolder =
+      'backup.detail.copyTemporaryFolder';
+  static const String backupDetailOpenTemporaryFolder =
+      'backup.detail.openTemporaryFolder';
+  static const String backupDetailInspectPackageNoTool =
+      'backup.detail.inspectPackageNoTool';
+  static const String backupDetailInspectPackageWorking =
+      'backup.detail.inspectPackageWorking';
+  static const String backupDetailInspectPackageUnavailable =
+      'backup.detail.inspectPackageUnavailable';
+  static const String backupDetailInspectPackageNoDifferences =
+      'backup.detail.inspectPackageNoDifferences';
+  static const String backupDetailInsidePackage = 'backup.detail.insidePackage';
   static const String backupDetailCompareFiles = 'backup.detail.compareFiles';
   static const String backupDetailFileUnavailable =
       'backup.detail.fileUnavailable';
@@ -398,6 +421,8 @@ class AppI10n {
       'backup.action.folderUnavailable';
   static const String backupActionSourceMissing = 'backup.action.sourceMissing';
   static const String backupActionStateChanged = 'backup.action.stateChanged';
+  static const String backupActionPackageSelectionBlocked =
+      'backup.action.packageSelectionBlocked';
   static const String backupActionTrashUnconfirmed =
       'backup.action.trashUnconfirmed';
   static const String backupActionTargetExists = 'backup.action.targetExists';

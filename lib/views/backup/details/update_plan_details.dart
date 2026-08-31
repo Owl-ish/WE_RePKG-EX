@@ -17,6 +17,7 @@ class UpdatePlanDetailContent extends StatelessWidget {
     required this.foreground,
     required this.focused,
     required this.needsFocus,
+    required this.rePKGPath,
     required this.selection,
     this.onRequestFocus,
   });
@@ -28,6 +29,7 @@ class UpdatePlanDetailContent extends StatelessWidget {
   final Color foreground;
   final bool focused;
   final bool needsFocus;
+  final String? rePKGPath;
   final BackupUpdateSelection? selection;
   final VoidCallback? onRequestFocus;
 
@@ -102,10 +104,12 @@ class UpdatePlanDetailContent extends StatelessWidget {
         if (plan.updateContent && (!needsFocus || focused))
           Expanded(
             child: _UpdateFileChanges(
+              wallpaperName: card.name,
               liveFolder: liveFolder,
               backupFolder: backupFolder,
               sourceLabel: _liveLabel(card.library),
               destinationLabel: _backupLabel(card.library),
+              rePKGPath: rePKGPath,
               foreground: foreground,
               selection: selection,
             ),
@@ -234,18 +238,22 @@ FileTreeCompareAction? _selectedManualCompareAction({
 
 class _UpdateFileChanges extends StatefulWidget {
   const _UpdateFileChanges({
+    required this.wallpaperName,
     required this.liveFolder,
     required this.backupFolder,
     required this.sourceLabel,
     required this.destinationLabel,
+    required this.rePKGPath,
     required this.foreground,
     required this.selection,
   });
 
+  final String wallpaperName;
   final String? liveFolder;
   final String? backupFolder;
   final String sourceLabel;
   final String destinationLabel;
+  final String? rePKGPath;
   final Color foreground;
   final BackupUpdateSelection? selection;
 
@@ -411,11 +419,13 @@ class _UpdateFileChangesState extends State<_UpdateFileChanges> {
                       _ChangedFileGroup(
                         title: tr(AppI10n.backupDetailModified),
                         paths: changes.modified,
+                        wallpaperName: widget.wallpaperName,
                         leftFolder: widget.liveFolder!,
                         rightFolder: widget.backupFolder!,
                         leftLabel: widget.sourceLabel,
                         rightLabel: widget.destinationLabel,
                         directionalVisual: true,
+                        rePKGPath: widget.rePKGPath,
                         colour: colours.warn,
                         foreground: widget.foreground,
                         selection: widget.selection,

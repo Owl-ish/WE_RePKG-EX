@@ -7,8 +7,16 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/widgets/app_dialog_surface.dart';
+import 'package:we_repkg/widgets/input_controls.dart';
 
 typedef ConfirmDetail = ({String label, String value});
+typedef ConfirmPathDetail = ({
+  String label,
+  String path,
+  String copyTooltip,
+  String openTooltip,
+  FutureOr<void> Function()? onOpen,
+});
 
 /// Asks before something destructive, resolving true only if the user confirms.
 ///
@@ -21,6 +29,7 @@ Future<bool> showConfirmDialog({
   String? confirmLabel,
   bool destructive = true,
   List<ConfirmDetail> details = const <ConfirmDetail>[],
+  List<ConfirmPathDetail> pathDetails = const <ConfirmPathDetail>[],
 }) {
   final completer = Completer<bool>();
   late final CancelFunc close;
@@ -55,6 +64,7 @@ Future<bool> showConfirmDialog({
       confirmLabel: confirmLabel ?? tr(AppI10n.confirm),
       destructive: destructive,
       details: details,
+      pathDetails: pathDetails,
       onResult: finish,
     ),
   );
@@ -69,6 +79,7 @@ class _ConfirmDialog extends StatelessWidget {
     required this.confirmLabel,
     required this.destructive,
     required this.details,
+    required this.pathDetails,
     required this.onResult,
   });
 
@@ -77,6 +88,7 @@ class _ConfirmDialog extends StatelessWidget {
   final String confirmLabel;
   final bool destructive;
   final List<ConfirmDetail> details;
+  final List<ConfirmPathDetail> pathDetails;
   final void Function(bool) onResult;
 
   static const double _width = 600;
@@ -163,6 +175,24 @@ class _ConfirmDialog extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
+                    ),
+                  ],
+                  for (final ConfirmPathDetail detail
+                      in pathDetails) ...<Widget>[
+                    const SizedBox(height: LayoutNums.mediumGap),
+                    Text(
+                      detail.label,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: LayoutNums.tinyGap),
+                    PathActionBox(
+                      path: detail.path,
+                      copyTooltip: detail.copyTooltip,
+                      openTooltip: detail.openTooltip,
+                      onOpen: detail.onOpen,
                     ),
                   ],
                 ],

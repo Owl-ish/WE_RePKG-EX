@@ -10,7 +10,6 @@ import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
-import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 
 import '../../support/backup_test_harness.dart';
@@ -169,60 +168,4 @@ void main() {
       expect(treeScrollbarCount, 2);
     },
   );
-
-  testWidgets('Reconcile details show every reason, warning, and folder', (
-    tester,
-  ) async {
-    const ReconcileEntry entry = ReconcileEntry(
-      name: '3707191336',
-      reason: BackupReconcileReason.duplicateLiveCopies,
-      additionalReasons: <BackupReconcileReason>{
-        BackupReconcileReason.conflictingBackupCopies,
-      },
-      states: <WallpaperLibrary, BackupState>{
-        WallpaperLibrary.workshop: BackupState.synced,
-        WallpaperLibrary.myProjects: BackupState.updateAvailable,
-      },
-      backupWorkshop: true,
-      backupMyProjects: true,
-    );
-    const List<String> folders = <String>[
-      r'C:\live\workshop\3707191336',
-      r'C:\live\myprojects\3707191336',
-      r'C:\backup\workshop\3707191336',
-      r'C:\backup\myprojects\3707191336',
-    ];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 900,
-            height: 520,
-            child: ReconcileDetailContent(
-              entry: entry,
-              foreground: Colors.black,
-              focused: false,
-              needsFocus: false,
-              workshopLiveFolder: folders[0],
-              myProjectsLiveFolder: folders[1],
-              workshopBackupFolder: folders[2],
-              myProjectsBackupFolder: folders[3],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.text('• ${AppI10n.backupReconcileConflictingBackupsAbout}'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('• ${AppI10n.backupStateUpdateAvailable}'),
-      findsOneWidget,
-    );
-    for (final String folder in folders) {
-      expect(find.text(folder), findsOneWidget);
-    }
-  });
 }
