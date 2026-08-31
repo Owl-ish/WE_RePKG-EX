@@ -622,6 +622,28 @@ void main() {
           backupStateLook(bulkContext, BackupState.vanished).colour,
         );
 
+        final Finder bulkScale = find.byKey(
+          const ValueKey<String>('backup-all-action-scale'),
+        );
+        expect(bulkScale, findsOneWidget);
+        expect(tester.widget<AnimatedScale>(bulkScale).scale, 1);
+        expect(
+          find.descendant(of: bulkScale, matching: find.byType(Tooltip)),
+          findsNothing,
+          reason: 'the visible action label should not create a hover overlay',
+        );
+        final TestGesture bulkMouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await bulkMouse.addPointer(location: Offset.zero);
+        await bulkMouse.moveTo(tester.getCenter(bulkGlow));
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(tester.widget<AnimatedScale>(bulkScale).scale, 1.06);
+        await bulkMouse.moveTo(Offset.zero);
+        await tester.pump(const Duration(milliseconds: 110));
+        expect(tester.widget<AnimatedScale>(bulkScale).scale, 1);
+        await bulkMouse.removePointer();
+
         final IconButton button = tester.widget<IconButton>(tileAction);
         expect(button.tooltip, isNull);
         expect(button.style?.animationDuration, Duration.zero);

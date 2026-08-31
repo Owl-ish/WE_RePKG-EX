@@ -75,6 +75,10 @@ Future<void> showRightMenu(
 typedef BackupFolderMenuTarget = ({String label, String path});
 
 /// What a backup tile offers on a right click.
+///
+/// [folders] is resolved by the tile because ordinary cards represent one
+/// live/backup pair while Reconcile can represent up to four concrete copies.
+/// Keeping the menu generic preserves those distinct locations.
 Future<void> showBackupMenu(
   BuildContext context,
   TapDownDetails details, {

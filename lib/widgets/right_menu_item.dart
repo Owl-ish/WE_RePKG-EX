@@ -30,8 +30,6 @@ final class RightMenuItem extends ContextMenuItem {
   ]) {
     final ThemeData theme = Theme.of(context);
     bool isFocused = menuState.focusedEntry == this;
-    final Color background =
-        theme.dialogTheme.backgroundColor ?? theme.scaffoldBackgroundColor;
     final Color focusedBackground = Colors.grey.withValues(alpha: 0.2);
     final TextStyle textStyle = TextStyle(
       color: color ?? theme.textTheme.labelMedium?.color,
@@ -40,33 +38,27 @@ final class RightMenuItem extends ContextMenuItem {
       fontFamily: 'Microsoft YaHei',
     );
 
-    // Inset, so a pill row does not run into the menu panel's own corners.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 36.0, minWidth: 120.0),
-        child: Material(
-          color: !enabled
-              ? Colors.transparent
-              : isFocused
-              ? focusedBackground
-              : background,
-          borderRadius: LayoutNums.pill,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: LayoutNums.pill,
-            onTap: !enabled ? null : () => handleItemSelection(context),
-            mouseCursor: SystemMouseCursors.click,
-            canRequestFocus: false,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: textStyle,
-                overflow: TextOverflow.ellipsis,
-              ),
+    // The menu panel owns the visible surface. Rows stay transparent until
+    // focused, avoiding a rounded control nested inside another rounded box.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 36.0, minWidth: 120.0),
+      child: Material(
+        color: enabled && isFocused ? focusedBackground : Colors.transparent,
+        borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(LayoutNums.controlRadius),
+          onTap: !enabled ? null : () => handleItemSelection(context),
+          mouseCursor: SystemMouseCursors.click,
+          canRequestFocus: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: textStyle,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),

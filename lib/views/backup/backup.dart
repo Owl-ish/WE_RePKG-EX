@@ -569,7 +569,7 @@ class _BackupIssueHeader extends StatelessWidget {
   );
 }
 
-class _GlowingActionButton extends StatelessWidget {
+class _GlowingActionButton extends StatefulWidget {
   const _GlowingActionButton({
     required this.label,
     required this.icon,
@@ -585,16 +585,30 @@ class _GlowingActionButton extends StatelessWidget {
   final bool destructive;
 
   @override
+  State<_GlowingActionButton> createState() => _GlowingActionButtonState();
+}
+
+class _GlowingActionButtonState extends State<_GlowingActionButton> {
+  bool _hovered = false;
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bool enabled = onPressed != null;
+    final bool enabled = widget.onPressed != null;
     final ThemeData theme = Theme.of(context);
     final ActionButtonTheme actionColors = theme.actionButtons;
     final Color resolvedColour = enabled
-        ? (destructive ? actionColors.destructiveForeground : colour)
+        ? (widget.destructive
+              ? actionColors.destructiveForeground
+              : widget.colour)
         : theme.disabledColor;
     // Non-destructive state actions rest like their status pills. Destructive
     // actions use the app-wide danger surface, then the same outward pulse.
-    final Color fill = destructive
+    final Color fill = widget.destructive
         ? (enabled
               ? actionColors.destructiveBackground
               : actionColors.destructiveBackground.withValues(alpha: .5))
@@ -602,36 +616,47 @@ class _GlowingActionButton extends StatelessWidget {
             resolvedColour.withValues(alpha: enabled ? .07 : .05),
             theme.scaffoldBackgroundColor,
           );
-    final Color border = destructive
+    final Color border = widget.destructive
         ? (enabled
               ? actionColors.destructiveBorder
               : actionColors.destructiveBorder.withValues(alpha: .5))
         : resolvedColour.withValues(alpha: enabled ? .2 : .15);
-    return Tooltip(
-      message: label,
-      child: BackupActionGlow(
-        colour: resolvedColour,
-        enabled: enabled,
-        borderRadius: LayoutNums.pill,
-        glowKey: const ValueKey<String>('backup-all-action-glow'),
-        child: Material(
-          color: fill,
-          shape: RoundedRectangleBorder(
-            borderRadius: LayoutNums.pill,
-            side: BorderSide(color: border),
-          ),
-          child: InkWell(
-            borderRadius: LayoutNums.pill,
-            onTap: onPressed,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: LayoutNums.compactGap,
-                children: <Widget>[
-                  Icon(icon, size: 16, color: resolvedColour),
-                  Text(label, style: TextStyle(color: resolvedColour)),
-                ],
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => _setHovered(true) : null,
+      onExit: enabled ? (_) => _setHovered(false) : null,
+      child: AnimatedScale(
+        key: const ValueKey<String>('backup-all-action-scale'),
+        scale: enabled && _hovered ? 1.06 : 1,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: BackupActionGlow(
+          colour: resolvedColour,
+          enabled: enabled,
+          borderRadius: LayoutNums.pill,
+          glowKey: const ValueKey<String>('backup-all-action-glow'),
+          child: Material(
+            color: fill,
+            shape: RoundedRectangleBorder(
+              borderRadius: LayoutNums.pill,
+              side: BorderSide(color: border),
+            ),
+            child: InkWell(
+              borderRadius: LayoutNums.pill,
+              onTap: widget.onPressed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: LayoutNums.compactGap,
+                  children: <Widget>[
+                    Icon(widget.icon, size: 16, color: resolvedColour),
+                    Text(widget.label, style: TextStyle(color: resolvedColour)),
+                  ],
+                ),
               ),
             ),
           ),

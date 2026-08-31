@@ -171,6 +171,7 @@ class _TileBadge extends StatelessWidget {
   final double allocatedWidth;
   final double lineHeight;
 
+  static const double _backgroundMix = .60;
   static const TextStyle _style = TextStyle(
     color: Colors.white,
     fontSize: 11,
@@ -217,7 +218,10 @@ class _TileBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: data.colour,
+        color: Color.alphaBlend(
+          data.colour.withValues(alpha: _backgroundMix),
+          Colors.black,
+        ),
         borderRadius: BorderRadius.circular(4),
       ),
       child: overflows
