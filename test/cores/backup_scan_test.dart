@@ -311,6 +311,30 @@ void main() {
       expect(changes.onlyBackup, <String>['legacy.txt']);
     });
 
+    test('detailed comparison retains files proven identical', () async {
+      final Directory first = wallpaper(live, 'matching');
+      final Directory second = wallpaper(backup, 'matching');
+      for (final Directory folder in <Directory>[first, second]) {
+        File(p.join(folder.path, 'project.json')).writeAsStringSync('same');
+        File(
+          p.join(folder.path, 'scene.pkg'),
+        ).writeAsStringSync('same package');
+      }
+      File(p.join(first.path, 'changed.txt')).writeAsStringSync('left');
+      File(p.join(second.path, 'changed.txt')).writeAsStringSync('rift');
+
+      final FolderFileComparison? comparison = await compareFolderFilesDetailed(
+        firstFolder: first.path,
+        secondFolder: second.path,
+      );
+
+      expect(comparison, isNotNull);
+      expect(comparison!.matching, <String>['project.json', 'scene.pkg']);
+      expect(comparison.changes.modified, <String>['changed.txt']);
+      expect(comparison.changes.onlyFirst, isEmpty);
+      expect(comparison.changes.onlySecond, isEmpty);
+    });
+
     test('JSON detail comparison works for any relative JSON file', () async {
       final Directory liveFolder = wallpaper(live, 'json-live');
       final Directory backupFolder = wallpaper(backup, 'json-live');
