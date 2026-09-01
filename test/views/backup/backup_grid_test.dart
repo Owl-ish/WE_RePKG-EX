@@ -610,7 +610,7 @@ void main() {
       expect(find.text('double-live'), findsOneWidget);
       expect(find.text(AppI10n.backupTileDuplicateLive), findsOneWidget);
       expect(
-        find.textContaining(AppI10n.backupReconcileDuplicateLiveTitle),
+        find.textContaining(AppI10n.backupReconcileReasonDuplicateLiveTitle),
         findsOneWidget,
       );
       expect(
@@ -650,7 +650,9 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining(AppI10n.backupReconcileConflictingBackupsTitle),
+        find.textContaining(
+          AppI10n.backupReconcileReasonConflictingBackupsTitle,
+        ),
         findsOneWidget,
       );
       expect(

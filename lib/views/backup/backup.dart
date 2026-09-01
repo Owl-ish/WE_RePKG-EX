@@ -800,16 +800,16 @@ class _GridState extends ConsumerState<_Grid> {
   ({String title, String about}) _reconcileText(BackupReconcileReason reason) =>
       switch (reason) {
         BackupReconcileReason.duplicateLiveCopies => (
-          title: AppI10n.backupReconcileDuplicateLiveTitle,
-          about: AppI10n.backupReconcileDuplicateLiveGroupAbout,
+          title: AppI10n.backupReconcileReasonDuplicateLiveTitle,
+          about: AppI10n.backupReconcileReasonDuplicateLiveGroupAbout,
         ),
         BackupReconcileReason.conflictingBackupCopies => (
-          title: AppI10n.backupReconcileConflictingBackupsTitle,
-          about: AppI10n.backupReconcileConflictingBackupsAbout,
+          title: AppI10n.backupReconcileReasonConflictingBackupsTitle,
+          about: AppI10n.backupReconcileReasonConflictingBackupsAbout,
         ),
         BackupReconcileReason.comparisonUnavailable => (
-          title: AppI10n.backupReconcileComparisonUnavailableTitle,
-          about: AppI10n.backupReconcileComparisonUnavailableAbout,
+          title: AppI10n.backupReconcileReasonComparisonUnavailableTitle,
+          about: AppI10n.backupReconcileReasonComparisonUnavailableAbout,
         ),
       };
 
@@ -1001,10 +1001,10 @@ class _GridState extends ConsumerState<_Grid> {
                 TextSpan(
                   children: <InlineSpan>[
                     TextSpan(
-                      text: '${tr(AppI10n.backupIgnoredUpdateTitle)} - ',
+                      text: '${tr(AppI10n.backupIgnoredGroupUpdateTitle)} - ',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    TextSpan(text: tr(AppI10n.backupIgnoredUpdateAbout)),
+                    TextSpan(text: tr(AppI10n.backupIgnoredGroupUpdateAbout)),
                   ],
                 ),
                 maxLines: 2,
@@ -1028,7 +1028,9 @@ class _GridState extends ConsumerState<_Grid> {
                         text: '${tr(_reconcileText(reason).title)} - ',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      TextSpan(text: tr(AppI10n.backupIgnoredReconcileAbout)),
+                      TextSpan(
+                        text: tr(AppI10n.backupIgnoredGroupReconcileAbout),
+                      ),
                     ],
                   ),
                   maxLines: 2,

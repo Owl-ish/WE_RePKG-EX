@@ -42,14 +42,14 @@ String _reconcileReasonExplanationKey(
 }) => switch (reason) {
   BackupReconcileReason.duplicateLiveCopies =>
     ignored
-        ? AppI10n.backupReconcileDuplicateLiveIgnoredAbout
-        : AppI10n.backupReconcileDuplicateLiveAbout,
+        ? AppI10n.backupReconcileReasonDuplicateLiveIgnoredAbout
+        : AppI10n.backupReconcileReasonDuplicateLiveAbout,
   BackupReconcileReason.conflictingBackupCopies =>
     ignored
-        ? AppI10n.backupReconcileConflictingBackupsIgnoredAbout
-        : AppI10n.backupReconcileConflictingBackupsAbout,
+        ? AppI10n.backupReconcileReasonConflictingBackupsIgnoredAbout
+        : AppI10n.backupReconcileReasonConflictingBackupsAbout,
   BackupReconcileReason.comparisonUnavailable =>
-    AppI10n.backupReconcileComparisonUnavailableAbout,
+    AppI10n.backupReconcileReasonComparisonUnavailableAbout,
 };
 
 String _reconcileReasonExplanationText(
