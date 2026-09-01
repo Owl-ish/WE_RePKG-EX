@@ -167,7 +167,6 @@ class AppI10n {
   static const String integrityVerdictShaderCacheOnly =
       'integrity.verdict.shaderCacheOnly';
   static const String backupReconcile = 'backup.reconcile';
-  static const String backupReconcileAbout = 'backup.reconcileAbout';
   static const String backupIgnored = 'backup.ignored';
   static const String backupIgnoredAbout = 'backup.ignoredAbout';
   static const String backupIgnoredUpdateTitle =
@@ -196,31 +195,20 @@ class AppI10n {
       'backup.reconcileReason.comparisonUnavailableAbout';
   static const String backupTileUpdate = 'backup.tile.update';
   static const String backupTileSync = 'backup.tile.sync';
-  static const String backupTileUpdateAbout = 'backup.tile.updateAbout';
-  static const String backupTileSyncAbout = 'backup.tile.syncAbout';
   static const String backupTileDuplicateLive = 'backup.tile.duplicateLive';
-  static const String backupTileBackupDifferences =
-      'backup.tile.backupDifferences';
   static const String backupTileBackupsConflict = 'backup.tile.backupsConflict';
   static const String backupTileComparisonUnavailable =
       'backup.tile.comparisonUnavailable';
-  static const String backupTileReconcile = 'backup.tile.reconcile';
-  static const String backupDetailDetectedCopies =
-      'backup.detail.detectedCopies';
   static const String backupDetailWorkshopLive = 'backup.detail.workshopLive';
   static const String backupDetailMyProjectsLive =
       'backup.detail.myProjectsLive';
   static const String backupDetailLiveDifferences =
       'backup.detail.liveDifferences';
-  static const String backupDetailExpandLiveDifferences =
-      'backup.detail.expandLiveDifferences';
   static const String backupDetailComparisonFailed =
       'backup.detail.comparisonFailed';
   static const String backupDetailRescanAdvice = 'backup.detail.rescanAdvice';
   static const String backupDetailDetectedDifferences =
       'backup.detail.detectedDifferences';
-  static const String backupDetailExpandDifferences =
-      'backup.detail.expandDifferences';
   static const String backupDetailDifferenceUnavailable =
       'backup.detail.differenceUnavailable';
   static const String backupDetailDifferentSize = 'backup.detail.differentSize';
@@ -245,10 +233,6 @@ class AppI10n {
       'backup.detail.fileComparisonUnavailable';
   static const String backupDetailNoFileDifferences =
       'backup.detail.noFileDifferences';
-  static const String backupDetailProjectJsonUnavailable =
-      'backup.detail.projectJsonUnavailable';
-  static const String backupDetailProjectJsonFormattingOnly =
-      'backup.detail.projectJsonFormattingOnly';
   static const String backupDetailJsonUnavailable =
       'backup.detail.jsonUnavailable';
   static const String backupDetailJsonFormattingOnly =
@@ -301,7 +285,6 @@ class AppI10n {
   static const String backupDetailSame = 'backup.detail.same';
   static const String backupDetailDifferent = 'backup.detail.different';
   static const String backupDetailNoExtension = 'backup.detail.noExtension';
-  static const String backupDetailCompareImages = 'backup.detail.compareImages';
   static const String backupDetailPreviewImage = 'backup.detail.previewImage';
   static const String backupDetailImageUnavailable =
       'backup.detail.imageUnavailable';
@@ -368,7 +351,6 @@ class AppI10n {
   static const String backupJunkShaderAbout = 'backup.junk.shaderAbout';
   static const String backupJunkMixedTitle = 'backup.junk.mixedTitle';
   static const String backupJunkMixedAbout = 'backup.junk.mixedAbout';
-  static const String backupJunkDetailsTitle = 'backup.junk.detailsTitle';
   static const String backupJunkDetailsEmpty = 'backup.junk.detailsEmpty';
   static const String backupJunkDetailsShader = 'backup.junk.detailsShader';
   static const String backupJunkDetailsMixed = 'backup.junk.detailsMixed';
@@ -415,7 +397,6 @@ class AppI10n {
   static const String backupActionShowAgainOne = 'backup.action.showAgainOne';
   static const String backupActionShowAgainMany = 'backup.action.showAgainMany';
   static const String backupActionWallpaper = 'backup.action.wallpaper';
-  static const String backupActionAll = 'backup.action.all';
   static const String backupActionDone = 'backup.action.done';
   static const String backupActionFolderUnavailable =
       'backup.action.folderUnavailable';

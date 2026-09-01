@@ -29,7 +29,6 @@
       "integrity": "Integrity check"
     },
     "reconcile": "Needs reconciling",
-    "reconcileAbout": "These names need your decision. The live source may be ambiguous, backup copies may conflict, or a required comparison could not finish safely. Automatic cleanup stops here rather than guessing.",
     "reconcileReason": {
       "duplicateLiveTitle": "Duplicate live copies",
       "duplicateLiveAbout": "This wallpaper exists in both Live {location1} and {location2} folders. Please remove one if they are identical, or ignore this detection.",
@@ -44,24 +43,17 @@
     "tile": {
       "update": "Update",
       "sync": "Sync",
-      "updateAbout": "This wallpaper has live content that is newer or different from its backup. Update refreshes the matching backup copy.",
-      "syncAbout": "This wallpaper is backed up, but its backup placement is wrong or duplicated across both backup libraries. Sync creates and verifies the matching copy before cleaning up the misplaced copy.",
       "duplicateLive": "Duplicate live",
-      "backupDifferences": "Backup differences: {count}",
       "comparisonUnavailable": "Comparison unavailable",
-      "backupsConflict": "Conflicting backups",
-      "reconcile": "Reconcile"
+      "backupsConflict": "Conflicting backups"
     },
     "detail": {
-      "detectedCopies": "Detected live copies",
       "workshopLive": "Workshop - Live",
       "myProjectsLive": "MyProjects - Live",
       "liveDifferences": "Live copy differences",
-      "expandLiveDifferences": "Click to expand and compare the live copies",
       "comparisonFailed": "Comparison could not finish",
       "rescanAdvice": "One or more required folders could not be read reliably. No automatic action is offered; rescan after the folders are available.",
       "detectedDifferences": "Detected backup differences",
-      "expandDifferences": "Click to expand and view differences",
       "differenceUnavailable": "The backups were classified as conflicting, but per-file difference details were not available for this scan.",
       "differentSize": "Different file size",
       "modified": "Modified Files",
@@ -88,8 +80,6 @@
       "syncWillMove": "Sync - Will move this wallpaper folder",
       "syncWillKeep": "Will keep",
       "syncWillRemove": "Will remove after verification",
-      "projectJsonUnavailable": "project.json could not be parsed for field-level changes.",
-      "projectJsonFormattingOnly": "No field values changed; only formatting or key order differs.",
       "jsonUnavailable": "This JSON file could not be parsed for field-level changes.",
       "jsonFormattingOnly": "No field values changed; only formatting or key order differs.",
       "expandJson": "Expand JSON changes",
@@ -122,7 +112,6 @@
       "same": "Same",
       "different": "Different",
       "noExtension": "No extension",
-      "compareImages": "Compare images",
       "previewImage": "Preview image",
       "imageUnavailable": "This image could not be loaded.",
       "imageZoomOut": "Zoom out",
@@ -197,7 +186,6 @@
       "showAgainOne": "Show this ignored update again under Update / Sync? No wallpaper files will change.",
       "showAgainMany": "Show these {count} ignored detections again? No wallpaper files will change.",
       "wallpaper": "Wallpaper",
-      "all": "{action} all {count}",
       "done": "Completed {count}",
       "folderUnavailable": "A required folder is not configured.",
       "sourceMissing": "The source folder is no longer available. Rescan first.",
@@ -224,7 +212,6 @@
       "shaderAbout": "These folders contain only rebuildable Wallpaper Engine shader cache, such as .dxs or rebuilt shader data. No wallpaper payload is present. They are checked again before moving to the Recycle Bin.",
       "mixedTitle": "Empty + shader cache",
       "mixedAbout": "These tiles represent more than one disposable folder for the same wallpaper, with a mix of truly empty and shader-cache-only folders. Every target is checked again before moving to the Recycle Bin.",
-      "detailsTitle": "Empty/Junk details",
       "detailsEmpty": "This tile is truly empty: its disposable folder contains no files.",
       "detailsShader": "This tile is shader cache only: it contains rebuildable shader data and no wallpaper payload.",
       "detailsMixed": "This tile represents multiple disposable folders, including both truly empty and shader-cache-only folders."

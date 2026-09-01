@@ -29,7 +29,6 @@
       "integrity": "完整性检查"
     },
     "reconcile": "待处理",
-    "reconcileAbout": "这些名称需要你决定如何处理：实时副本可能冲突、备份副本可能不同，或必要的比较无法安全完成。自动清理会在这里停止，不会猜测。",
     "reconcileReason": {
       "duplicateLiveTitle": "重复的实时副本",
       "duplicateLiveAbout": "此壁纸同时存在于实时 {location1} 和 {location2} 文件夹中。如果两份内容相同，请删除其中一份，或忽略此检测。",
@@ -44,24 +43,17 @@
     "tile": {
       "update": "更新",
       "sync": "同步",
-      "updateAbout": "此壁纸的实时内容比备份更新或与备份不同。“更新”会刷新对应备份库中的备份副本。",
-      "syncAbout": "此壁纸已有备份，但备份位置不正确，或两个备份库中都存在副本。“同步”会先创建并验证正确位置的副本，再清理放错位置的副本。",
       "duplicateLive": "重复实时副本",
-      "backupDifferences": "备份差异：{count}",
       "comparisonUnavailable": "无法完成比较",
-      "backupsConflict": "备份冲突",
-      "reconcile": "需要处理"
+      "backupsConflict": "备份冲突"
     },
     "detail": {
-      "detectedCopies": "检测到的实时副本",
       "workshopLive": "创意工坊 - 实时",
       "myProjectsLive": "MyProjects - 实时",
       "liveDifferences": "实时副本差异",
-      "expandLiveDifferences": "点击展开并比较两个实时副本",
       "comparisonFailed": "比较未能完成",
       "rescanAdvice": "一个或多个必要文件夹无法可靠读取。不会提供自动操作；请在文件夹可用后重新扫描。",
       "detectedDifferences": "检测到的备份差异",
-      "expandDifferences": "点击展开并查看差异",
       "differenceUnavailable": "已判定两个备份存在冲突，但本次扫描无法提供逐文件差异详情。",
       "differentSize": "文件大小不同",
       "modified": "已修改的文件",
@@ -88,8 +80,6 @@
       "syncWillMove": "同步 - 将移动此壁纸文件夹",
       "syncWillKeep": "将保留",
       "syncWillRemove": "验证后将移除",
-      "projectJsonUnavailable": "无法解析 project.json，因此不能显示字段级变化。",
-      "projectJsonFormattingOnly": "字段值没有变化；仅格式或键顺序不同。",
       "jsonUnavailable": "无法解析此 JSON 文件，因此不能显示字段级变化。",
       "jsonFormattingOnly": "字段值没有变化；仅格式或键顺序不同。",
       "expandJson": "展开 JSON 变化",
@@ -122,7 +112,6 @@
       "same": "相同",
       "different": "不同",
       "noExtension": "无扩展名",
-      "compareImages": "比较图片",
       "previewImage": "预览图片",
       "imageUnavailable": "无法加载此图片。",
       "imageZoomOut": "缩小",
@@ -197,7 +186,6 @@
       "showAgainOne": "将此已忽略的更新重新显示在“更新 / 同步”中？不会修改任何壁纸文件。",
       "showAgainMany": "重新显示这 {count} 个已忽略的检测？不会修改任何壁纸文件。",
       "wallpaper": "壁纸",
-      "all": "{action}全部 {count} 个",
       "done": "已完成 {count} 个",
       "folderUnavailable": "未配置所需的文件夹。",
       "sourceMissing": "源文件夹已不可用。请先重新扫描。",
@@ -224,7 +212,6 @@
       "shaderAbout": "这些文件夹只包含 Wallpaper Engine 可重新生成的着色器缓存（例如 .dxs 或重建的着色器数据），不包含壁纸主体文件。移到回收站前会再次检查。",
       "mixedTitle": "空文件夹 + 着色器缓存",
       "mixedAbout": "这些项目为同一壁纸对应了多个可丢弃文件夹，其中既有真正的空文件夹，也有仅着色器缓存的文件夹。每个目标在移到回收站前都会再次检查。",
-      "detailsTitle": "空文件夹/垃圾详情",
       "detailsEmpty": "此项目被判定为真正的空文件夹：对应的可丢弃文件夹中没有任何文件。",
       "detailsShader": "此项目被判定为仅着色器缓存：其中只有可重新生成的着色器数据，没有壁纸主体文件。",
       "detailsMixed": "此项目对应多个可丢弃文件夹，其中同时包含真正的空文件夹和仅着色器缓存的文件夹。"

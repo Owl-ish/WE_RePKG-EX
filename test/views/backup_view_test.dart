@@ -993,7 +993,6 @@ void main() {
         english['backup']['reconcileReason']['conflictingBackupsTitle'],
         'Conflicting backup copies',
       );
-      expect(english['backup']['tile']['reconcile'], 'Reconcile');
       expect(
         english['backup']['detail']['syncWillMove'],
         'Sync - Will move this wallpaper folder',
@@ -1030,7 +1029,6 @@ void main() {
         english['backup']['about']['vanished'],
         'These wallpapers exist only in backup. No live copy is found in the libraries.',
       );
-      expect(chinese['backup']['tile']['reconcile'], '需要处理');
     });
 
     // A folder with no readable project.json still occupies the backup, and it

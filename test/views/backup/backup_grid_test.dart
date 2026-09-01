@@ -608,7 +608,6 @@ void main() {
       );
       expect(find.byType(BackupTileView), findsNothing);
       expect(find.text('double-live'), findsOneWidget);
-      expect(find.text(AppI10n.backupTileReconcile), findsNothing);
       expect(find.text(AppI10n.backupTileDuplicateLive), findsOneWidget);
       expect(
         find.textContaining(AppI10n.backupReconcileDuplicateLiveTitle),
