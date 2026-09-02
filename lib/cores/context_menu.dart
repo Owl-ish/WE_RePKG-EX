@@ -11,7 +11,7 @@ import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/right_menu_item.dart';
 
 import '../actions/wallpaper_actions.dart';
-import 'extract.dart';
+import '../actions/extract_actions.dart';
 
 List<WallpaperInfo> menuTargets(
   List<WallpaperInfo> checked,
