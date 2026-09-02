@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/path_actions.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/utils/memory_advice.dart';
 import 'package:we_repkg/utils/system_memory.dart';

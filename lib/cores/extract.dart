@@ -22,7 +22,7 @@ import 'package:we_repkg/utils/repkg_output.dart';
 import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
-import 'base.dart';
+import '../actions/path_actions.dart';
 import 'toast.dart';
 
 /// Where a worker writes its progress line. Captured from the provider before

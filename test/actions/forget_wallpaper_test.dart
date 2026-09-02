@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/storage.dart';

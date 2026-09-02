@@ -10,7 +10,7 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/right_menu_item.dart';
 
-import 'base.dart';
+import '../actions/wallpaper_actions.dart';
 import 'extract.dart';
 
 List<WallpaperInfo> menuTargets(

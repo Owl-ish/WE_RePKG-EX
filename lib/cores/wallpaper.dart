@@ -3,22 +3,15 @@ import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
-import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/models/acf.dart';
-import 'package:we_repkg/models/enums.dart';
-import 'package:we_repkg/models/error.dart';
 import 'package:we_repkg/models/wallpaper.dart';
-import 'package:we_repkg/provider/system.dart';
-import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/src/rust/api/simple.dart' as rust;
-import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -97,50 +90,6 @@ Future<void> _handleStorageLogic(String? wallpaperPath) async {
     String projectPath = projectDefaultPath(wallpaperPath);
     await StorageUtil.setString(AppKeys.projectPath, projectPath);
   }
-}
-
-Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
-  // Read before any await: switching folders unmounts the widget owning `ref`,
-  // so the scan writes back through these captured notifiers instead.
-  final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
-  final CurrentState currentState = ref.read(currentStateProvider.notifier);
-  final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
-  final WallpaperLibrary library = ref.read(currentLibraryProvider);
-  final String? myProjects = ref.read(myProjectsLibraryProvider);
-  String? folderPath = ref.read(wallpaperPathProvider);
-  // Only the Workshop library is worth hunting for across the drives; the
-  // myprojects one is derived from whatever that search settles on.
-  if (folderPath == null) {
-    folderPath = await getWallpaperPath();
-    wallpaperPathNotifier.update(folderPath);
-  }
-  if (library == WallpaperLibrary.myProjects) {
-    // Derived here rather than taken from the provider, which settled on null
-    // back when the Workshop path was still unknown.
-    folderPath =
-        myProjects ??
-        (folderPath == null ? null : projectDefaultPath(folderPath));
-  }
-  currentState.update(RunState.initial);
-  List<WallpaperInfo> wallpapers = [];
-  try {
-    final result = await scanWallpapers(folderPath);
-    wallpapers = result.wallpapers;
-    final earliest = result.earliestDate;
-    if (earliest != null) {
-      earliestTimeNotifier.update(earliest.toString().substring(0, 10));
-    }
-    currentState.update(RunState.complete);
-  } catch (e) {
-    showErrorView([
-      ErrorInfo(
-        wallpaper: null,
-        message: '${tr(AppI10n.errorGetWallpaperFailed)} $e',
-      ),
-    ]);
-  }
-  if (wallpapers.isEmpty) currentState.update(RunState.empty);
-  return wallpapers;
 }
 
 Future<List<AcfInfo>> getAcfInfo() async {
@@ -356,16 +305,4 @@ Future<WallpaperInfo?> _parseWallpaperFolder(
     }
     return null;
   }
-}
-
-Future<void> refreshWallpaper(WidgetRef ref) async {
-  // Capture the notifier before awaiting so a refresh can't crash if the
-  // widget owning `ref` is unmounted mid-scan.
-  final wallpaperListNotifier = ref.read(wallpaperListProvider.notifier);
-  wallpaperListNotifier.clear();
-  // The library is about to be replaced, so ids selected against the old one
-  // mean nothing.
-  ref.read(checkedIdsProvider.notifier).clear();
-  List<WallpaperInfo> wallpapers = await getAllFile(ref);
-  wallpaperListNotifier.addAll(wallpapers);
 }

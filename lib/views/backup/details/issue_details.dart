@@ -8,7 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';

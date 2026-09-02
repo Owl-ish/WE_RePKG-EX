@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
-import 'package:we_repkg/cores/wallpaper.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';

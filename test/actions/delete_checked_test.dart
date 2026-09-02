@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 
 WallpaperInfo wallpaper(String id) => WallpaperInfo(

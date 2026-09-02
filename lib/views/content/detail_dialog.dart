@@ -18,7 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_type.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/cores/extract.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/wallpaper.dart';

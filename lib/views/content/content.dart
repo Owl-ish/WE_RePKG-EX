@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:we_repkg/cores/wallpaper.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/navigation.dart';

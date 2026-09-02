@@ -13,7 +13,7 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/cores/backup.dart';
-import 'package:we_repkg/cores/base.dart';
+import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/views/backup/details/backup_update_selection.dart';
