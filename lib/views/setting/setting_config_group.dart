@@ -55,6 +55,14 @@ class _SettingConfigGroupState extends ConsumerState<SettingConfigGroup> {
               ref.read(useTitleNameProvider.notifier).update(value!),
         ),
         SettingCheckbox.twoLine(
+          label: tr(AppI10n.settingConfigSeparateWallpaperFolders),
+          subTitle: tr(AppI10n.settingConfigSeparateWallpaperFoldersTip),
+          value: ref.watch(separateWallpaperFoldersProvider),
+          onChanged: (value) => ref
+              .read(separateWallpaperFoldersProvider.notifier)
+              .update(value!),
+        ),
+        SettingCheckbox.twoLine(
           value: ref.watch(deleteTransparencyProvider),
           onChanged: (value) =>
               ref.read(deleteTransparencyProvider.notifier).update(value!),

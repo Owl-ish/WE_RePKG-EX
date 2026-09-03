@@ -13,6 +13,7 @@ import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/states/error.dart';
@@ -202,6 +203,266 @@ void main() {
       expect(Directory(projectPath).existsSync(), isFalse);
       expect(statuses, contains(AppI10n.dialogExtractVideoInfo));
       await expectRetired(tester, container, completed: 1);
+      await dismissToasts(tester);
+    },
+  );
+
+  for (final useTitle in [false, true]) {
+    testWidgets(
+      'separate folders route all copy types with title naming $useTitle',
+      (tester) async {
+        await tester.runAsync(() async {
+          await StorageUtil.setBool(AppKeys.separateWallpaperFolders, true);
+          await StorageUtil.setBool(AppKeys.useTitleName, useTitle);
+        });
+        final (container, ref) = await host(tester);
+        final video = wallpaper('video', 'original.mp4', title: 'Shared');
+        final images = wallpaper(
+          'images',
+          WallpaperDirectories.custom,
+          title: 'Shared',
+        );
+        final web = wallpaper('web', 'index.html', title: 'Shared');
+        File(video.target).writeAsStringSync('video bytes');
+        Directory(images.target).createSync();
+        File(
+          p.join(images.target, 'image.png'),
+        ).writeAsStringSync('image bytes');
+        File(web.target).writeAsStringSync('web bytes');
+
+        await tester.runAsync(
+          () => extractWallpapers(ref, [video, images, web]),
+        );
+
+        String folder(String id) =>
+            p.join(exportPath, useTitle ? 'Shared ($id)' : id);
+        // Video filenames keep their existing title-based naming in either mode.
+        expect(
+          File(p.join(folder('video'), 'Shared.mp4')).readAsStringSync(),
+          'video bytes',
+        );
+        expect(
+          File(p.join(folder('images'), 'image.png')).readAsStringSync(),
+          'image bytes',
+        );
+        expect(
+          File(p.join(folder('web'), 'index.html')).readAsStringSync(),
+          'web bytes',
+        );
+        expect(Directory(exportPath).listSync().whereType<File>(), isEmpty);
+        expect(
+          Directory(folder('web')).listSync().whereType<Directory>(),
+          isEmpty,
+        );
+        await expectRetired(tester, container, completed: 3);
+        expect(find.byType(ErrorView), findsNothing);
+        await dismissToasts(tester);
+      },
+    );
+  }
+
+  for (final overwrite in [false, true]) {
+    testWidgets(
+      'separate folders preserve repeat-export policy with overwrite $overwrite',
+      (tester) async {
+        await tester.runAsync(() async {
+          await StorageUtil.setBool(AppKeys.separateWallpaperFolders, true);
+          await StorageUtil.setBool(AppKeys.replaceFile, overwrite);
+        });
+        final (container, ref) = await host(tester);
+        final first = wallpaper('one', 'clip.mp4', title: 'Same title');
+        final second = wallpaper('two', 'clip.mp4', title: 'Same title');
+        File(first.target).writeAsStringSync('first');
+        File(second.target).writeAsStringSync('second');
+        await tester.runAsync(() => extractWallpapers(ref, [second]));
+        await dismissToasts(tester);
+        await tester.runAsync(() => extractWallpapers(ref, [first]));
+        await dismissToasts(tester);
+        final original = File(
+          p.join(exportPath, 'Same title (one)', 'Same title.mp4'),
+        );
+        final other = File(
+          p.join(exportPath, 'Same title (two)', 'Same title.mp4'),
+        );
+        final userFile = File(p.join(original.parent.path, 'notes.txt'))
+          ..writeAsStringSync('keep');
+        File(first.target).writeAsStringSync('updated');
+
+        await tester.runAsync(() => extractWallpapers(ref, [first]));
+
+        expect(original.readAsStringSync(), overwrite ? 'updated' : 'first');
+        final extra = File(p.join(original.parent.path, 'Same title-1.mp4'));
+        expect(extra.existsSync(), !overwrite);
+        if (!overwrite) expect(extra.readAsStringSync(), 'updated');
+        expect(other.readAsStringSync(), 'second');
+        expect(userFile.readAsStringSync(), 'keep');
+        await expectRetired(tester, container, completed: 1);
+        await dismissToasts(tester);
+      },
+    );
+  }
+
+  testWidgets('separate folder failure stays with that wallpaper', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => StorageUtil.setBool(AppKeys.separateWallpaperFolders, true),
+    );
+    final (container, ref) = await host(tester);
+    final blocked = wallpaper('blocked', 'clip.mp4');
+    final good = wallpaper('good', 'clip.mp4');
+    File(blocked.target).writeAsStringSync('blocked');
+    File(good.target).writeAsStringSync('good');
+    Directory(exportPath).createSync();
+    final obstruction = File(p.join(exportPath, 'blocked (blocked)'))
+      ..writeAsStringSync('keep');
+
+    await tester.runAsync(() => extractWallpapers(ref, [blocked, good]));
+
+    expect(obstruction.readAsStringSync(), 'keep');
+    expect(
+      File(p.join(exportPath, 'good (good)', 'good.mp4')).readAsStringSync(),
+      'good',
+    );
+    await expectRetired(tester, container, completed: 2);
+    final errors = tester.widget<ErrorView>(find.byType(ErrorView)).errors;
+    expect(errors, hasLength(1));
+    expect(errors.single.wallpaper, blocked);
+    await dismissToasts(tester);
+  });
+
+  testWidgets('separate folders do not change project destinations', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await StorageUtil.setBool(AppKeys.separateWallpaperFolders, true);
+      await StorageUtil.setInt(AppKeys.extractType, ExtractType.project.index);
+    });
+    final (container, ref) = await host(tester);
+    final web = wallpaper('one', 'index.html', title: 'Project title');
+    File(web.target).writeAsStringSync('web');
+
+    await tester.runAsync(() => extractProject(ref, [web]));
+
+    expect(
+      File(
+        p.join(projectPath, 'Project title', 'index.html'),
+      ).readAsStringSync(),
+      'web',
+    );
+    expect(Directory(exportPath).existsSync(), isFalse);
+    await expectRetired(tester, container, completed: 1);
+    await dismissToasts(tester);
+  });
+
+  test('separate folder preference defaults off and survives reload', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    expect(container.read(separateWallpaperFoldersProvider), isFalse);
+    for (final enabled in [true, false]) {
+      container.read(separateWallpaperFoldersProvider.notifier).update(enabled);
+      // Await storage's write queue without altering the preference under test.
+      await StorageUtil.setBool(AppKeys.useTitleName, true);
+      await StorageUtil.initWithoutFile();
+      final reloaded = ProviderContainer();
+      expect(reloaded.read(separateWallpaperFoldersProvider), enabled);
+      reloaded.dispose();
+    }
+  });
+
+  testWidgets('cancel leaves later separate folders uncreated', (tester) async {
+    await tester.runAsync(
+      () => StorageUtil.setBool(AppKeys.separateWallpaperFolders, true),
+    );
+    final (container, ref) = await host(tester);
+    final first = wallpaper('first', 'clip.mp4');
+    final second = wallpaper('second', 'clip.mp4');
+    File(first.target).writeAsStringSync('first');
+    File(second.target).writeAsStringSync('second');
+    final subscription = container.listen(currentIndexProvider, (_, next) {
+      if (next == 1) container.read(activeCancelTokenProvider)!.cancel();
+    });
+    addTearDown(subscription.close);
+
+    await tester.runAsync(() => extractWallpapers(ref, [first, second]));
+
+    expect(
+      File(p.join(exportPath, 'first (first)', 'first.mp4')).readAsStringSync(),
+      'first',
+    );
+    expect(
+      Directory(p.join(exportPath, 'second (second)')).existsSync(),
+      isFalse,
+    );
+    await expectRetired(tester, container, completed: 1);
+    expect(find.text(AppI10n.dialogCancelled), findsOneWidget);
+    await dismissToasts(tester);
+  });
+
+  testWidgets(
+    'switching back to shared output does not sweep wallpaper folders',
+    (tester) async {
+      await tester.runAsync(
+        () => StorageUtil.setBool(AppKeys.separateWallpaperFolders, true),
+      );
+      final (container, ref) = await host(tester);
+      final grouped = wallpaper('one', 'clip.mp4', title: '.werepkg-ex-title');
+      final shared = wallpaper('two', 'clip.mp4', title: 'Shared');
+      File(grouped.target).writeAsStringSync('grouped');
+      File(shared.target).writeAsStringSync('shared');
+      await tester.runAsync(() => extractWallpapers(ref, [grouped]));
+      await dismissToasts(tester);
+      container.read(separateWallpaperFoldersProvider.notifier).update(false);
+
+      await tester.runAsync(() => extractWallpapers(ref, [shared]));
+
+      expect(
+        File(
+          p.join(
+            exportPath,
+            '_.werepkg-ex-title (one)',
+            '.werepkg-ex-title.mp4',
+          ),
+        ).readAsStringSync(),
+        'grouped',
+      );
+      expect(
+        File(p.join(exportPath, 'Shared.mp4')).readAsStringSync(),
+        'shared',
+      );
+      await expectRetired(tester, container, completed: 1);
+      await dismissToasts(tester);
+    },
+  );
+
+  testWidgets(
+    'separate scene failure cleans scratch data but keeps existing output',
+    (tester) async {
+      await tester.runAsync(
+        () => StorageUtil.setBool(AppKeys.separateWallpaperFolders, true),
+      );
+      final (container, ref) = await host(tester);
+      final scene = wallpaper('scene', 'scene.pkg');
+      File(scene.target).writeAsStringSync('package');
+      File(
+        container.read(toolPathProvider)!,
+      ).writeAsStringSync('not an executable');
+      final destination = Directory(p.join(exportPath, 'scene (scene)'))
+        ..createSync(recursive: true);
+      final existing = File(p.join(destination.path, 'keep.png'))
+        ..writeAsStringSync('keep');
+      Directory(p.join(destination.path, '.werepkg-ex-stale')).createSync();
+
+      await tester.runAsync(() => extractWallpapers(ref, [scene]));
+
+      expect(destination.listSync().map((entry) => p.basename(entry.path)), [
+        'keep.png',
+      ]);
+      expect(existing.readAsStringSync(), 'keep');
+      await expectRetired(tester, container, completed: 1);
+      final errors = tester.widget<ErrorView>(find.byType(ErrorView)).errors;
+      expect(errors, hasLength(1));
+      expect(errors.single.message, contains(destination.path));
       await dismissToasts(tester);
     },
   );

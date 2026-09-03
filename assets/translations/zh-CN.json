@@ -396,6 +396,8 @@
       "onlySaveImage": "仅保存图片文件",
       "noTexture": "不保留纹理图片",
       "originalProjectName": "标题为原项目名",
+      "separateWallpaperFolders": "将每张壁纸提取到独立文件夹",
+      "separateWallpaperFoldersTip": "仅适用于壁纸模式。文件夹名为“标题 (ID)”；关闭标题命名后仅使用 ID。",
       "replaceExistFile": "替换已存在文件",
       "replaceExistFileTip": "当导出的文件名在目标文件夹存在时直接替换，否则不会导出",
       "toolPath": "工具路径",

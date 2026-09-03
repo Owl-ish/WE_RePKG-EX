@@ -164,6 +164,59 @@ abstract class _$UseTitleName extends $Notifier<bool> {
   }
 }
 
+@ProviderFor(SeparateWallpaperFolders)
+final separateWallpaperFoldersProvider = SeparateWallpaperFoldersProvider._();
+
+final class SeparateWallpaperFoldersProvider
+    extends $NotifierProvider<SeparateWallpaperFolders, bool> {
+  SeparateWallpaperFoldersProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'separateWallpaperFoldersProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$separateWallpaperFoldersHash();
+
+  @$internal
+  @override
+  SeparateWallpaperFolders create() => SeparateWallpaperFolders();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$separateWallpaperFoldersHash() =>
+    r'9817003e02a2c1ec3bea50aeb61abf7ef9537f28';
+
+abstract class _$SeparateWallpaperFolders extends $Notifier<bool> {
+  bool build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<bool, bool>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<bool, bool>,
+              bool,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(SortAscending)
 final sortAscendingProvider = SortAscendingProvider._();
 

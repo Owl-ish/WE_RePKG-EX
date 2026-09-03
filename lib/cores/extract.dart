@@ -109,6 +109,23 @@ Map<String, String> resolveProjectFolders(
   return assigned;
 }
 
+/// Keeps the ID in title-based names so equal titles cannot merge across runs,
+/// even when the wallpapers are selected separately or in a different order.
+String wallpaperExportFolder(
+  WallpaperInfo wallpaper,
+  String basePath, {
+  required bool useTitleName,
+}) {
+  final String name = useTitleName
+      ? '${renameFolder(wallpaper.title)} (${wallpaper.id})'
+      : wallpaper.id;
+  // A later shared-folder export must not mistake this output for scratch data.
+  final String safeName = name.toLowerCase().startsWith(_sceneTempSweepPrefix)
+      ? '_$name'
+      : name;
+  return path.join(basePath, safeName);
+}
+
 /// Extracts one wallpaper into [outPath]. Returns the failure, or null on
 /// success, so a bad item never aborts the batch.
 Future<String?> extractProjectTo({
@@ -181,16 +198,13 @@ final Map<String, int> _exporting = <String, int>{};
 /// click starts before it finishes. The second sweep then deleted the first
 /// run's `.werepkg-ex-` folder out from under RePKG, which surfaced as a file
 /// that was not found.
-Future<void> withExportSweep(
-  String outPath,
-  Future<void> Function() work,
-) async {
+Future<T> withExportSweep<T>(String outPath, Future<T> Function() work) async {
   final String key = path.normalize(outPath).toLowerCase();
   final bool alone = (_exporting[key] ?? 0) == 0;
   _exporting[key] = (_exporting[key] ?? 0) + 1;
   try {
     if (alone) await sweepStaleOutput(outPath);
-    await work();
+    return await work();
   } finally {
     final int left = (_exporting[key] ?? 1) - 1;
     left > 0 ? _exporting[key] = left : _exporting.remove(key);
@@ -199,6 +213,8 @@ Future<void> withExportSweep(
 
 /// [detailedProgress] turns on the per-file byte counter. Off for batches, where
 /// several workers writing one progress line just makes it flicker.
+/// [destinationIsWallpaperFolder] prevents another nesting level for web and
+/// application wallpapers when [outPath] already belongs to this wallpaper.
 Future<String?> extractBranch(
   StatusSink onStatus,
   ExtractSettings settings,
@@ -208,6 +224,7 @@ Future<String?> extractBranch(
   CancelToken token, {
   bool detailedProgress = false,
   VoidCallback? onNothingWritten,
+  bool destinationIsWallpaperFolder = false,
 }) async {
   final target = wallpaper.target;
   // Match the file type case-insensitively (e.g. ".MP4" should still count).
@@ -248,7 +265,9 @@ Future<String?> extractBranch(
   final name = settings.useTitleName
       ? renameFolder(wallpaper.title)
       : wallpaper.id;
-  final String dest = path.join(outPath, name);
+  final String dest = destinationIsWallpaperFolder
+      ? outPath
+      : path.join(outPath, name);
   final String? copied = await copyWallpaperFolderTo(
     wallpaper,
     dest,

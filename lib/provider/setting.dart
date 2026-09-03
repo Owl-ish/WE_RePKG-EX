@@ -37,6 +37,16 @@ class UseTitleName extends _$UseTitleName {
 }
 
 @riverpod
+class SeparateWallpaperFolders extends _$SeparateWallpaperFolders {
+  @override
+  bool build() => StorageUtil.getBool(AppKeys.separateWallpaperFolders);
+  void update(bool value) async {
+    state = value;
+    await StorageUtil.setBool(AppKeys.separateWallpaperFolders, value);
+  }
+}
+
+@riverpod
 class SortAscending extends _$SortAscending {
   @override
   bool build() => StorageUtil.getBool(AppKeys.sortAscending);

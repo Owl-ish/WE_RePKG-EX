@@ -396,6 +396,8 @@
       "onlySaveImage": "Save only image files",
       "noTexture": "Don't retain texture images",
       "originalProjectName": "Title as project name",
+      "separateWallpaperFolders": "Extract each wallpaper into its own folder",
+      "separateWallpaperFoldersTip": "Wallpaper mode only. Folder names use Title (ID), or just ID when title naming is off.",
       "replaceExistFile": "Replace existing files",
       "replaceExistFileTip": "Replace if the exported filename exists; otherwise, skip exporting",
       "toolPath": "Tool path",

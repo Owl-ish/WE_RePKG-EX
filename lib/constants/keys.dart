@@ -14,6 +14,7 @@ class AppKeys {
   static const String onlySaveImage = 'onlySaveImage';
   static const String excludeTexture = 'excludeTexture';
   static const String useTitleName = 'useTitleName';
+  static const String separateWallpaperFolders = 'separateWallpaperFolders';
   static const String replaceFile = 'replaceFile';
   static const String sortAscending = 'sortAscending';
   static const String wallpaperPath = 'wallpaperPath';

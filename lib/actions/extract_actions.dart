@@ -176,6 +176,7 @@ Future<void> extractWallpapers(
   // One set for the whole batch: with overwrite on, a name may replace an
   // earlier run's file but must not be handed to two wallpapers here.
   final claims = FileNameClaims(overwrite: settings.overwrite);
+  final bool separateFolders = ref.read(separateWallpaperFoldersProvider);
 
   final StatusSink onStatus = ref.read(loadingTextProvider.notifier).update;
 
@@ -189,18 +190,31 @@ Future<void> extractWallpapers(
     finished = await _runBatch(ref, wallpapers, settings.plan.concurrency, (
       wallpaper,
       token,
-    ) {
-      return extractBranch(
+    ) async {
+      final String destination = separateFolders
+          ? wallpaperExportFolder(
+              wallpaper,
+              outPath,
+              useTitleName: settings.useTitleName,
+            )
+          : outPath;
+      Future<String?> extract() => extractBranch(
         onStatus,
         settings,
         wallpaper,
-        outPath,
+        destination,
         claims,
         token,
         // Only a single-wallpaper run can own the progress line.
         detailedProgress: wallpapers.length == 1,
         onNothingWritten: () => emptyHanded.add(wallpaper.title),
+        destinationIsWallpaperFolder: separateFolders,
       );
+      if (!separateFolders) return extract();
+      if (!await ensureOutputDir(destination)) {
+        return '${tr(AppI10n.errorCreatedFolderFailed)} $destination';
+      }
+      return withExportSweep(destination, extract);
     });
   });
 

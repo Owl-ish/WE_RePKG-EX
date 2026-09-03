@@ -105,4 +105,41 @@ void main() {
     final second = resolveProjectFolders(wallpapers, base, useTitleName: true);
     expect(first, second);
   });
+
+  test('wallpaper folders keep identity independent of batch order', () {
+    expect(
+      wallpaperExportFolder(make('1', 'A/B'), base, useTitleName: true),
+      r'C:\out\A_B (1)',
+    );
+    expect(
+      wallpaperExportFolder(make('2', 'A:B'), base, useTitleName: true),
+      r'C:\out\A_B (2)',
+    );
+    expect(
+      wallpaperExportFolder(make('1', 'A/B'), base, useTitleName: false),
+      r'C:\out\1',
+    );
+  });
+
+  test(
+    'wallpaper folder names cannot enter the temporary cleanup namespace',
+    () {
+      expect(
+        wallpaperExportFolder(
+          make('1', '.werepkg-ex-title'),
+          base,
+          useTitleName: true,
+        ),
+        r'C:\out\_.werepkg-ex-title (1)',
+      );
+      expect(
+        wallpaperExportFolder(
+          make('.werepkg-id', 'Title'),
+          base,
+          useTitleName: false,
+        ),
+        r'C:\out\_.werepkg-id',
+      );
+    },
+  );
 }

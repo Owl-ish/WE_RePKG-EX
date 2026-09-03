@@ -469,6 +469,10 @@ class AppI10n {
   static const String settingConfigNoTexture = 'setting.config.noTexture';
   static const String settingConfigOriginalProjectName =
       'setting.config.originalProjectName';
+  static const String settingConfigSeparateWallpaperFolders =
+      'setting.config.separateWallpaperFolders';
+  static const String settingConfigSeparateWallpaperFoldersTip =
+      'setting.config.separateWallpaperFoldersTip';
   static const String settingConfigReplaceExistFile =
       'setting.config.replaceExistFile';
   static const String settingConfigReplaceExistFileTip =

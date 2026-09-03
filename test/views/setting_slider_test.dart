@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/keys.dart';
+import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/setting/setting_slider.dart';
+import 'package:we_repkg/views/setting/setting_config_group.dart';
+import 'package:we_repkg/widgets/setting_checkbox.dart';
 
 // Slider asserts its value sits inside min..max, so a stored value the range no
 // longer covers would first show up as a blank settings page.
@@ -67,6 +70,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
     return container;
   }
+
+  testWidgets('folder checkbox updates the persisted extraction setting', (
+    tester,
+  ) async {
+    final container = await pump(
+      tester,
+      const SingleChildScrollView(child: SettingConfigGroup()),
+    );
+    final row = find.ancestor(
+      of: find.text(AppI10n.settingConfigSeparateWallpaperFolders),
+      matching: find.byType(SettingCheckbox),
+    );
+    final checkbox = find.descendant(of: row, matching: find.byType(Checkbox));
+    expect(
+      find.text(AppI10n.settingConfigSeparateWallpaperFoldersTip),
+      findsOneWidget,
+    );
+    expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+    await tester.ensureVisible(checkbox);
+    await tester.tap(checkbox);
+    await tester.pump();
+    expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+    expect(container.read(separateWallpaperFoldersProvider), isTrue);
+    expect(StorageUtil.getBool(AppKeys.separateWallpaperFolders), isTrue);
+    expect(tester.takeException(), isNull);
+  });
 
   group('concurrency', () {
     testWidgets('builds', (tester) async {
