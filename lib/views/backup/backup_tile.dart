@@ -15,7 +15,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/actions/wallpaper_actions.dart';
-import 'package:we_repkg/cores/context_menu.dart';
+import 'package:we_repkg/widgets/context_menu.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
 import 'package:we_repkg/models/wallpaper.dart';

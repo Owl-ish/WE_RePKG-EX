@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/config/theme_extensions.dart';
-import 'package:we_repkg/cores/context_menu.dart';
+import 'package:we_repkg/widgets/context_menu.dart';
 import 'package:we_repkg/utils/grid_selection.dart';
 import 'package:we_repkg/utils/modifier_keys.dart';
 import 'package:we_repkg/widgets/input_controls.dart';
