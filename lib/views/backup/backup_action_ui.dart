@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
+import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 
 /// Shared attention halo for backup actions. The control inside keeps its own
@@ -90,6 +92,105 @@ class _BackupActionGlowState extends State<BackupActionGlow>
     },
     child: widget.child,
   );
+}
+
+/// Bulk-action styling for the Backup summary and grouped cleanup controls.
+class BackupBulkActionButton extends StatefulWidget {
+  const BackupBulkActionButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.colour,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color colour;
+  final VoidCallback? onPressed;
+  final bool destructive;
+
+  @override
+  State<BackupBulkActionButton> createState() => _BackupBulkActionButtonState();
+}
+
+class _BackupBulkActionButtonState extends State<BackupBulkActionButton> {
+  bool _hovered = false;
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = widget.onPressed != null;
+    final ThemeData theme = Theme.of(context);
+    final ActionButtonTheme actionColors = theme.actionButtons;
+    final Color resolvedColour = enabled
+        ? (widget.destructive
+              ? actionColors.destructiveForeground
+              : widget.colour)
+        : theme.disabledColor;
+    // Non-destructive state actions rest like their status pills. Destructive
+    // actions use the app-wide danger surface, then the same outward pulse.
+    final Color fill = widget.destructive
+        ? (enabled
+              ? actionColors.destructiveBackground
+              : actionColors.destructiveBackground.withValues(alpha: .5))
+        : Color.alphaBlend(
+            resolvedColour.withValues(alpha: enabled ? .07 : .05),
+            theme.scaffoldBackgroundColor,
+          );
+    final Color border = widget.destructive
+        ? (enabled
+              ? actionColors.destructiveBorder
+              : actionColors.destructiveBorder.withValues(alpha: .5))
+        : resolvedColour.withValues(alpha: enabled ? .2 : .15);
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => _setHovered(true) : null,
+      onExit: enabled ? (_) => _setHovered(false) : null,
+      child: AnimatedScale(
+        key: const ValueKey<String>('backup-all-action-scale'),
+        scale: enabled && _hovered ? 1.06 : 1,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: BackupActionGlow(
+          colour: resolvedColour,
+          enabled: enabled,
+          borderRadius: LayoutNums.pill,
+          glowKey: const ValueKey<String>('backup-all-action-glow'),
+          child: Material(
+            color: fill,
+            shape: RoundedRectangleBorder(
+              borderRadius: LayoutNums.pill,
+              side: BorderSide(color: border),
+            ),
+            child: InkWell(
+              borderRadius: LayoutNums.pill,
+              onTap: widget.onPressed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: LayoutNums.compactGap,
+                  children: <Widget>[
+                    Icon(widget.icon, size: 16, color: resolvedColour),
+                    Text(widget.label, style: TextStyle(color: resolvedColour)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 IconData backupActionIcon(BackupAction action) => switch (action) {

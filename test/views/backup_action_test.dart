@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/config/theme.dart';
+import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/provider/backup.dart';
 import 'package:we_repkg/provider/system.dart';
@@ -200,6 +201,8 @@ void main() {
         container: container,
         child: MaterialApp(
           theme: AppTheme.lightTheme,
+          builder: BotToastInit(),
+          navigatorObservers: <NavigatorObserver>[BotToastNavigatorObserver()],
           home: const Scaffold(body: BackupView()),
         ),
       ),
@@ -258,7 +261,92 @@ void main() {
     await tester.pump();
     expect(container.read(backupSelectionProvider), contains(card.id));
     semantics.dispose();
+
+    await tester.tap(find.byType(BackupBulkActionButton));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text(AppI10n.backupActionBackUpOne), findsOneWidget);
+    await tester.tap(find.text(AppI10n.cancel));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.text(AppI10n.backupActionBackUpOne), findsNothing);
+    expect(container.read(backupSelectionProvider), {card.id});
+    expect(tester.takeException(), isNull);
   });
+
+  for (final bool destructive in [false, true]) {
+    testWidgets(
+      '${destructive ? 'destructive' : 'ordinary'} bulk button keeps hover, activation, and disabled behavior',
+      (tester) async {
+        const Color accent = Color(0xFF2F76B8);
+        final ThemeData theme = AppTheme.lightTheme;
+        int calls = 0;
+
+        Future<void> pumpButton({required bool enabled}) => tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: Center(
+                child: BackupBulkActionButton(
+                  label: 'Run backup action',
+                  icon: Icons.backup_outlined,
+                  colour: accent,
+                  destructive: destructive,
+                  onPressed: enabled ? () => calls++ : null,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await pumpButton(enabled: true);
+        expect(
+          tester.widget<Icon>(find.byIcon(Icons.backup_outlined)).color,
+          destructive ? theme.actionButtons.destructiveForeground : accent,
+        );
+        final TestGesture mouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await mouse.addPointer(location: Offset.zero);
+        addTearDown(mouse.removePointer);
+        await mouse.moveTo(
+          tester.getCenter(find.byType(BackupBulkActionButton)),
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+          1.06,
+        );
+
+        await tester.tap(find.text('Run backup action'));
+        await tester.pump();
+        expect(calls, 1);
+
+        await pumpButton(enabled: false);
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(
+          tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+          1,
+        );
+        expect(
+          tester
+              .widget<BackupActionGlow>(find.byType(BackupActionGlow))
+              .enabled,
+          isFalse,
+        );
+        expect(
+          tester.widget<Icon>(find.byIcon(Icons.backup_outlined)).color,
+          theme.disabledColor,
+        );
+        await tester.tap(find.text('Run backup action'));
+        await tester.pump();
+        expect(calls, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('BackupActionGlow animates the halo independently of its child', (
     tester,
   ) async {

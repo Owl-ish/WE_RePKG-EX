@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -784,6 +785,57 @@ void main() {
         ),
         everyElement(isTrue),
       );
+
+      final String duplicateId = ignoredReconcileTileId(
+        'ignored-reconcile',
+        BackupReconcileReason.duplicateLiveCopies,
+      );
+      final String conflictId = ignoredReconcileTileId(
+        'ignored-reconcile',
+        BackupReconcileReason.conflictingBackupCopies,
+      );
+      await tester.tap(find.byKey(ValueKey<String>(ignoredUpdate.id)));
+      await tester.pump(kDoubleTapTimeout);
+      expect(container.read(backupSelectionProvider), {ignoredUpdate.id});
+
+      final Finder lastDetection = find.byKey(ValueKey<String>(conflictId));
+      await tester.scrollUntilVisible(
+        lastDetection,
+        250,
+        scrollable: find
+            .descendant(of: ignoredGrid, matching: find.byType(Scrollable))
+            .first,
+      );
+      await settle(tester);
+      await Scrollable.ensureVisible(
+        tester.element(lastDetection),
+        alignment: .5,
+      );
+      await settle(tester);
+      expect(lastDetection.hitTestable(), findsOneWidget);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.tap(lastDetection);
+      await tester.pump(kDoubleTapTimeout);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(container.read(backupSelectionProvider), {
+        ignoredUpdate.id,
+        duplicateId,
+        conflictId,
+      });
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(lastDetection);
+      await tester.pump(kDoubleTapTimeout);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(container.read(backupSelectionProvider), {
+        ignoredUpdate.id,
+        duplicateId,
+      });
+
+      container.read(backupSearchProvider.notifier).update('ignored-reconcile');
+      await settle(tester);
+      expect(container.read(backupSelectionProvider), {duplicateId});
+      expect(tester.takeException(), isNull);
     });
 
     // They all read as off while it has the grid, so lighting one has to mean
