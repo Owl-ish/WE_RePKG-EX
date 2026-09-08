@@ -19,6 +19,7 @@ import 'package:we_repkg/utils/tool.dart';
 import 'package:we_repkg/utils/work_pool.dart';
 
 import 'path_actions.dart';
+import 'library_scan_refresh.dart';
 
 /// Guarded because this runs before the loading overlay, so a throw here took
 /// the extraction down with nothing on screen.
@@ -56,8 +57,10 @@ Future<bool> _runBatch(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
   int concurrency,
-  Future<String?> Function(WallpaperInfo wallpaper, CancelToken token) work,
-) async {
+  Future<String?> Function(WallpaperInfo wallpaper, CancelToken token) work, {
+  required String outputFolder,
+}) async {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   // Every notifier taken before the first await: the widget owning `ref` can be
   // gone by the time a worker reports or the batch retires, and reading through
   // it then throws.
@@ -78,13 +81,17 @@ Future<bool> _runBatch(
   final List<ErrorInfo> errList = [];
   List<String?> results = const <String?>[];
   try {
-    results = await runBounded<WallpaperInfo, String?>(
-      wallpapers,
-      (wallpaper) => work(wallpaper, token),
-      concurrency: concurrency,
-      cancelToken: token,
-      onStart: processing.update,
-      onComplete: (_) => index.increment(),
+    results = await withLibraryScanRefresh(
+      container,
+      () => runBounded<WallpaperInfo, String?>(
+        wallpapers,
+        (wallpaper) => work(wallpaper, token),
+        concurrency: concurrency,
+        cancelToken: token,
+        onStart: processing.update,
+        onComplete: (_) => index.increment(),
+      ),
+      outputFolder: outputFolder,
     );
   } catch (e) {
     errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
@@ -115,6 +122,7 @@ Future<void> extractProject(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
 ) async {
+  if (wallpapers.isEmpty) return;
   final bool toProjectFolder =
       ref.read(useProjectPathProvider) ||
       ref.read(currentExtractTypeProvider).isProject;
@@ -151,6 +159,7 @@ Future<void> extractProject(
       overwrite: overwrite,
       token: token,
     ),
+    outputFolder: outPath,
   );
 }
 
@@ -163,6 +172,7 @@ Future<void> extractWallpapers(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
 ) async {
+  if (wallpapers.isEmpty) return;
   if (!await checkExportPath(ref, true)) return;
   if (!await _rePKGAvailable(ref, wallpapers)) return;
 
@@ -215,7 +225,7 @@ Future<void> extractWallpapers(
         return '${tr(AppI10n.errorCreatedFolderFailed)} $destination';
       }
       return withExportSweep(destination, extract);
-    });
+    }, outputFolder: outPath);
   });
 
   if (!finished || emptyHanded.isEmpty) return;

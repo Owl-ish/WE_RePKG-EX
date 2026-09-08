@@ -10,9 +10,13 @@ import 'package:we_repkg/actions/extract_actions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
+import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/integrity_scan.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/provider/system.dart';
+import 'package:we_repkg/provider/backup.dart';
+import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/provider/setting.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -58,8 +62,39 @@ void main() {
     );
   }
 
-  Future<(ProviderContainer, WidgetRef)> host(WidgetTester tester) async {
-    final container = ProviderContainer();
+  Future<(ProviderContainer, WidgetRef)> host(
+    WidgetTester tester, {
+    void Function(String)? onScan,
+  }) async {
+    final container = ProviderContainer(
+      overrides: [
+        if (onScan != null) ...[
+          backupScanProvider.overrideWith((ref) async {
+            onScan('backup');
+            const BackupScan result = (
+              cards: {},
+              updates: {},
+              ignoredUpdates: {},
+              presence: {},
+              junk: {},
+              reconcile: [],
+              acfRead: true,
+              missing: {},
+            );
+            return result;
+          }),
+          integrityScanProvider.overrideWith((ref) async {
+            onScan('integrity');
+            const IntegrityReport result = (
+              findings: [],
+              scanned: {},
+              missing: {},
+            );
+            return result;
+          }),
+        ],
+      ],
+    );
     addTearDown(container.dispose);
     late WidgetRef captured;
     await tester.pumpWidget(
@@ -101,6 +136,60 @@ void main() {
     await tester.pump();
     expect(find.byType(ExtractionProgressPanel), findsNothing);
     expect(tester.takeException(), isNull);
+  }
+
+  for (final projectMode in [true, false]) {
+    for (final inLibrary in [true, false]) {
+      testWidgets(
+        '${projectMode ? 'project' : 'wallpaper'} output ${inLibrary ? 'refreshes library scans' : 'preserves unrelated scans'}',
+        (tester) async {
+          await tester.runAsync(() async {
+            await StorageUtil.setInt(
+              AppKeys.extractType,
+              ExtractType.project.index,
+            );
+            await StorageUtil.setString(
+              AppKeys.myProjectsLibrary,
+              inLibrary
+                  ? (projectMode ? projectPath : exportPath)
+                  : p.join(temp.path, 'other-library'),
+            );
+          });
+          final scans = <String, int>{'backup': 0, 'integrity': 0};
+          final (container, ref) = await host(
+            tester,
+            onScan: (name) => scans[name] = scans[name]! + 1,
+          );
+          await container.read(backupScanProvider.future);
+          await container.read(integrityScanProvider.future);
+          final source = wallpaper('refresh', 'index.html');
+          File(source.target).writeAsStringSync('contents');
+          await tester.runAsync(
+            () => projectMode
+                ? extractProject(ref, [source])
+                : extractWallpapers(ref, [source]),
+          );
+          expect(
+            File(
+              p.join(
+                projectMode ? projectPath : exportPath,
+                'refresh',
+                'index.html',
+              ),
+            ).readAsStringSync(),
+            'contents',
+          );
+          await container.read(backupScanProvider.future);
+          await container.read(integrityScanProvider.future);
+          expect(scans, {
+            'backup': inLibrary ? 2 : 1,
+            'integrity': inLibrary ? 2 : 1,
+          });
+          await expectRetired(tester, container, completed: 1);
+          await dismissToasts(tester);
+        },
+      );
+    }
   }
 
   for (final mode in ExtractType.values) {
@@ -470,7 +559,13 @@ void main() {
   testWidgets('cancel stops the next wallpaper and retires progress state', (
     tester,
   ) async {
-    final (container, ref) = await host(tester);
+    await tester.runAsync(
+      () => StorageUtil.setString(AppKeys.myProjectsLibrary, exportPath),
+    );
+    var scans = 0;
+    final (container, ref) = await host(tester, onScan: (_) => scans++);
+    await container.read(backupScanProvider.future);
+    await container.read(integrityScanProvider.future);
     final first = wallpaper('first', 'video.mp4');
     final second = wallpaper('second', 'video.mp4');
     File(first.target).writeAsStringSync('first bytes');
@@ -488,6 +583,9 @@ void main() {
       'first bytes',
     );
     expect(File(p.join(exportPath, 'second.mp4')).existsSync(), isFalse);
+    await container.read(backupScanProvider.future);
+    await container.read(integrityScanProvider.future);
+    expect(scans, 4);
     await expectRetired(tester, container, completed: 1);
     expect(find.text(AppI10n.dialogCancelled), findsOneWidget);
     expect(find.text(AppI10n.dialogOperationCompleted), findsNothing);
@@ -497,7 +595,13 @@ void main() {
   testWidgets('failed copy is reported without losing the next wallpaper', (
     tester,
   ) async {
-    final (container, ref) = await host(tester);
+    await tester.runAsync(
+      () => StorageUtil.setString(AppKeys.myProjectsLibrary, exportPath),
+    );
+    var scans = 0;
+    final (container, ref) = await host(tester, onScan: (_) => scans++);
+    await container.read(backupScanProvider.future);
+    await container.read(integrityScanProvider.future);
     final missing = wallpaper('missing', 'missing.mp4');
     final good = wallpaper('good', 'video.mp4');
     File(good.target).writeAsStringSync('good bytes');
@@ -514,6 +618,9 @@ void main() {
     expect(errors, hasLength(1));
     expect(errors.single.wallpaper, missing);
     expect(errors.single.message, contains(AppI10n.errorExportVideoFailed));
+    await container.read(backupScanProvider.future);
+    await container.read(integrityScanProvider.future);
+    expect(scans, 4);
     await dismissToasts(tester);
   });
 

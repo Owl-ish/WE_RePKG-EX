@@ -17,6 +17,8 @@ import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/widgets/confirm_dialog.dart';
 
+import 'library_scan_refresh.dart';
+
 Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
   // Read before any await: switching folders unmounts the widget owning `ref`,
   // so the scan writes back through these captured notifiers instead.
@@ -105,6 +107,7 @@ Future<Set<String>> findDeletedWallpapers(
 }
 
 Future<String?> deleteChecked(WidgetRef ref) async {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   String? err;
   List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
   if (wallpapers.isEmpty) return null;
@@ -125,7 +128,10 @@ Future<String?> deleteChecked(WidgetRef ref) async {
   if (!confirmed) return null;
   List<String> paths = wallpapers.map((e) => e.folder).toList();
   try {
-    final String? trashErr = await deleteAllToTrash(filePaths: paths);
+    final String? trashErr = await withLibraryScanRefresh(
+      container,
+      () => deleteAllToTrash(filePaths: paths),
+    );
     if (trashErr != null) {
       err = '${tr(AppI10n.dialogDeleteFailed)} $trashErr';
     }
@@ -183,6 +189,7 @@ void forgetWallpaper(WidgetRef ref, WallpaperInfo wallpaper) {
 }
 
 Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   final bool confirmed = await showConfirmDialog(
     title: tr(AppI10n.dialogDeleteConfirmTitle),
     message: tr(
@@ -195,7 +202,10 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
     // deleteToTrash reports failure through its return value, not by throwing.
     // Awaiting it and discarding the result dropped the row from the list while
     // the folder was still on disk.
-    final String? trashErr = await deleteToTrash(filePath: wallpaper.folder);
+    final String? trashErr = await withLibraryScanRefresh(
+      container,
+      () => deleteToTrash(filePath: wallpaper.folder),
+    );
     if (trashErr != null) {
       debugPrint('${tr(AppI10n.logDeleteFileFailed)} $trashErr');
       return showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $trashErr');
