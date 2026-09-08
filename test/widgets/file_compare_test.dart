@@ -39,11 +39,15 @@ void main() {
       addTearDown(() {
         if (root.existsSync()) root.deleteSync(recursive: true);
       });
-      final File before = File(
-        '${root.path}${Platform.pathSeparator}before.json',
-      )..writeAsStringSync('{"title":"Old","nested":{"strength":1}}');
+      final File before =
+          File('${root.path}${Platform.pathSeparator}before.json')
+            ..writeAsStringSync(
+              '{"title":"Old","nested":{"strength":1},"a.b":1,"a":{"b":2}}',
+            );
       final File after = File('${root.path}${Platform.pathSeparator}after.json')
-        ..writeAsStringSync('{"title":"New","nested":{"strength":2}}');
+        ..writeAsStringSync(
+          '{"title":"New","nested":{"strength":2},"a.b":9,"a":{"b":2}}',
+        );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -122,6 +126,15 @@ void main() {
       expect(jsonContent, findsOneWidget);
       expect(find.text('title'), findsOneWidget);
       expect(find.text('nested  ›  strength'), findsOneWidget);
+      expect(find.text('["a.b"]'), findsOneWidget);
+      expect(
+        tester
+            .widget<SelectableText>(
+              find.byKey(const ValueKey<String>(r'file-json-after-$["a.b"]')),
+            )
+            .data,
+        '9',
+      );
       expect(find.byTooltip(r'$.title'), findsNothing);
       expect(find.byTooltip(r'$.nested.strength'), findsNothing);
       expect(

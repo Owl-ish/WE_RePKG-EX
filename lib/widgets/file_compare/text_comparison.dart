@@ -26,92 +26,20 @@ Future<_TextFileInfo?> _readTextInfo(String filePath) async {
   }
 }
 
-class _JsonDifference {
-  const _JsonDifference({
-    required this.field,
-    required this.before,
-    required this.after,
-    required this.beforePresent,
-    required this.afterPresent,
-  });
-
-  final String field;
-  final Object? before;
-  final Object? after;
-  final bool beforePresent;
-  final bool afterPresent;
-}
-
 class _JsonComparison {
   const _JsonComparison(this.differences);
-
-  final List<_JsonDifference> differences;
+  final List<JsonFieldChange> differences;
 }
 
 _JsonComparison? _tryJsonComparison(_TextFileInfo first, _TextFileInfo second) {
   if (first.truncated || second.truncated) return null;
-  Object? left;
-  Object? right;
   try {
-    left = jsonDecode(first.text);
-    right = jsonDecode(second.text);
+    return _JsonComparison(
+      compareJsonValues(jsonDecode(first.text), jsonDecode(second.text)),
+    );
   } on FormatException {
     return null;
   }
-
-  final Map<String, Object?> before = <String, Object?>{};
-  final Map<String, Object?> after = <String, Object?>{};
-  _flattenJson(left, r'$', before);
-  _flattenJson(right, r'$', after);
-  final List<String> fields = <String>{...before.keys, ...after.keys}.toList()
-    ..sort();
-
-  final List<_JsonDifference> differences = <_JsonDifference>[];
-  for (final String field in fields) {
-    final bool beforePresent = before.containsKey(field);
-    final bool afterPresent = after.containsKey(field);
-    final Object? beforeValue = before[field];
-    final Object? afterValue = after[field];
-    if (beforePresent == afterPresent &&
-        (!beforePresent || jsonEncode(beforeValue) == jsonEncode(afterValue))) {
-      continue;
-    }
-    differences.add(
-      _JsonDifference(
-        field: field,
-        before: beforeValue,
-        after: afterValue,
-        beforePresent: beforePresent,
-        afterPresent: afterPresent,
-      ),
-    );
-  }
-  return _JsonComparison(differences);
-}
-
-void _flattenJson(Object? value, String field, Map<String, Object?> output) {
-  if (value is Map) {
-    if (value.isEmpty) {
-      output[field] = const <String, Object?>{};
-      return;
-    }
-    for (final Object? rawKey in value.keys) {
-      final String key = rawKey.toString();
-      _flattenJson(value[rawKey], '$field.$key', output);
-    }
-    return;
-  }
-  if (value is List) {
-    if (value.isEmpty) {
-      output[field] = const <Object?>[];
-      return;
-    }
-    for (int index = 0; index < value.length; index++) {
-      _flattenJson(value[index], '$field[$index]', output);
-    }
-    return;
-  }
-  output[field] = value;
 }
 
 Future<void> _showTextDialog(
@@ -319,7 +247,7 @@ class _StructuredJsonComparison extends StatelessWidget {
                   separatorBuilder: (_, _) =>
                       Divider(height: 1, color: outline.withValues(alpha: .65)),
                   itemBuilder: (BuildContext context, int index) {
-                    final _JsonDifference difference =
+                    final JsonFieldChange difference =
                         comparison.differences[index];
                     return Padding(
                       padding: const EdgeInsets.symmetric(

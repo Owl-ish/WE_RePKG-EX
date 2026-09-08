@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +10,7 @@ import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/src/rust/api/simple.dart' as rust;
 import 'package:we_repkg/utils/backup_diff.dart';
+import 'package:we_repkg/utils/json_diff.dart';
 import 'package:we_repkg/utils/parse_acf.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 
@@ -1334,13 +1334,7 @@ Future<BackupFileChanges?> compareBackupFileChanges({
 /// Presence is kept separately from the value because JSON `null` is a real
 /// value and must not be confused with a field or list item that was added or
 /// removed.
-typedef BackupJsonFieldChange = ({
-  String field,
-  Object? before,
-  Object? after,
-  bool beforePresent,
-  bool afterPresent,
-});
+typedef BackupJsonFieldChange = JsonFieldChange;
 
 /// Compares any two JSON files structurally by relative path.
 ///
@@ -1357,20 +1351,7 @@ Future<List<BackupJsonFieldChange>?> compareBackupJsonChanges({
     if (!await beforeFile.exists() || !await afterFile.exists()) return null;
     final Object? beforeJson = jsonDecode(await beforeFile.readAsString());
     final Object? afterJson = jsonDecode(await afterFile.readAsString());
-    final List<BackupJsonFieldChange> changes = <BackupJsonFieldChange>[];
-    _collectJsonChanges(
-      beforeJson,
-      afterJson,
-      field: '',
-      beforePresent: true,
-      afterPresent: true,
-      changes: changes,
-    );
-    changes.sort(
-      (BackupJsonFieldChange a, BackupJsonFieldChange b) =>
-          a.field.toLowerCase().compareTo(b.field.toLowerCase()),
-    );
-    return changes;
+    return compareJsonValues(beforeJson, afterJson);
   } on FileSystemException {
     return null;
   } on FormatException {
@@ -1387,65 +1368,6 @@ Future<List<BackupJsonFieldChange>?> compareBackupProjectJsonChanges({
   afterFolder: liveFolder,
   relativePath: WallpaperFiles.project,
 );
-
-void _collectJsonChanges(
-  Object? before,
-  Object? after, {
-  required String field,
-  required bool beforePresent,
-  required bool afterPresent,
-  required List<BackupJsonFieldChange> changes,
-}) {
-  if (beforePresent && afterPresent && before is Map && after is Map) {
-    final Set<String> keys = <String>{
-      ...before.keys.map((Object? key) => '$key'),
-      ...after.keys.map((Object? key) => '$key'),
-    };
-    final List<String> ordered = keys.toList()
-      ..sort(
-        (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
-      );
-    for (final String key in ordered) {
-      final bool hasBefore = before.containsKey(key);
-      final bool hasAfter = after.containsKey(key);
-      _collectJsonChanges(
-        hasBefore ? before[key] : null,
-        hasAfter ? after[key] : null,
-        field: field.isEmpty ? key : '$field.$key',
-        beforePresent: hasBefore,
-        afterPresent: hasAfter,
-        changes: changes,
-      );
-    }
-    return;
-  }
-
-  if (beforePresent && afterPresent && before is List && after is List) {
-    final int length = max(before.length, after.length);
-    for (int index = 0; index < length; index++) {
-      final bool hasBefore = index < before.length;
-      final bool hasAfter = index < after.length;
-      _collectJsonChanges(
-        hasBefore ? before[index] : null,
-        hasAfter ? after[index] : null,
-        field: '$field[$index]',
-        beforePresent: hasBefore,
-        afterPresent: hasAfter,
-        changes: changes,
-      );
-    }
-    return;
-  }
-
-  if (beforePresent == afterPresent && before == after) return;
-  changes.add((
-    field: field.isEmpty ? r'$' : field,
-    before: before,
-    after: after,
-    beforePresent: beforePresent,
-    afterPresent: afterPresent,
-  ));
-}
 
 /// Compares two files in fixed-size chunks without buffering whole payloads.
 Future<bool?> filesHaveSameContents(File first, File second) async {

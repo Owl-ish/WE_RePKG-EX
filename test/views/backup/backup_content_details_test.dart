@@ -68,10 +68,10 @@ void main() {
     )..createSync();
     File(
       '${liveEffects.path}${Platform.pathSeparator}settings.json',
-    ).writeAsStringSync('{"strength":2,"enabled":true}');
+    ).writeAsStringSync('{"strength":2,"enabled":true,"a.b":9,"a":{"b":2}}');
     File(
       '${backupEffects.path}${Platform.pathSeparator}settings.json',
-    ).writeAsStringSync('{"strength":1,"enabled":true}');
+    ).writeAsStringSync('{"strength":1,"enabled":true,"a.b":1,"a":{"b":2}}');
     File('${live.path}${Platform.pathSeparator}preview.png').writeAsBytesSync(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8Dwn4GBgYGJAQoAHxcCAk+Uzr4AAAAASUVORK5CYII=',
@@ -443,6 +443,8 @@ void main() {
     expect(find.text('title'), findsOneWidget);
     expect(find.text('"Old"  →  "Updated"'), findsOneWidget);
     expect(find.text('strength'), findsOneWidget);
+    expect(find.text('["a.b"]'), findsOneWidget);
+    expect(find.text('1  →  9'), findsOneWidget);
     expect(find.text('1  →  2'), findsOneWidget);
     expect(find.text('scene.pkg'), findsOneWidget);
     final Finder imageCompare = find.byKey(

@@ -368,25 +368,25 @@ void main() {
       expect(
         byField.keys,
         containsAll(<String>[
-          'title',
-          'tags[1]',
-          'nested.speed',
-          'added',
-          'removed',
+          r'$.title',
+          r'$.tags[1]',
+          r'$.nested.speed',
+          r'$.added',
+          r'$.removed',
         ]),
       );
-      expect(byField['title']!.before, 'Old');
-      expect(byField['title']!.after, 'New');
-      expect(byField['nested.speed']!.before, 1);
-      expect(byField['nested.speed']!.after, 2);
-      expect(byField['tags[1]']!.beforePresent, isFalse);
-      expect(byField['tags[1]']!.after, 'Game');
-      expect(byField['added']!.beforePresent, isFalse);
-      expect(byField['added']!.after, isTrue);
-      expect(byField['removed']!.before, 'gone');
-      expect(byField['removed']!.afterPresent, isFalse);
-      expect(byField.containsKey('nested.keep'), isFalse);
-      expect(byField.containsKey('type'), isFalse);
+      expect(byField[r'$.title']!.before, 'Old');
+      expect(byField[r'$.title']!.after, 'New');
+      expect(byField[r'$.nested.speed']!.before, 1);
+      expect(byField[r'$.nested.speed']!.after, 2);
+      expect(byField[r'$.tags[1]']!.beforePresent, isFalse);
+      expect(byField[r'$.tags[1]']!.after, 'Game');
+      expect(byField[r'$.added']!.beforePresent, isFalse);
+      expect(byField[r'$.added']!.after, isTrue);
+      expect(byField[r'$.removed']!.before, 'gone');
+      expect(byField[r'$.removed']!.afterPresent, isFalse);
+      expect(byField.containsKey(r'$.nested.keep'), isFalse);
+      expect(byField.containsKey(r'$.type'), isFalse);
     });
 
     test(

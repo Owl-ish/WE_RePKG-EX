@@ -8,7 +8,10 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
+import 'package:we_repkg/utils/json_diff.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
+
+export 'package:we_repkg/utils/json_diff.dart' show formatJsonFieldPath;
 
 part 'file_compare/image_comparison.dart';
 part 'file_compare/text_comparison.dart';
@@ -70,25 +73,6 @@ bool isTextComparisonPath(String filePath) =>
 /// pair falls back to metadata plus a streamed SHA-256 comparison.
 bool canCompareFilePaths(String firstPath, String secondPath) =>
     firstPath.trim().isNotEmpty && secondPath.trim().isNotEmpty;
-
-/// Converts the internal flattened JSON locator into a compact UI breadcrumb.
-///
-/// The comparer keeps the exact locator only for identity/internal matching;
-/// users see hierarchy rather than JSONPath-like implementation syntax.
-String formatJsonFieldPath(String field) {
-  String display = field.trim();
-  if (display == r'$') return display;
-  if (display.startsWith(r'$.')) {
-    display = display.substring(2);
-  } else if (display.startsWith(r'$')) {
-    display = display.substring(1);
-  }
-  display = display.replaceAllMapped(
-    RegExp(r'\[(\d+)\]'),
-    (Match match) => '  ›  [${match.group(1)}]',
-  );
-  return display.replaceAll('.', '  ›  ').trim();
-}
 
 /// Shared explicit Compare action for two concrete files.
 ///
