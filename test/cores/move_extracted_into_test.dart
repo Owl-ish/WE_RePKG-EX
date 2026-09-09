@@ -136,8 +136,7 @@ void main() {
     expect(to.listSync(), isEmpty);
   });
 
-  // The caller deletes the source directory straight after, so a file that
-  // cannot move must not cost the ones behind it.
+  // A failed move must not prevent other files from being exported.
   test('one unmovable file does not strand the rest', () async {
     write(from, 'a.png', 'a');
     write(from, 'blocked\\stuck.png', 'x');

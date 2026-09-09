@@ -377,8 +377,7 @@ Future<String?> moveExtractedInto(
   String to,
   FileNameClaims claims,
 ) async {
-  // Per file, because the caller deletes the source directory afterwards:
-  // stopping at the first failure would throw away everything behind it.
+  // Continue after individual failures so other files can still be exported.
   final List<String> failed = <String>[];
   // Tracked so each directory is created once, not once per file in it.
   final Set<String> createdDirs = <String>{to};
@@ -463,9 +462,7 @@ Future<String?> extractSceneToShared(
 
     final String? moved = await moveExtractedInto(temp.path, outPath, claims);
     if (moved == null) return null;
-    // Whatever could not be moved is still in here. Deleting it would destroy
-    // output the error message just named, and re-extracting cannot recover it
-    // when the cause is permanent, a path too long being the usual one.
+    // Preserve unmoved files and report their recovery folder.
     keepTemp = true;
     return '$moved -> ${await keepUnmovedFiles(temp, outPath)}';
   } finally {
@@ -495,8 +492,8 @@ Future<bool> isEmptyOfFiles(Directory dir) async {
   return true;
 }
 
-/// Moves the leftovers out of the sweep's way and says where they went, since
-/// the next run clears anything still named with the scene prefix.
+/// Renames leftover output to avoid cleanup on the next run.
+/// Returns the original path if renaming fails.
 Future<String> keepUnmovedFiles(Directory temp, String outPath) async {
   // Named after this run's own directory, so a second run on the same wallpaper
   // cannot delete the files an error message has just pointed at. The scene
