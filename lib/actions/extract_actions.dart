@@ -21,8 +21,7 @@ import 'package:we_repkg/utils/work_pool.dart';
 import 'path_actions.dart';
 import 'library_scan_refresh.dart';
 
-/// Guarded because this runs before the loading overlay, so a throw here took
-/// the extraction down with nothing on screen.
+/// Creates the output folder; shows an error and returns false on failure.
 Future<bool> ensureOutputDir(String outPath) async {
   try {
     await Directory(outPath).create(recursive: true);
@@ -34,8 +33,7 @@ Future<bool> ensureOutputDir(String outPath) async {
   }
 }
 
-/// Only scenes (.pkg) need RePKG, so a batch without any skips the check.
-/// Returns false having already told the user.
+/// Checks RePKG only for scene batches. Reports a missing tool before returning false.
 Future<bool> _rePKGAvailable(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
@@ -48,11 +46,8 @@ Future<bool> _rePKGAvailable(
   return false;
 }
 
-/// Runs [work] over [wallpapers] behind the loading overlay and reports how it
-/// went. Both extraction modes share this; only the setup before it differs.
-///
-/// Returns whether it ran to the end, so a caller with something else to say
-/// stays quiet after a cancel.
+/// Runs a batch with progress and error reporting. Returns false on cancellation,
+/// not on worker errors, which are reported separately.
 Future<bool> _runBatch(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
@@ -61,9 +56,7 @@ Future<bool> _runBatch(
   required String outputFolder,
 }) async {
   final container = ProviderScope.containerOf(ref.context, listen: false);
-  // Every notifier taken before the first await: the widget owning `ref` can be
-  // gone by the time a worker reports or the batch retires, and reading through
-  // it then throws.
+  // Capture notifiers before awaiting; the widget may unmount during extraction.
   final processing = ref.read(processingWallpaperProvider.notifier);
   final index = ref.read(currentIndexProvider.notifier);
   final activeToken = ref.read(activeCancelTokenProvider.notifier);
@@ -74,7 +67,7 @@ Future<bool> _runBatch(
   final cancel = showExtractionProgress(wallpapers);
   index.reset();
   processing.update(null);
-  // Published so the loading overlay's cancel button can reach it.
+  // Expose the token to the loading overlay's cancel button.
   final token = CancelToken();
   activeToken.update(token);
 
@@ -96,8 +89,7 @@ Future<bool> _runBatch(
   } catch (e) {
     errList.add(ErrorInfo(wallpaper: null, message: e.toString()));
   } finally {
-    // The pool rethrows a worker's error, so without this the loading overlay
-    // and its barrier stay up for good and the token is never retired.
+    // Release the overlay and token even if a worker throws.
     processing.update(null);
     activeToken.update(null);
     cancel.call();
@@ -137,17 +129,16 @@ Future<void> extractProject(
       : ref.read(exportPathProvider))!;
   if (!await ensureOutputDir(outPath)) return;
 
-  // Read once rather than per wallpaper; neither changes mid-batch.
+  // Use one settings snapshot for the batch.
   final String? rePKGPath = ref.read(toolPathProvider);
   final bool overwrite = ref.read(replaceFileProvider);
-  // Assigned before any worker starts, so the folder choice cannot race.
+  // Allocate distinct folders before starting workers.
   final Map<String, String> outDirs = resolveProjectFolders(
     wallpapers,
     outPath,
     useTitleName: ref.read(useTitleNameProvider),
   );
 
-  // Parallel is safe here: every wallpaper owns a distinct subfolder.
   await _runBatch(
     ref,
     wallpapers,
@@ -165,9 +156,7 @@ Future<void> extractProject(
 
 // 新增的通用提取方法
 //
-// Each scene cleans up inside its own private directory before publishing, so
-// nothing sweeps the export folder afterwards: it could not tell this run's
-// output from the user's own files.
+// Clean each scene in its temporary directory, not among the user's exported files.
 Future<void> extractWallpapers(
   WidgetRef ref,
   List<WallpaperInfo> wallpapers,
@@ -183,16 +172,13 @@ Future<void> extractWallpapers(
     ref,
     wallpapers.length,
   );
-  // One set for the whole batch: with overwrite on, a name may replace an
-  // earlier run's file but must not be handed to two wallpapers here.
+  // Overwrite may replace earlier exports, but workers must not share a filename.
   final claims = FileNameClaims(overwrite: settings.overwrite);
   final bool separateFolders = ref.read(separateWallpaperFoldersProvider);
 
   final StatusSink onStatus = ref.read(loadingTextProvider.notifier).update;
 
-  // A run that writes nothing is not a failure: skipping every entry is what
-  // some settings ask for. It is still worth saying, since the only other
-  // signal is a success toast over an unchanged folder.
+  // Report empty output separately; settings may intentionally skip every file.
   final List<String> emptyHanded = <String>[];
   bool finished = false;
 
@@ -215,7 +201,7 @@ Future<void> extractWallpapers(
         destination,
         claims,
         token,
-        // Only a single-wallpaper run can own the progress line.
+        // Avoid competing per-file progress updates in a batch.
         detailedProgress: wallpapers.length == 1,
         onNothingWritten: () => emptyHanded.add(wallpaper.title),
         destinationIsWallpaperFolder: separateFolders,
@@ -273,7 +259,6 @@ Future<ExtractSettings> readExtractSettings(
   WidgetRef ref,
   int batchSize,
 ) async {
-  // Awaited once here rather than once per wallpaper.
   final String? version = await ref.read(toolVersionProvider.future);
   return ExtractSettings(
     rePKGPath: ref.read(toolPathProvider),
