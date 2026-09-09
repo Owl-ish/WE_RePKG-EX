@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/backup_records.dart';
 import 'package:we_repkg/src/rust/api/simple.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/file_copy.dart';
@@ -15,14 +16,9 @@ import 'package:we_repkg/utils/wallpaper_junk.dart';
 typedef BackupActionResult = ({bool changed, String? error});
 typedef BackupTrash = Future<String?> Function(String folder);
 
-//====================
-// Backup / Update / Sync
-//====================
-/// Mirrors a live wallpaper into its matching backup library.
-///
-/// Detailed Update can preserve selected old files. [mirror] is explicit so
-/// ordinary Back up remains non-destructive; Update/Sync enables it. Cleanup
-/// happens only after selected copies finish and the source is still stable.
+/// Copies a wallpaper into its matching backup library.
+/// [mirror] enables Update/Sync cleanup; ordinary Back up keeps destination-only files.
+/// Cleanup follows successful copies and a source stability check.
 Future<BackupActionResult> backUpWallpaper({
   required BackupCard card,
   required String? backupRoot,
@@ -117,12 +113,10 @@ Future<BackupActionResult> backUpWallpaper({
       liveFolder: source.path,
       acfPath: acfPath,
     );
-    // A thrown copy can still have published files, so failures after this
-    // point refresh instead of claiming the filesystem stayed unchanged.
+    // A failed copy may have changed files; refresh scans after this point.
     filesystemMayHaveChanged = true;
 
-    // A wrong-tree selective update needs the old backup as its starting point
-    // so files marked Keep survive the relocation into the canonical tree.
+    // Start from the old backup so files marked Keep survive relocation.
     if (selection?.isPartial == true &&
         !destinationExisted &&
         otherBackupExisted) {
@@ -180,8 +174,7 @@ Future<BackupActionResult> backUpWallpaper({
       records[card.id] = next;
     }
 
-    // The matching copy and stable source are established before any
-    // opposite-library backup is recycled.
+    // Verify the matching copy before recycling the other backup.
     String? syncError;
     if (otherBackupExisted) {
       syncError = await _recycleSyncedBackup(
@@ -204,10 +197,8 @@ Future<BackupActionResult> backUpWallpaper({
   }
 }
 
-/// Claims a redundant backup before sending it to the Recycle Bin.
-///
-/// If trash cannot be confirmed, the claim is restored so Sync does not leave
-/// the filesystem in a half-cleaned state.
+/// Moves a redundant backup aside before recycling it.
+/// If recycling fails, restore it only if the original destination is still free.
 Future<String?> _recycleSyncedBackup({
   required Directory target,
   BackupTrash? trashFolder,
@@ -237,14 +228,7 @@ Future<String?> _recycleSyncedBackup({
   }
 }
 
-//====================
-// Ignored detections
-//====================
-/// Moves one content-update detection into the shared Ignored view.
-///
-/// The ignored version is tied to the current live version. A later live
-/// change no longer matches the marker, so the update automatically surfaces
-/// again.
+/// Ignores the current update. A new live version makes it visible again.
 Future<BackupActionResult> ignoreBackupUpdate({
   required BackupCard card,
   required String? backupRoot,
@@ -326,10 +310,7 @@ Future<BackupActionResult> ignoreReconcileIssues({
   }
 }
 
-/// Restores selected ignored Reconcile detections for one wallpaper.
-///
-/// The name-level record can hold more than one ignored reason. Removing only
-/// the requested reasons preserves the other grouped Ignored detections.
+/// Shows selected Reconcile issues again, preserving other ignored reasons.
 Future<BackupActionResult> showReconcileIssuesAgain({
   required String name,
   required Set<BackupReconcileReason> reasons,
@@ -424,9 +405,6 @@ Future<BackupActionResult> showAllIgnoredIssues({
   }
 }
 
-//====================
-// Update Dismissal
-//====================
 /// Clears only the dismissed update marker, preserving the backup baseline.
 Future<BackupActionResult> showBackupUpdateAgain({
   required BackupCard card,
@@ -454,9 +432,6 @@ Future<BackupActionResult> showBackupUpdateAgain({
   }
 }
 
-//====================
-// Junk Cleanup
-//====================
 /// Recycles disposable live or backup remnants after rechecking each target.
 Future<BackupActionResult> recycleBackupJunk({
   required BackupCard card,
@@ -533,7 +508,7 @@ Future<BackupActionResult> recycleBackupJunk({
 
 typedef _JunkCheck = Future<bool> Function(Directory folder);
 
-/// Rechecks junk before and after claiming it so concurrent changes fail safe.
+/// Rechecks junk before and after moving it aside for recycling.
 Future<BackupActionResult> _recycleCheckedFolder({
   required Directory target,
   required String library,
@@ -579,13 +554,8 @@ Future<bool> _isShaderCacheFolder(Directory folder) async =>
         WallpaperDirectories.shaderCache.toLowerCase() &&
     await folder.exists();
 
-//====================
-// Restore
-//====================
-/// Restores one vanished wallpaper into MyProjects through a staging folder.
-///
-/// Same-name cards share one restore target. Source choice prefers an unpacked
-/// MyProjects backup, then Workshop, then any remaining MyProjects copy.
+/// Restores a vanished wallpaper through a staging folder.
+/// Prefers unpacked MyProjects, then Workshop, then other MyProjects backups.
 Future<BackupActionResult> restoreVanishedWallpaper({
   required List<BackupCard> cards,
   required String? backupRoot,
@@ -651,13 +621,8 @@ Future<Directory?> _preferredRestoreSource(
   return sources.isEmpty ? null : sources.first.folder;
 }
 
-//====================
-// Shared Filesystem Helpers
-//====================
-/// Copies selected meaningful files without touching destination-only files.
-///
-/// Cleanup is a separate phase so a failed copy cannot delete the old backup
-/// first. Copied files keep source modification time for cheap reruns.
+/// Copies selected files without removing destination-only files.
+/// Cleanup runs separately after copying succeeds. Source modification times are preserved.
 Future<bool> _copyFolderIncrementally(
   Directory source,
   Directory destination, {
@@ -768,9 +733,7 @@ Future<bool> _sameFile(File source, File destination) async {
     return false;
   }
 
-  // Size + mtime is only a fast candidate check. Two different payloads can
-  // legitimately share both values, so never let metadata alone suppress an
-  // Update copy that the exact detail comparison identified as modified.
+  // Matching size and modification time do not prove equal contents.
   return await filesHaveSameContents(source, destination) ?? false;
 }
 

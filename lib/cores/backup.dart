@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
+import 'package:we_repkg/cores/backup_records.dart';
 import 'package:we_repkg/models/acf.dart';
 import 'package:we_repkg/src/rust/api/simple.dart' as rust;
 import 'package:we_repkg/utils/backup_diff.dart';
@@ -22,22 +23,10 @@ String? backupMyProjectsPath(String? backupRoot) => backupRoot == null
     ? null
     : path.join(backupRoot, AppStrings.backupProjectDir);
 
-/// A folder the comparison cannot do without.
-///
-/// Any of the three unset or off disk and the answer is not merely incomplete,
-/// it is wrong in the quiet direction: an unreadable live library turns every
-/// backup folder into a vanished card, and an unreachable backup root turns the
-/// whole live library into "not backed up, nothing vanished". Both read as a
-/// confident number rather than as a failure, so the tab names the folder
-/// instead of showing counts.
+/// Required scan folders. Missing paths must not be treated as empty libraries.
 enum BackupFolder { liveWorkshop, liveMyProjects, backupRoot }
 
-/// What the scan is doing, for the tab to say so instead of spinning silently.
-///
-/// [comparing] is the long one: it checks whether live and backup still mirror
-/// each other. [finishing] covers the short tail while the lightweight
-/// junk checks finish. [reading] has no useful total. [details] remains for
-/// callers that want counted face reads; [preparing] covers the final handoff.
+/// Scan progress phases. [reading] has no total; [preparing] covers card assembly.
 enum BackupScanPhase { reading, comparing, finishing, details, preparing }
 
 typedef BackupScanProgress = ({BackupScanPhase phase, int done, int total});
@@ -53,11 +42,7 @@ typedef BackupScan = ({
   Set<BackupFolder> missing,
 });
 
-/// Everything the differ needs, read in one pass, then the comparison.
-///
-/// Paths rather than a `WidgetRef`, so this runs against a temp directory in a
-/// test. A null backup root reads as an empty backup, which is what makes every
-/// live wallpaper come back not backed up rather than as an error.
+/// Scans live and backup folders for wallpaper states and differences.
 Future<BackupScan> scanBackup({
   required String? backupRoot,
   required String? liveWorkshopPath,
@@ -107,9 +92,7 @@ Future<BackupScan> scanBackup({
   ).wait;
   final Set<String> liveMyProjects = myProjects.names;
 
-  // Mirror checks compare every shared folder. Workshop stays shallow because
-  // scene.pkg carries most payload, but saved version records cannot answer
-  // whether stale files remain only in the backup.
+  // Saved versions cannot detect files left only in the backup.
   final Set<String> sharedWorkshop = _shared(liveWorkshop, backupWorkshop);
   final Set<String> sharedMyProjects = _shared(
     liveMyProjects,
@@ -136,8 +119,7 @@ Future<BackupScan> scanBackup({
     backupWorkshop,
     backupMyProjects,
   );
-  // Report the work that actually dominates the wait: mirror comparisons.
-  // Junk checks run beside it and usually stop at the first ordinary file.
+  // Track comparison progress while junk checks run alongside it.
   final int compareTotal =
       workshopToCompare.length +
       sharedMyProjects.length +
@@ -167,8 +149,7 @@ Future<BackupScan> scanBackup({
   workshopStandingFuture = copyStandings(
     livePath: liveWorkshopPath,
     backupPath: backupWorkshopPath(backupRoot),
-    // Workshop wallpapers are packed, so matching-tree mirror check only needs the
-    // top-level payload outside the rebuilt shader cache.
+    // Workshop comparison checks top-level files, excluding rebuilt shaders.
     recursive: false,
     shared: sharedWorkshop,
     compare: workshopToCompare,
@@ -178,8 +159,7 @@ Future<BackupScan> scanBackup({
       copyStandings(
         livePath: liveMyProjectsPath,
         backupPath: backupMyProjectsPath(backupRoot),
-        // MyProjects wallpapers are usually unpacked, so edits can land in
-        // subfolders and require recursive mirror comparison.
+        // MyProjects comparison includes edits in subfolders.
         recursive: true,
         shared: sharedMyProjects,
         compare: sharedMyProjects,
@@ -366,13 +346,8 @@ Map<String, ({bool live, bool backup})> _cardPresence(
   return result;
 }
 
-/// Reads the face of every card, from whichever folder still exists.
-///
-/// A vanished card has no live folder left, so its picture can only come from
-/// the backup copy. A folder whose `project.json` is missing or unreadable
-/// comes back absent rather than dropping the card: that folder is exactly what
-/// the integrity check exists to point at, and hiding it here would make the
-/// card list disagree with the filesystem scan.
+/// Reads card metadata, using backup copies for vanished wallpapers.
+/// Missing or unreadable project.json files omit metadata, not the card.
 Future<Map<BackupCard, CardFace>> readCardFaces({
   required String? backupRoot,
   required String? liveWorkshopPath,
@@ -396,14 +371,12 @@ Future<Map<BackupCard, CardFace>> readCardFaces({
     }
   });
 
-  // One counter over all four, since they read at the same time and the user is
-  // watching one line.
+  // Share progress across the four concurrent library reads.
   int done = 0;
   void read(int folders) {
     done += folders;
     onProgress?.call((
-      // The last disk read is not the end of the wait: the provider still has
-      // to assemble the card list and Flutter has to replace this progress UI.
+      // Keep progress visible until the provider finishes assembling cards.
       phase: done >= cards.length
           ? BackupScanPhase.preparing
           : BackupScanPhase.details,
@@ -478,8 +451,7 @@ Future<Map<String, CardFace>> _faces(
       );
     }, onBatch: onBatch);
   } catch (_) {
-    // Keep the existing Dart reader as a safety net if the native bridge is
-    // unavailable or a future platform cannot service the batch call.
+    // Fall back to Dart if the native batch reader fails.
     return _perFolder<CardFace>(
       root,
       names,
@@ -532,15 +504,11 @@ Future<CardFace?> _face(Directory folder) async {
   try {
     final Map<String, dynamic> parsed =
         json.decode(await file.readAsString()) as Map<String, dynamic>;
-    // The same field the extract grid dates a wallpaper by, so both grids
-    // mean the same thing by their date order.
+    // Use the same date field as the Extraction grid.
     final DateTime modified = (await file.stat()).changed;
 
     final String? preview = parsed[WallpaperProjectFields.preview] as String?;
-    // myprojects wallpapers often have no title. A hand-made one can also put a
-    // number where the string belongs, which the cast throws on and the catch
-    // below turns into no face at all, matching what the extract grid does with
-    // the same folder.
+    // Invalid metadata returns no card face, as in the Extraction reader.
     return (
       title:
           parsed[WallpaperProjectFields.title] as String? ??
@@ -558,10 +526,7 @@ Future<CardFace?> _face(Directory folder) async {
   }
 }
 
-/// Faces for the names waiting to be reconciled, one per name.
-///
-/// A live folder before a backup copy, and myprojects before Workshop: the
-/// picture should be the one Wallpaper Engine is showing.
+/// Reads one face per Reconcile name, preferring live copies and MyProjects.
 Future<Map<String, CardFace>> readReconcileFaces({
   required String? backupRoot,
   required String? liveWorkshopPath,
@@ -603,12 +568,7 @@ Future<Map<String, CardFace>> readReconcileFaces({
   };
 }
 
-/// The pair of folders a reconcile tile opens.
-///
-/// A name here has copies in more than one place, so it picks one of each: the
-/// myprojects copy, being the one the author edits, before the Workshop one.
-/// The rest is in the presence matrix on the tile, and the per-folder actions
-/// arrive with the reconcile operations.
+/// Selects live and backup folders for Reconcile, preferring MyProjects on each side.
 ({String? live, String? backup}) reconcileFolders({
   required ReconcileEntry entry,
   required String? backupRoot,
@@ -639,8 +599,7 @@ Future<Map<String, CardFace>> readReconcileFaces({
   );
 }
 
-/// The two folders a card stands for. Null where the folder is not there: a
-/// vanished card has no live copy left, and one never backed up has no backup.
+/// Returns a card's live and backup paths, or null for missing folders.
 ({String? live, String? backup}) cardFolders({
   required WallpaperLibrary library,
   required String name,
@@ -666,13 +625,8 @@ Future<Map<String, CardFace>> readReconcileFaces({
   );
 }
 
-/// Names held by both sides, which are the only ones worth comparing: a folder
-/// with no counterpart has nothing to compare against.
-///
-/// Lowercased to match [BackupCard.id] and to keep the two sets that come out
-/// of here spelling a name the same way. It is not what makes a re-cased folder
-/// compare: the paths are joined rather than listed, and Windows resolves the
-/// case itself.
+/// Returns shared names lowercased to match [BackupCard.id].
+/// Windows resolves casing when these names are joined to library paths.
 Set<String> _shared(Set<String> live, Set<String> backup) {
   final Set<String> backupKeys = _lowered(backup);
   return <String>{
@@ -777,27 +731,20 @@ typedef _FolderComparison = ({
   _FolderDifference? difference,
 });
 
-/// Exact file-level differences between two wallpaper folders.
-///
-/// The normal library scan only needs names and sizes. Detail views pay for
-/// content reads so same-size modified files are still detected.
+/// File-level differences from byte comparison, including same-size changes.
 typedef FolderFileChanges = ({
   List<String> modified,
   List<String> onlyFirst,
   List<String> onlySecond,
 });
 
-/// Exact comparison result for detail views that also need proof of equality.
-///
-/// [matching] contains relative paths that existed on both sides and whose
-/// contents were confirmed equal. The ordinary Update flow only consumes
-/// [changes], so retaining this evidence does not change its public contract.
+/// File differences and relative paths whose contents were confirmed equal.
 typedef FolderFileComparison = ({
   FolderFileChanges changes,
   List<String> matching,
 });
 
-/// Update-facing names for the same exact comparison semantics.
+/// File differences for Update callers.
 typedef BackupFileChanges = ({
   List<String> modified,
   List<String> onlyLive,
@@ -920,11 +867,7 @@ Future<Set<BackupFolder>> _missingFolders(
 Future<bool> _folderPresent(String? folderPath) async =>
     folderPath != null && await Directory(folderPath).exists();
 
-/// Which of [names] are folders Steam emptied, so the tab can leave them out.
-///
-/// Narrow on purpose: only a folder holding nothing but the rebuilt shader cache
-/// counts. Anything else with content in it, however unloadable, keeps its card,
-/// or a wallpaper the user could still back up would quietly stop existing.
+/// Finds empty and shader-cache-only folders without discarding other content.
 Future<Map<String, WallpaperJunkKind>> _junkFolders(
   String? root,
   Set<String> names, {
@@ -942,8 +885,7 @@ Future<Map<String, WallpaperJunkKind>> _junkFolders(
     );
     return _classifyKnownJunk(root, junk);
   } catch (_) {
-    // Keep the Dart scan as a safety net when the native bridge is unavailable,
-    // including unit tests that do not initialise the desktop Rust library.
+    // Fall back to Dart if the native junk scan fails.
   }
   return _perFolder<WallpaperJunkKind>(
     root,
@@ -1027,11 +969,7 @@ BackupCard? _cardWithId(Map<BackupCard, BackupState> cards, String id) {
   return null;
 }
 
-/// Folder names in a wallpaper library, for the backup diff.
-///
-/// Names only, with no `project.json` parsing: the diff compares thousands of
-/// folders and does not need their contents, and a folder dropped in by hand
-/// without a `project.json` still occupies the backup.
+/// Lists folders without requiring valid project.json metadata.
 Future<Set<String>> listFolderNames(String? folderPath) async {
   final Set<String> names = <String>{};
   if (folderPath == null) return names;
@@ -1045,60 +983,8 @@ Future<Set<String>> listFolderNames(String? folderPath) async {
   return names;
 }
 
-/// The only persisted state in the feature. It sits at the backup root so it
-/// travels with the drive, and triage survives moving to another machine.
-const String backupRecordsName = 'werepkg-ex-backup.json';
-
-/// Where the records file is built before it is renamed into place.
-const String backupRecordsPartSuffix = '.werepkg-ex-part';
-
-/// Indented, because this file lives in the user's backup and they open it.
-const JsonEncoder _records = JsonEncoder.withIndent('  ');
-
-/// What the backup holds, and which updates were waved off.
-///
-/// Every other fact the tab shows comes off the filesystem. A missing or
-/// corrupt file reads as no records, which re-offers some dismissed updates
-/// rather than taking the tab down.
-Future<Map<String, BackupRecord>> readBackupRecords(String? backupRoot) async {
-  if (backupRoot == null) return <String, BackupRecord>{};
-  final File file = File(path.join(backupRoot, backupRecordsName));
-  if (!await file.exists()) return <String, BackupRecord>{};
-  try {
-    final Map<String, dynamic> parsed =
-        json.decode(await file.readAsString()) as Map<String, dynamic>;
-    return <String, BackupRecord>{
-      for (final MapEntry<String, dynamic> entry in parsed.entries)
-        if (entry.value is Map<String, dynamic>)
-          entry.key: BackupRecord(
-            backedUpVersion: entry.value['backedUpVersion'] as String?,
-            dismissedVersion: entry.value['dismissedVersion'] as String?,
-            ignoredReconcileIssues:
-                entry.value['ignoredReconcileIssues'] is Map<String, dynamic>
-                ? <BackupReconcileReason, String>{
-                    for (final MapEntry<String, dynamic> issue
-                        in (entry.value['ignoredReconcileIssues']
-                                as Map<String, dynamic>)
-                            .entries)
-                      for (final BackupReconcileReason reason
-                          in BackupReconcileReason.values)
-                        if (reason.name == issue.key && issue.value is String)
-                          reason: issue.value as String,
-                  }
-                : const <BackupReconcileReason, String>{},
-          ),
-    };
-  } catch (e) {
-    debugPrint('${tr(AppI10n.errorReadBackupRecordsFailed)} $e');
-    return <String, BackupRecord>{};
-  }
-}
-
-/// Runs [work] over [names] under [root], keeping whatever comes back non-null.
-///
-/// Batched, or a large library opens too many file handles at once. Paths are
-/// joined rather than listed: every caller already knows the names it wants, so
-/// enumerating the directory again would walk each library twice per scan.
+/// Runs [work] in batches to limit open file handles, keeping non-null results.
+/// Uses known names to avoid listing the library again.
 Future<Map<String, T>> _perFolder<T extends Object>(
   String root,
   Iterable<String> names,
@@ -1122,7 +1008,7 @@ Future<Map<String, T>> _perFolder<T extends Object>(
   return found;
 }
 
-/// Whether the backup mirrors every meaningful live file and has no residue.
+/// Compares meaningful file paths and sizes, including backup-only files.
 Future<CopyStanding?> _copyStanding({
   required Directory liveFolder,
   required Directory backupFolder,
@@ -1147,7 +1033,7 @@ Future<CopyStanding?> _copyStanding({
   return CopyStanding.covers;
 }
 
-/// Whether two backup folders hold the same meaningful files.
+/// Compares meaningful file paths and sizes between two backup folders.
 Future<_FolderComparison> _compareBackupFolders(
   Directory first,
   Directory second,
@@ -1235,11 +1121,8 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
   }
 }
 
-/// Compares two complete wallpaper folders exactly and retains equality proof.
-///
-/// This is deliberately more exact than the normal scan: same-size matching
-/// files are compared in chunks without loading whole wallpaper files into
-/// memory. Returns null when either tree cannot be read.
+/// Compares file contents in chunks and returns differences and matching paths.
+/// Returns null if either tree cannot be read.
 Future<FolderFileComparison?> compareFolderFilesDetailed({
   required String firstFolder,
   required String secondFolder,
@@ -1300,7 +1183,7 @@ Future<FolderFileComparison?> compareFolderFilesDetailed({
   );
 }
 
-/// Difference-only wrapper retained for Update and existing callers.
+/// Returns only the differences from the detailed folder comparison.
 Future<FolderFileChanges?> compareFolderFileChanges({
   required String firstFolder,
   required String secondFolder,
@@ -1312,7 +1195,7 @@ Future<FolderFileChanges?> compareFolderFileChanges({
   return comparison?.changes;
 }
 
-/// Update-facing wrapper for the shared exact folder comparison.
+/// Returns exact folder differences for Update callers.
 Future<BackupFileChanges?> compareBackupFileChanges({
   required String liveFolder,
   required String backupFolder,
@@ -1329,17 +1212,10 @@ Future<BackupFileChanges?> compareBackupFileChanges({
   );
 }
 
-/// One leaf-level semantic change inside a JSON file.
-///
-/// Presence is kept separately from the value because JSON `null` is a real
-/// value and must not be confused with a field or list item that was added or
-/// removed.
+/// A structural JSON change. Presence is separate from JSON null values.
 typedef BackupJsonFieldChange = JsonFieldChange;
 
-/// Compares any two JSON files structurally by relative path.
-///
-/// File-byte comparison decides whether a JSON file changed. This slower parse
-/// is intentionally on-demand for detail views that need field-level meaning.
+/// Compares JSON fields on demand; the library scan does not parse JSON changes.
 Future<List<BackupJsonFieldChange>?> compareBackupJsonChanges({
   required String beforeFolder,
   required String afterFolder,
@@ -1359,7 +1235,7 @@ Future<List<BackupJsonFieldChange>?> compareBackupJsonChanges({
   }
 }
 
-/// Compatibility helper for callers that still ask specifically for project.json.
+/// Compares project.json fields through the shared JSON comparison.
 Future<List<BackupJsonFieldChange>?> compareBackupProjectJsonChanges({
   required String liveFolder,
   required String backupFolder,
@@ -1394,11 +1270,8 @@ Future<bool?> filesHaveSameContents(File first, File second) async {
   }
 }
 
-/// Whether two backup folders hold exactly the same meaningful files.
-///
-/// This guard is used immediately before destructive reconciliation. The normal
-/// library scan intentionally compares only names and sizes for speed, but a
-/// destructive decision must also verify same-size file contents byte-for-byte.
+/// Checks meaningful file contents before destructive reconciliation.
+/// Unlike the library scan, this verifies same-size files byte-for-byte.
 Future<bool> backupFoldersEquivalent(Directory first, Directory second) async {
   final FolderFileChanges? changes = await compareFolderFileChanges(
     firstFolder: first.path,
@@ -1410,10 +1283,8 @@ Future<bool> backupFoldersEquivalent(Directory first, Directory second) async {
       changes.onlySecond.isEmpty;
 }
 
-/// Where each backup folder stands against its live counterpart.
-///
-/// Only [compare] is opened. Empty/junk detection belongs to the dedicated junk
-/// pass; this comparison answers whether the meaningful file sets mirror.
+/// Compares paths and sizes for [compare] folders only.
+/// Empty/junk classification is handled separately.
 Future<Map<String, CopyStanding>> copyStandings({
   required String? livePath,
   required String? backupPath,
@@ -1445,8 +1316,7 @@ Future<Map<String, CopyStanding>> copyStandings({
           entry.key: entry.value ? CopyStanding.covers : CopyStanding.behind,
       };
     } catch (_) {
-      // Keep the existing Dart path as a safety net if the native bridge is
-      // unavailable or the native scan itself cannot start.
+      // Fall back to Dart if the native comparison fails.
     }
   }
 
@@ -1465,53 +1335,8 @@ Future<Map<String, CopyStanding>> copyStandings({
   );
 }
 
-Future<void> writeBackupRecords(
-  String? backupRoot,
-  Map<String, BackupRecord> records,
-) async {
-  if (backupRoot == null) return;
-  final Map<String, Map<String, dynamic>> encoded =
-      <String, Map<String, dynamic>>{};
-  // Sorted, and indented below, because this file sits in the user's backup
-  // where they read it by hand. A stable order also keeps one changed wallpaper
-  // from rewriting the whole thing.
-  final List<String> ids = records.keys.toList()..sort();
-  for (final String id in ids) {
-    final BackupRecord record = records[id]!;
-    final Map<String, dynamic> fields = <String, dynamic>{
-      if (record.backedUpVersion != null)
-        'backedUpVersion': record.backedUpVersion!,
-      if (record.dismissedVersion != null)
-        'dismissedVersion': record.dismissedVersion!,
-      if (record.ignoredReconcileIssues.isNotEmpty)
-        'ignoredReconcileIssues': <String, String>{
-          for (final MapEntry<BackupReconcileReason, String> issue
-              in (record.ignoredReconcileIssues.entries.toList()..sort(
-                (
-                  MapEntry<BackupReconcileReason, String> a,
-                  MapEntry<BackupReconcileReason, String> b,
-                ) => a.key.index.compareTo(b.key.index),
-              )))
-            issue.key.name: issue.value,
-        },
-    };
-    if (fields.isNotEmpty) encoded[id] = fields;
-  }
-  // Write beside the live file and rename into place. A direct write truncates
-  // first, so process failure could discard every baseline and dismissal.
-  final File file = File(path.join(backupRoot, backupRecordsName));
-  final File part = File('${file.path}$backupRecordsPartSuffix');
-  await part.writeAsString(_records.convert(encoded), flush: true);
-  await part.rename(file.path);
-}
-
-/// Workshop version tokens by wallpaper id, and whether the ACF was readable.
-///
-/// Deliberately not `getAcfInfo`, which honours the `useAcfInfo` setting. That
-/// setting picks what the grid sorts on; letting it switch off update detection
-/// would report every backed-up Workshop wallpaper as current. A false
-/// `acfRead` puts the warning above the counts, since an unreadable ACF and a
-/// library with nothing to update look identical otherwise.
+/// Reads Workshop versions independently of the ACF display setting.
+/// Returns acfRead: false when version data is unavailable.
 Future<({Map<String, String> byId, bool acfRead})> workshopVersions(
   String? acfPath,
 ) async {
@@ -1537,10 +1362,7 @@ Future<({Map<String, String> byId, bool acfRead})> workshopVersions(
   }
 }
 
-/// Version token per wallpaper folder, for a library with no ACF to ask.
-///
-/// Folders with no top-level files are left out, so the differ sees them as
-/// uncomparable rather than as changed.
+/// Reads top-level version tokens, omitting folders without top-level files.
 Future<Map<String, String>> folderVersions(String? folderPath) async {
   return (await _myProjectsInventory(folderPath)).versions;
 }

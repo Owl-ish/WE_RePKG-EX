@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/backup_records.dart';
 import 'package:we_repkg/cores/backup_action.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
@@ -171,7 +172,7 @@ void main() {
       ..createSync();
     File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
 
-    // Block the atomic metadata write after the wallpaper copy has completed.
+    // Block record replacement after the wallpaper copy completes.
     Directory(
       path.join(backupRoot.path, '$backupRecordsName$backupRecordsPartSuffix'),
     ).createSync();
