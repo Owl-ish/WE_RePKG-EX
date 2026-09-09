@@ -18,7 +18,7 @@ import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
-import 'package:we_repkg/views/backup/integrity_repair_action.dart';
+import 'package:we_repkg/actions/integrity_actions.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

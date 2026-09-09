@@ -15,7 +15,7 @@ import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/views/backup/integrity.dart';
-import 'package:we_repkg/views/backup/integrity_repair_action.dart';
+import 'package:we_repkg/actions/integrity_actions.dart';
 import 'package:we_repkg/widgets/count_pill.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 

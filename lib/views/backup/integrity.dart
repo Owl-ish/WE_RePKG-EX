@@ -6,7 +6,7 @@ import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/cores/integrity_scan.dart';
-import 'package:we_repkg/views/backup/integrity_repair_action.dart';
+import 'package:we_repkg/actions/integrity_actions.dart';
 import 'package:we_repkg/provider/integrity.dart';
 import 'package:we_repkg/cores/integrity_rules.dart';
 import 'package:we_repkg/utils/tool.dart';
