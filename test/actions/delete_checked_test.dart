@@ -37,8 +37,7 @@ void main() {
     });
 
     test('reports only the folders that actually went away', () async {
-      // trash::delete_all can fail partway through, which is the case the old
-      // code got wrong: it dropped all three rows regardless.
+      // Simulate a partial deletion: one folder survives.
       final survivors = {'C:\\wallpapers\\b'};
       final gone = await findDeletedWallpapers([
         wallpaper('a'),

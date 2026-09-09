@@ -15,9 +15,7 @@ import 'package:we_repkg/provider/wallpaper.dart';
 import 'package:we_repkg/utils/info.dart';
 import 'package:we_repkg/utils/storage.dart';
 
-// The pickers below keep the window open for as long as the user browses, and
-// the widget holding `ref` can be gone by the time they return. Reading through
-// `ref` then throws; a notifier taken beforehand keeps working.
+// Capture notifiers before opening a picker; its widget may unmount while browsing.
 Future<bool> setExportPath(WidgetRef ref, [bool show = false]) async {
   if (show) showSelectFolderToast(tr(AppI10n.extractFolderToast));
   final notifier = ref.read(exportPathProvider.notifier);
@@ -27,7 +25,6 @@ Future<bool> setExportPath(WidgetRef ref, [bool show = false]) async {
   return true;
 }
 
-/// One setter behind both the settings row and the backup tab's empty state.
 Future<void> setBackupRoot(WidgetRef ref) async {
   final notifier = ref.read(backupRootProvider.notifier);
   final String? backupRoot = await getDirectoryPath();
@@ -55,14 +52,13 @@ Future<bool> setProjectPath(WidgetRef ref, [bool show = false]) async {
   return true;
 }
 
-/// One setter behind the settings row for the live myprojects library.
 Future<void> setMyProjectsLibrary(WidgetRef ref) async {
   final notifier = ref.read(myProjectsLibraryProvider.notifier);
   final String? picked = await getDirectoryPath();
   if (picked != null) notifier.update(picked);
 }
 
-/// Back to following the Workshop library path.
+/// Removes the override so MyProjects is derived from the Workshop path again.
 void refreshMyProjectsLibrary(WidgetRef ref) =>
     ref.read(myProjectsLibraryProvider.notifier).reset();
 
@@ -111,8 +107,7 @@ Future<void> refreshWallpaperPath(WidgetRef ref) async {
   await refreshWallpaper(ref);
 }
 
-/// Captures what it needs now and returns the work, so a caller can run it
-/// after a picker await without touching `ref` again.
+/// Captures settings and notifiers for updating related paths after a picker closes.
 void Function(String wallpaperPath) otherFolderUpdater(WidgetRef ref) {
   final bool alwaysProject = ref.read(updateProjectPathProvider);
   final bool alwaysAcf = ref.read(updateAcfPathProvider);

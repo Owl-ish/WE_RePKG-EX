@@ -35,7 +35,7 @@ class Host extends ConsumerWidget {
 
 void main() {
   setUp(() async {
-    // Every filter off, so checkedWallpaperList sees whatever the test puts in.
+    // Disable filters so all seeded wallpapers are visible to the selection provider.
     SharedPreferences.setMockInitialValues({
       'hideWeb': false,
       'hideApp': false,
@@ -45,8 +45,6 @@ void main() {
     await StorageUtil.init();
   });
 
-  // Deleting one wallpaper used to leave its id in the checked set: the batch
-  // delete pruned it, the context menu and detail dialog did not.
   testWidgets('a deleted wallpaper stops counting as checked', (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -68,8 +66,7 @@ void main() {
     expect(container.read(checkedIdsProvider), <String>{'2'});
   });
 
-  // The sharp end of leaving it behind: ids come from the Workshop, so
-  // re-subscribing brings the same one back, and it would return pre-checked.
+  // Re-subscribing can restore the same Workshop ID.
   testWidgets('it does not come back checked if the id reappears', (
     tester,
   ) async {

@@ -9,8 +9,7 @@ import 'package:we_repkg/actions/path_actions.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/storage.dart';
 
-/// A folder picker the test opens and closes by hand, standing in for the one
-/// the user browses.
+/// Keeps the picker pending until the test supplies an answer.
 class HeldPicker extends FileSelectorPlatform {
   final Completer<String?> answer = Completer<String?>();
 
@@ -42,10 +41,7 @@ void main() {
     FileSelectorPlatform.instance = picker;
   });
 
-  // The picker stays open for as long as the user browses, and the settings
-  // page can be gone by the time it closes. Reaching back through `ref` then
-  // throws "Using ref when a widget is about to or has been unmounted", and the
-  // folder the user just chose is dropped on the floor.
+  // Unmount the page before resolving the picker to expose reads through a disposed ref.
   testWidgets('a folder chosen after the page closed is still kept', (
     tester,
   ) async {
@@ -71,14 +67,11 @@ void main() {
     );
 
     picker.answer.complete(r'C:\chosen');
-    // runAsync, because the picker's future settles on the real clock rather
-    // than the one pump drives.
+    // Resolve the picker outside the widget test's fake clock.
     expect(await tester.runAsync(() => pending), isTrue);
     expect(container.read(exportPathProvider), r'C:\chosen');
   });
 
-  // Same shape for the backup root, which the settings row and the backup tab's
-  // empty state both reach through one setter.
   testWidgets('a backup root chosen after the page closed is still kept', (
     tester,
   ) async {
@@ -108,8 +101,6 @@ void main() {
     expect(container.read(backupRootProvider), r'C:\backup');
   });
 
-  // Cancelling used to blank the row on screen while storage kept the old path,
-  // so the app looked like it had forgotten the setting until a restart.
   testWidgets('cancelling the picker keeps a root already set', (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);

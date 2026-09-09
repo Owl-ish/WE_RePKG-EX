@@ -20,23 +20,20 @@ import 'package:we_repkg/widgets/confirm_dialog.dart';
 import 'library_scan_refresh.dart';
 
 Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
-  // Read before any await: switching folders unmounts the widget owning `ref`,
-  // so the scan writes back through these captured notifiers instead.
+  // Capture notifiers before awaiting; switching folders may unmount the widget.
   final wallpaperPathNotifier = ref.read(wallpaperPathProvider.notifier);
   final CurrentState currentState = ref.read(currentStateProvider.notifier);
   final earliestTimeNotifier = ref.read(earliestTimeProvider.notifier);
   final WallpaperLibrary library = ref.read(currentLibraryProvider);
   final String? myProjects = ref.read(myProjectsLibraryProvider);
   String? folderPath = ref.read(wallpaperPathProvider);
-  // Only the Workshop library is worth hunting for across the drives; the
-  // myprojects one is derived from whatever that search settles on.
+  // Discover Workshop first; it supplies the default MyProjects path.
   if (folderPath == null) {
     folderPath = await getWallpaperPath();
     wallpaperPathNotifier.update(folderPath);
   }
   if (library == WallpaperLibrary.myProjects) {
-    // Derived here rather than taken from the provider, which settled on null
-    // back when the Workshop path was still unknown.
+    // The captured MyProjects path may predate Workshop discovery.
     folderPath =
         myProjects ??
         (folderPath == null ? null : projectDefaultPath(folderPath));
@@ -64,12 +61,10 @@ Future<List<WallpaperInfo>> getAllFile(WidgetRef ref) async {
 }
 
 Future<void> refreshWallpaper(WidgetRef ref) async {
-  // Capture the notifier before awaiting so a refresh can't crash if the
-  // widget owning `ref` is unmounted mid-scan.
+  // Keep the notifier available if the widget unmounts during the scan.
   final wallpaperListNotifier = ref.read(wallpaperListProvider.notifier);
   wallpaperListNotifier.clear();
-  // The library is about to be replaced, so ids selected against the old one
-  // mean nothing.
+  // Clear selection before replacing the library.
   ref.read(checkedIdsProvider.notifier).clear();
   List<WallpaperInfo> wallpapers = await getAllFile(ref);
   wallpaperListNotifier.addAll(wallpapers);
@@ -88,12 +83,7 @@ Future<void> playVideo(WallpaperInfo wallpaper) async {
   }
 }
 
-/// Ids of the wallpapers whose folder is no longer on disk.
-///
-/// `trash::delete_all` can fail partway through a batch, leaving some folders
-/// deleted and others intact, and its error value says nothing about which is
-/// which. Asking the filesystem is the only way to know what to drop from the
-/// list. Probes run concurrently; [probe] is injectable for tests.
+/// Finds deleted wallpaper IDs by checking disk after a potentially partial deletion.
 Future<Set<String>> findDeletedWallpapers(
   List<WallpaperInfo> wallpapers, {
   DirectoryProbe probe = directoryExists,
@@ -111,8 +101,6 @@ Future<String?> deleteChecked(WidgetRef ref) async {
   String? err;
   List<WallpaperInfo> wallpapers = ref.read(checkedWallpaperListProvider);
   if (wallpapers.isEmpty) return null;
-  // Confirm first: the delete button sits beside the extract buttons and the
-  // selection can be large.
   final bool confirmed = await showConfirmDialog(
     title: tr(AppI10n.dialogDeleteConfirmTitle),
     message: wallpapers.length == 1
@@ -135,9 +123,7 @@ Future<String?> deleteChecked(WidgetRef ref) async {
     if (trashErr != null) {
       err = '${tr(AppI10n.dialogDeleteFailed)} $trashErr';
     }
-    // Remove exactly what actually went away. The previous version dropped
-    // every selected wallpaper regardless of the result, so a failed delete
-    // showed a success toast and hid folders that were still on disk.
+    // A batch can fail partially; remove only folders confirmed absent.
     final Set<String> gone = await findDeletedWallpapers(wallpapers);
     if (gone.isNotEmpty) {
       WallpaperInfo? selectedWallpaper = ref.read(selectedWallpaperProvider);
@@ -145,15 +131,13 @@ Future<String?> deleteChecked(WidgetRef ref) async {
         ref.read(selectedWallpaperProvider.notifier).update(null);
       }
       ref.read(wallpaperListProvider.notifier).removeAll(gone);
-      // Selection is held by id, so a deleted wallpaper would otherwise stay in
-      // the set and come back with anything that reused its id.
+      // Prevent a reused ID from inheriting the deleted wallpaper's selection.
       ref.read(checkedIdsProvider.notifier).forget(gone);
     }
   } catch (e) {
     debugPrint('${tr(AppI10n.logDeleteCheckedFailed)} $e');
     err = '${tr(AppI10n.dialogDeleteFailed)} $e';
   }
-  // The only caller discards this return value, so report the outcome here.
   if (err == null) {
     showDeleteToast();
   } else {
@@ -178,10 +162,7 @@ Future<void> browserFolder(String folder) async {
   }
 }
 
-/// Drops [wallpaper] from the library, the selection and the checked set.
-///
-/// Selection is held by id, so leaving the id behind keeps it counted as
-/// checked, and it would come back checked if a later scan reused the id.
+/// Removes the wallpaper and its selection state, including its stored checked ID.
 void forgetWallpaper(WidgetRef ref, WallpaperInfo wallpaper) {
   ref.read(wallpaperListProvider.notifier).remove(wallpaper);
   ref.read(selectedWallpaperProvider.notifier).update(null);
@@ -199,9 +180,7 @@ Future<void> deleteCurrent(WidgetRef ref, WallpaperInfo wallpaper) async {
   );
   if (!confirmed) return;
   try {
-    // deleteToTrash reports failure through its return value, not by throwing.
-    // Awaiting it and discarding the result dropped the row from the list while
-    // the folder was still on disk.
+    // Check the returned error before removing the wallpaper from the list.
     final String? trashErr = await withLibraryScanRefresh(
       container,
       () => deleteToTrash(filePath: wallpaper.folder),

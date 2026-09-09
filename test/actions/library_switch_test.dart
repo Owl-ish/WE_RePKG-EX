@@ -35,8 +35,7 @@ void main() {
     ).writeAsStringSync('{"title":"$name","type":"scene","file":"scene.pkg"}');
   }
 
-  // Both the temp tree and the prefs are built here, outside the fake clock a
-  // testWidgets body runs under, which never delivers a platform-channel reply.
+  // Initialize filesystem and preferences outside the widget test's fake clock.
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('we_repkg_library');
     wallpaper('431960', '793602574');
@@ -63,8 +62,6 @@ void main() {
     return (container, captured);
   }
 
-  // The grid reads one list, so the only thing that can point it at the other
-  // library is this choice.
   testWidgets('the library choice picks which folder is scanned', (
     tester,
   ) async {
