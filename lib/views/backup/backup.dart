@@ -373,18 +373,18 @@ class _Loaded extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final Map<BackupState, int> counts = countByState(scan.cards.values);
+    final totals = backupPillCounts(
+      states: scan.cards.values,
+      ignoredUpdates: scan.ignoredUpdates,
+      reconcile: scan.reconcile,
+    );
+    final Map<BackupState, int> counts = totals.states;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
-    final int activeReconcileCount = scan.reconcile
-        .where((ReconcileEntry entry) => entry.activeReasons.isNotEmpty)
-        .length;
-    final int ignoredCount = ignoredDetectionCount(
-      updates: scan.ignoredUpdates,
-      reconcile: scan.reconcile,
-    );
+    final int activeReconcileCount = totals.reconcile;
+    final int ignoredCount = totals.ignored;
     final BackupAction? action =
         shown.reconcile ||
             shown.ignored ||

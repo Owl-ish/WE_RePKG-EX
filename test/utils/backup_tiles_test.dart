@@ -55,6 +55,60 @@ List<BackupTile> visible(
 );
 
 void main() {
+  group('backup pill counts', () {
+    test('empty input includes zero for every state', () {
+      final totals = backupPillCounts(
+        states: const [],
+        ignoredUpdates: const [],
+        reconcile: const [],
+      );
+      expect(totals.states.keys, unorderedEquals(BackupState.values));
+      expect(totals.states.values, everyElement(0));
+      expect(totals.reconcile, 0);
+      expect(totals.ignored, 0);
+    });
+
+    test('counts Reconcile names once and ignored reasons separately', () {
+      const reasons = {
+        BackupReconcileReason.duplicateLiveCopies,
+        BackupReconcileReason.conflictingBackupCopies,
+      };
+      final totals = backupPillCounts(
+        states: const [
+          BackupState.synced,
+          BackupState.synced,
+          BackupState.vanished,
+        ],
+        ignoredUpdates: const [
+          BackupCard(WallpaperLibrary.workshop, 'ignored'),
+        ],
+        reconcile: const [
+          ReconcileEntry(
+            name: 'active',
+            reason: BackupReconcileReason.duplicateLiveCopies,
+            additionalReasons: reasons,
+            states: {},
+            backupWorkshop: true,
+            backupMyProjects: true,
+          ),
+          ReconcileEntry(
+            name: 'ignored',
+            reason: BackupReconcileReason.duplicateLiveCopies,
+            additionalReasons: reasons,
+            ignoredReasons: reasons,
+            states: {},
+            backupWorkshop: true,
+            backupMyProjects: true,
+          ),
+        ],
+      );
+      expect(totals.states[BackupState.synced], 2);
+      expect(totals.states[BackupState.vanished], 1);
+      expect(totals.reconcile, 1);
+      expect(totals.ignored, 3);
+    });
+  });
+
   group('the state pills', () {
     test('a state that is not lit is not drawn', () {
       final List<BackupTile> tiles = <BackupTile>[

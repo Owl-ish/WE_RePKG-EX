@@ -157,22 +157,18 @@ class BackupStateFilter extends _$BackupStateFilter {
     return _shown;
   }
 
-  /// [shown], or the worst state with anything in it when [shown] has nothing.
-  ///
-  /// A looked-after library would otherwise open on a dead Not backed up pill
-  /// over an empty grid, and a rescan that clears whatever was being looked at
-  /// leaves the same thing behind.
+  /// Keeps a non-empty pill selected, falling back in priority order.
   static BackupShown _holding(BackupShown shown, BackupScan scan) {
-    final int activeReconcile = scan.reconcile
-        .where((ReconcileEntry entry) => entry.activeReasons.isNotEmpty)
-        .length;
-    final int ignored = ignoredDetectionCount(
-      updates: scan.ignoredUpdates,
+    final totals = backupPillCounts(
+      states: scan.cards.values,
+      ignoredUpdates: scan.ignoredUpdates,
       reconcile: scan.reconcile,
     );
+    final int activeReconcile = totals.reconcile;
+    final int ignored = totals.ignored;
     if (shown.reconcile && activeReconcile > 0) return shown;
     if (shown.ignored && ignored > 0) return shown;
-    final Map<BackupState, int> counts = countByState(scan.cards.values);
+    final Map<BackupState, int> counts = totals.states;
     if (!shown.reconcile &&
         !shown.ignored &&
         shown.state != BackupState.updateDismissed &&

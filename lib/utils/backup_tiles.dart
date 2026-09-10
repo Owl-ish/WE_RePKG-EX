@@ -21,6 +21,17 @@ String reconcileTileId(String name) => 'reconcile/${name.toLowerCase()}';
 String ignoredReconcileTileId(String name, BackupReconcileReason reason) =>
     'ignored/${reason.name}/${reconcileTileId(name)}';
 
+/// Whole-library totals; Reconcile counts names and Ignored counts detections.
+({Map<BackupState, int> states, int reconcile, int ignored}) backupPillCounts({
+  required Iterable<BackupState> states,
+  required Iterable<BackupCard> ignoredUpdates,
+  required Iterable<ReconcileEntry> reconcile,
+}) => (
+  states: countByState(states),
+  reconcile: reconcile.where((entry) => entry.activeReasons.isNotEmpty).length,
+  ignored: ignoredDetectionCount(updates: ignoredUpdates, reconcile: reconcile),
+);
+
 /// Number shown by the shared Ignored pill.
 int ignoredDetectionCount({
   required Iterable<BackupCard> updates,
