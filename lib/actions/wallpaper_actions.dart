@@ -153,8 +153,7 @@ Future<void> browserFolder(String folder) async {
   if (!Directory(folder).existsSync()) {
     return showErrorToast(tr(AppI10n.dialogFileNoExist));
   }
-  final fixedPath = 'file:///${folder.replaceAll('\\', '/')}';
-  final uri = Uri.parse(fixedPath);
+  final uri = Uri.directory(folder);
   if (await canLaunchUrl(uri)) {
     await launchUrl(uri);
   } else {

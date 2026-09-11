@@ -114,9 +114,7 @@ class ScenePkgInspectionSession {
     final String safeName = wallpaperName
         .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
         .replaceAll(RegExp(r'\s+'), '_');
-    final String shortName = safeName.length > 48
-        ? safeName.substring(0, 48)
-        : safeName;
+    final String shortName = String.fromCharCodes(safeName.runes.take(48));
     final Directory root = Directory(
       path.join(
         base.path,

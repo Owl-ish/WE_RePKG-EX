@@ -195,9 +195,12 @@ pub async fn delete_transparent_pngs_rust(file_paths: Vec<String>) -> Vec<String
 const REBUILT_SHADER_DIR: &str = r"shaders\blobssm40\";
 
 fn normalise_relative(path: &Path) -> String {
+    // Match Dart's per-character lowercase mapping, without contextual expansions.
     path.to_string_lossy()
         .replace('/', "\\")
-        .to_ascii_lowercase()
+        .chars()
+        .flat_map(|character| character.to_lowercase().take(1))
+        .collect()
 }
 
 fn is_rebuilt_shader_path_rust(relative: &Path) -> bool {
@@ -496,7 +499,11 @@ fn read_integrity_folders_blocking(
                     break;
                 };
                 let entry_name = entry.file_name().to_string_lossy().into_owned();
-                let is_directory = kind.is_dir();
+                let is_directory = if kind.is_symlink() {
+                    entry.path().is_dir()
+                } else {
+                    kind.is_dir()
+                };
                 if !is_directory && entry_name.eq_ignore_ascii_case("project.json") {
                     project_present = true;
                 }
@@ -558,11 +565,10 @@ pub struct WallpaperProjectRead {
 
 #[cfg(windows)]
 fn file_changed_micros(metadata: &std::fs::Metadata) -> f64 {
-    // Windows FILETIME is 100ns ticks since 1601-01-01. Dart's Windows stat
-    // implementation exposes ftCreationTime as FileStat.changed.
+    // Dart FileStat.changed uses Windows creation time at whole-second precision.
     const WINDOWS_TO_UNIX_EPOCH_100NS: i128 = 116_444_736_000_000_000;
     (metadata.creation_time() as i128 - WINDOWS_TO_UNIX_EPOCH_100NS)
-        .div_euclid(10) as f64
+        .div_euclid(10_000_000) as f64 * 1_000_000.0
 }
 
 #[cfg(not(windows))]
@@ -652,16 +658,30 @@ fn folder_version_token(folder: &Path) -> std::io::Result<Option<String>> {
     let mut stamps = Vec::<(String, u64, i128)>::new();
     for entry in std::fs::read_dir(folder)? {
         let entry = entry?;
+        // Follow readable links; Dart leaves dangling links out of file tokens.
         let kind = entry.file_type()?;
-        if !kind.is_file() {
+        if !kind.is_file() && !kind.is_symlink() {
             continue;
         }
-        let metadata = entry.metadata()?;
+        let metadata = if kind.is_symlink() {
+            match std::fs::metadata(entry.path()) {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            }
+        } else {
+            entry.metadata()?
+        };
+        if !metadata.is_file() {
+            continue;
+        }
         let modified = metadata.modified()?;
         let millis = match modified.duration_since(std::time::UNIX_EPOCH) {
             Ok(duration) => duration.as_millis() as i128,
             Err(error) => -(error.duration().as_millis() as i128),
         };
+        // Dart FileStat on Windows exposes whole seconds. Keep saved tokens compatible.
+        #[cfg(windows)]
+        let millis = millis.div_euclid(1000) * 1000;
         stamps.push((
             entry.file_name().to_string_lossy().into_owned(),
             metadata.len(),
@@ -671,7 +691,7 @@ fn folder_version_token(folder: &Path) -> std::io::Result<Option<String>> {
     if stamps.is_empty() {
         return Ok(None);
     }
-    stamps.sort_by(|a, b| a.0.cmp(&b.0));
+    stamps.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
     Ok(Some(
         stamps
             .into_iter()
@@ -696,7 +716,7 @@ fn my_projects_inventory_blocking(
     for entry in entries {
         let entry = entry.map_err(|e| e.to_string())?;
         let kind = entry.file_type().map_err(|e| e.to_string())?;
-        if !kind.is_dir() {
+        if !kind.is_dir() && !(kind.is_symlink() && entry.path().is_dir()) {
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1142,6 +1162,36 @@ mod tests {
         let file = root.join(relative);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(file, bytes).unwrap();
+    }
+
+    #[test]
+    fn filename_keys_preserve_unicode_and_use_simple_lowercase() {
+        assert_eq!(
+            normalise_relative(Path::new("中文/日本語/한국어🌸/Ä.PNG")),
+            "中文\\日本語\\한국어🌸\\ä.png"
+        );
+        assert_eq!(normalise_relative(Path::new("ΟΣ")), "οσ");
+        assert_eq!(normalise_relative(Path::new("İ")), "i");
+        assert_eq!(normalise_relative(Path::new("\u{10400}")), "\u{10428}");
+        assert_ne!(
+            normalise_relative(Path::new("é")),
+            normalise_relative(Path::new("e\u{301}"))
+        );
+    }
+
+    #[test]
+    fn version_token_orders_supplementary_names_as_utf16() {
+        let root = tmp_dir();
+        write_backup_fixture(&root, "\u{10000}.txt", b"a");
+        write_backup_fixture(&root, "\u{e000}.txt", b"b");
+        let token = folder_version_token(&root).unwrap().unwrap();
+        assert!(token.starts_with("\u{10000}.txt|1|"));
+        #[cfg(windows)]
+        for entry in token.split(';') {
+            let millis: i128 = entry.rsplit('|').next().unwrap().parse().unwrap();
+            assert_eq!(millis % 1000, 0);
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
