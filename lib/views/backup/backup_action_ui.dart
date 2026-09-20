@@ -195,7 +195,8 @@ class _BackupBulkActionButtonState extends State<BackupBulkActionButton> {
 
 IconData backupActionIcon(BackupAction action) => switch (action) {
   BackupAction.backUp => Icons.backup_outlined,
-  BackupAction.update => Icons.sync_rounded,
+  BackupAction.update => Icons.update_rounded,
+  BackupAction.sync => Icons.drive_file_move_outline,
   BackupAction.restore => Icons.restore_rounded,
   BackupAction.recycleJunk => Icons.delete_outline_rounded,
   BackupAction.ignoreUpdate => Icons.visibility_off_outlined,

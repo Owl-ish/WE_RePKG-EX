@@ -127,6 +127,12 @@ Future<BackupActionResult> _runOne(
     mirror: action == BackupAction.update,
     selectiveUpdate: action == BackupAction.update ? selectiveUpdate : null,
   ),
+  BackupAction.sync => syncBackupWallpaper(
+    card: cards.single,
+    backupRoot: container.read(backupRootProvider),
+    liveWorkshopPath: container.read(wallpaperPathProvider),
+    liveMyProjectsPath: container.read(myProjectsLibraryProvider),
+  ),
   BackupAction.restore => restoreVanishedWallpaper(
     cards: cards,
     backupRoot: container.read(backupRootProvider),
@@ -282,6 +288,7 @@ List<List<BackupCard>> _restoreTargets(List<BackupCard> cards) {
 String _label(BackupAction action) => switch (action) {
   BackupAction.backUp => AppI10n.backupActionBackUp,
   BackupAction.update => AppI10n.backupActionUpdate,
+  BackupAction.sync => AppI10n.backupTileSync,
   BackupAction.restore => AppI10n.backupActionRestore,
   BackupAction.recycleJunk => AppI10n.backupActionRecycle,
   BackupAction.ignoreUpdate => AppI10n.backupActionIgnore,
@@ -291,6 +298,7 @@ String _label(BackupAction action) => switch (action) {
 String _title(BackupAction action) => switch (action) {
   BackupAction.backUp => AppI10n.backupActionBackUpTitle,
   BackupAction.update => AppI10n.backupActionUpdateTitle,
+  BackupAction.sync => AppI10n.backupActionSyncTitle,
   BackupAction.restore => AppI10n.backupActionRestoreTitle,
   BackupAction.recycleJunk => AppI10n.backupActionRecycleTitle,
   BackupAction.ignoreUpdate => AppI10n.backupActionIgnoreUpdateTitle,
@@ -302,6 +310,8 @@ String _message(BackupAction action, bool one) => switch (action) {
     one ? AppI10n.backupActionBackUpOne : AppI10n.backupActionBackUpMany,
   BackupAction.update =>
     one ? AppI10n.backupActionUpdateOne : AppI10n.backupActionUpdateMany,
+  BackupAction.sync =>
+    one ? AppI10n.backupActionSyncOne : AppI10n.backupActionSyncMany,
   BackupAction.restore =>
     one ? AppI10n.backupActionRestoreOne : AppI10n.backupActionRestoreMany,
   BackupAction.recycleJunk =>

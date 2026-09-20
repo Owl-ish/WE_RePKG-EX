@@ -52,6 +52,7 @@ enum BackupState {
 enum BackupAction {
   backUp,
   update,
+  sync,
   restore,
   recycleJunk,
   ignoreUpdate,
@@ -114,6 +115,12 @@ BackupAction? actionForBackupState(BackupState state) => switch (state) {
   BackupState.updateDismissed => BackupAction.showUpdateAgain,
   BackupState.synced => null,
 };
+
+/// Applicable actions for one Update/Sync plan; both remain independently usable.
+List<BackupAction> actionsForUpdatePlan(BackupUpdatePlan plan) => [
+  if (plan.updateContent) BackupAction.update,
+  if (plan.needsSync) BackupAction.sync,
+];
 
 /// What a card draws with, plus the three fields the tab filters and orders on.
 ///
@@ -194,6 +201,7 @@ enum BackupReconcileReason {
   duplicateLiveCopies,
   conflictingBackupCopies,
   comparisonUnavailable,
+  duplicateBackupCopies,
 }
 
 /// Everything known about a wallpaper that needs manual review.
@@ -424,6 +432,7 @@ const List<BackupReconcileReason> _reconcileReasonPriority =
     <BackupReconcileReason>[
       BackupReconcileReason.duplicateLiveCopies,
       BackupReconcileReason.conflictingBackupCopies,
+      BackupReconcileReason.duplicateBackupCopies,
       BackupReconcileReason.comparisonUnavailable,
     ];
 
@@ -596,6 +605,8 @@ BackupRuleDecision backupRule({
       reasons.add(BackupReconcileReason.comparisonUnavailable);
     } else if (!backupCopiesEquivalent) {
       reasons.add(BackupReconcileReason.conflictingBackupCopies);
+    } else {
+      reasons.add(BackupReconcileReason.duplicateBackupCopies);
     }
   }
 
@@ -613,6 +624,7 @@ BackupRuleDecision backupRule({
     const List<BackupReconcileReason> priority = <BackupReconcileReason>[
       BackupReconcileReason.duplicateLiveCopies,
       BackupReconcileReason.conflictingBackupCopies,
+      BackupReconcileReason.duplicateBackupCopies,
       BackupReconcileReason.comparisonUnavailable,
     ];
     final BackupReconcileReason primary = priority.firstWhere(reasons.contains);
@@ -623,7 +635,6 @@ BackupRuleDecision backupRule({
   // Update / Sync Rules
   //====================
   // A usable backup exists, but its top-level library placement is wrong.
-  // Equivalent copies in both backup libraries are also safe structure cleanup.
   // Placement problems cannot be hidden by dismissing a content update.
   if (otherBackup) {
     return decision(BackupRuleKind.structureSync);
@@ -718,6 +729,7 @@ BackupDiffResult backupDiff({
                 'size=${difference.differentSize.join('|')};'
                 'workshop=${difference.onlyWorkshop.join('|')};'
                 'myprojects=${difference.onlyMyProjects.join('|')}';
+      case BackupReconcileReason.duplicateBackupCopies:
       case BackupReconcileReason.comparisonUnavailable:
         return null;
     }
@@ -841,15 +853,10 @@ BackupDiffResult backupDiff({
           liveCard.library == WallpaperLibrary.workshop
           ? WallpaperLibrary.myProjects
           : WallpaperLibrary.workshop;
-      final bool ownBackup = liveCard.library == WallpaperLibrary.workshop
-          ? bw != null
-          : bm != null;
       updates[liveCard] = BackupUpdatePlan(
         updateContent: contentState == BackupState.updateAvailable,
         sync: BackupSyncPlan(
-          kind: ownBackup
-              ? BackupSyncKind.removeDuplicate
-              : BackupSyncKind.relocate,
+          kind: BackupSyncKind.relocate,
           from: other,
           to: liveCard.library,
         ),

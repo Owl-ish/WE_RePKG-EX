@@ -583,6 +583,32 @@ void main() {
         },
       );
 
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${updateCard.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${updateCard.id}-sync')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${syncCard.id}')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${syncCard.id}-sync')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${bothCard.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('backup-tile-action-${bothCard.id}-sync')),
+        findsOneWidget,
+      );
+      expect(find.text(AppI10n.backupActionUpdateAll), findsOneWidget);
+      expect(find.text(AppI10n.backupActionSyncAll), findsOneWidget);
       expect(find.byType(TileBadgeStrip), findsNWidgets(3));
       expect(find.text(AppI10n.backupTileUpdate), findsNWidgets(2));
       expect(find.text(AppI10n.backupTileSync), findsNWidgets(2));

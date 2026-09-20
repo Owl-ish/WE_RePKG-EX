@@ -44,6 +44,8 @@ String _reconcileReasonExplanationKey(
     ignored
         ? AppI10n.backupReconcileReasonDuplicateLiveIgnoredAbout
         : AppI10n.backupReconcileReasonDuplicateLiveAbout,
+  BackupReconcileReason.duplicateBackupCopies =>
+    AppI10n.backupDuplicateBackupsAbout,
   BackupReconcileReason.conflictingBackupCopies =>
     ignored
         ? AppI10n.backupReconcileReasonConflictingBackupsIgnoredAbout
@@ -418,6 +420,13 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
         entry.reason;
     return switch (primary) {
       BackupReconcileReason.duplicateLiveCopies => _duplicateLiveAsyncDetails(),
+      BackupReconcileReason.duplicateBackupCopies => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _detectedLocationCards(
+          includeLive: false,
+          includeBackup: true,
+        ),
+      ),
       BackupReconcileReason.comparisonUnavailable =>
         _comparisonUnavailableDetails(),
       BackupReconcileReason.conflictingBackupCopies

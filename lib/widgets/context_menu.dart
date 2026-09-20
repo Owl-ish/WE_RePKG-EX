@@ -86,6 +86,7 @@ Future<void> showBackupMenu(
   required List<BackupFolderMenuTarget> folders,
   String? actionLabel,
   VoidCallback? onAction,
+  List<({String label, VoidCallback onPressed})> actions = const [],
 }) async {
   await showMenuAt(context, details, <ContextMenuEntry>[
     // Double click opens the same dialog, but nothing on a tile advertises
@@ -99,6 +100,8 @@ Future<void> showBackupMenu(
         label: folder.label,
         onSelected: (_) => browserFolder(folder.path),
       ),
+    for (final action in actions)
+      RightMenuItem(label: action.label, onSelected: (_) => action.onPressed()),
     if (actionLabel != null && onAction != null)
       RightMenuItem(label: actionLabel, onSelected: (_) => onAction()),
   ]);

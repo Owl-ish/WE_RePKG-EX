@@ -16,9 +16,9 @@ import 'package:we_repkg/utils/wallpaper_junk.dart';
 typedef BackupActionResult = ({bool changed, String? error});
 typedef BackupTrash = Future<String?> Function(String folder);
 
-/// Copies a wallpaper into its matching backup library.
-/// [mirror] enables Update/Sync cleanup; ordinary Back up keeps destination-only files.
-/// Cleanup follows successful copies and a source stability check.
+/// Back up creates the matching copy; [mirror] updates existing copies in place.
+/// Updating never relocates or removes a backup directory. Duplicate backups
+/// require Reconcile before either operation can proceed.
 Future<BackupActionResult> backUpWallpaper({
   required BackupCard card,
   required String? backupRoot,
@@ -27,7 +27,6 @@ Future<BackupActionResult> backUpWallpaper({
   required String? acfPath,
   bool mirror = false,
   BackupSelectiveUpdatePlan? selectiveUpdate,
-  BackupTrash? trashFolder,
 }) async {
   final String? liveRoot = switch (card.library) {
     WallpaperLibrary.workshop => liveWorkshopPath,
@@ -73,15 +72,26 @@ Future<BackupActionResult> backUpWallpaper({
     if (otherBackupExisted && otherLive == null) {
       return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
     }
-    if (otherBackupExisted && await otherLive!.exists()) {
+    if (otherLive != null && await otherLive.exists()) {
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
-    if (destinationExisted &&
-        otherBackupExisted &&
-        !await backupFoldersEquivalent(destination, otherBackup)) {
+    if (destinationExisted && otherBackupExisted) {
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
 
+    if ((!mirror && otherBackupExisted) ||
+        (mirror && !destinationExisted && !otherBackupExisted)) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    final List<Directory> destinations = mirror
+        ? [
+            if (destinationExisted) destination,
+            if (otherBackupExisted) otherBackup,
+          ]
+        : [destination];
+    if (destinations.any((folder) => _inside(folder.path, source.path))) {
+      return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+    }
     final BackupSelectiveUpdatePlan? selection = selectiveUpdate;
     if (selection != null && selection.blockedPackages.isNotEmpty) {
       return (
@@ -116,38 +126,31 @@ Future<BackupActionResult> backUpWallpaper({
     // A failed copy may have changed files; refresh scans after this point.
     filesystemMayHaveChanged = true;
 
-    // Start from the old backup so files marked Keep survive relocation.
-    if (selection?.isPartial == true &&
-        !destinationExisted &&
-        otherBackupExisted) {
+    for (final Directory target in destinations) {
       changed =
-          await _copyFolderIncrementally(otherBackup, destination) || changed;
-    }
-    changed =
-        await _copyFolderIncrementally(
-          source,
-          destination,
-          skippedRelativePaths: selection?.skippedCopies ?? const <String>{},
-        ) ||
-        changed;
-
-    final String? afterCopies = await liveBackupVersion(
-      card,
-      liveFolder: source.path,
-      acfPath: acfPath,
-    );
-    if (before != afterCopies) {
-      return (changed: changed, error: tr(AppI10n.backupActionSourceChanged));
-    }
-
-    if (mirror) {
-      changed =
-          await _removeMirrorResidue(
-            source: source,
-            destination: destination,
-            keptRelativePaths: selection?.keptBackupFiles ?? const <String>{},
+          await _copyFolderIncrementally(
+            source,
+            target,
+            skippedRelativePaths: selection?.skippedCopies ?? const <String>{},
           ) ||
           changed;
+      final String? afterCopies = await liveBackupVersion(
+        card,
+        liveFolder: source.path,
+        acfPath: acfPath,
+      );
+      if (before != afterCopies) {
+        return (changed: changed, error: tr(AppI10n.backupActionSourceChanged));
+      }
+      if (mirror) {
+        changed =
+            await _removeMirrorResidue(
+              source: source,
+              destination: target,
+              keptRelativePaths: selection?.keptBackupFiles ?? const <String>{},
+            ) ||
+            changed;
+      }
     }
 
     final String? version = await liveBackupVersion(
@@ -174,57 +177,76 @@ Future<BackupActionResult> backUpWallpaper({
       records[card.id] = next;
     }
 
-    // Verify the matching copy before recycling the other backup.
-    String? syncError;
-    if (otherBackupExisted) {
-      syncError = await _recycleSyncedBackup(
-        target: otherBackup,
-        trashFolder: trashFolder,
-      );
-      if (syncError == null) {
-        changed = true;
-        final WallpaperLibrary otherLibrary = switch (card.library) {
-          WallpaperLibrary.workshop => WallpaperLibrary.myProjects,
-          WallpaperLibrary.myProjects => WallpaperLibrary.workshop,
-        };
-        records.remove(BackupCard(otherLibrary, card.name).id);
-      }
-    }
     await writeBackupRecords(backupRoot, records);
-    return (changed: changed, error: syncError);
+    return (changed: changed, error: null);
   } catch (error) {
     return (changed: changed || filesystemMayHaveChanged, error: '$error');
   }
 }
 
-/// Moves a redundant backup aside before recycling it.
-/// If recycling fails, restore it only if the original destination is still free.
-Future<String?> _recycleSyncedBackup({
-  required Directory target,
-  BackupTrash? trashFolder,
+/// Aligns backup placement without copying live content or recording a new version.
+/// Duplicate copies and ambiguous live ownership require Reconcile instead.
+Future<BackupActionResult> syncBackupWallpaper({
+  required BackupCard card,
+  required String? backupRoot,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
 }) async {
-  if (!await target.exists()) return null;
-  final Directory wrapper = await target.parent.createTemp(
-    WallpaperFiles.emptyBackupStagePrefix,
-  );
-  final Directory claimed = Directory(
-    path.join(wrapper.path, path.basename(target.path)),
-  );
+  final bool workshop = card.library == WallpaperLibrary.workshop;
+  final String? liveRoot = workshop ? liveWorkshopPath : liveMyProjectsPath;
+  final String? otherLiveRoot = workshop
+      ? liveMyProjectsPath
+      : liveWorkshopPath;
+  final String? targetRoot = workshop
+      ? backupWorkshopPath(backupRoot)
+      : backupMyProjectsPath(backupRoot);
+  final String? oldRoot = workshop
+      ? backupMyProjectsPath(backupRoot)
+      : backupWorkshopPath(backupRoot);
+  if (backupRoot == null ||
+      liveRoot == null ||
+      otherLiveRoot == null ||
+      targetRoot == null ||
+      oldRoot == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  final source = Directory(path.join(oldRoot, card.name));
+  final target = Directory(path.join(targetRoot, card.name));
+  bool changed = false;
   try {
-    publishWithoutReplacing(target, claimed.path);
-    final BackupTrash trash =
-        trashFolder ?? (String folder) => deleteToTrash(filePath: folder);
-    final String? error = await trash(claimed.path);
-    if (await claimed.exists()) {
-      await _restoreClaim(claimed, target.path);
-      return error ?? tr(AppI10n.backupActionTrashUnconfirmed);
+    if (!await Directory(path.join(liveRoot, card.name)).exists() ||
+        await Directory(path.join(otherLiveRoot, card.name)).exists()) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
-    return error;
+    if (!await source.exists()) return (changed: false, error: null);
+    // Placement must not touch a live tree, even with overlapping configured roots.
+    for (final folder in [source, target]) {
+      if (_inside(folder.path, liveRoot) ||
+          _inside(folder.path, otherLiveRoot)) {
+        return (
+          changed: false,
+          error: tr(AppI10n.backupActionUnsafeDestination),
+        );
+      }
+    }
+    final records = await readBackupRecords(backupRoot);
+    if (await target.exists()) {
+      return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+    }
+    await target.parent.create(recursive: true);
+    publishWithoutReplacing(source, target.path);
+    changed = true;
+    final otherCard = BackupCard(
+      workshop ? WallpaperLibrary.myProjects : WallpaperLibrary.workshop,
+      card.name,
+    );
+    // Preserve an existing live-owner record; Sync must never mark live changes backed up.
+    final previous = records.remove(otherCard.id);
+    if (previous != null) records.putIfAbsent(card.id, () => previous);
+    await writeBackupRecords(backupRoot, records);
+    return (changed: changed, error: null);
   } catch (error) {
-    if (await claimed.exists()) await _restoreClaim(claimed, target.path);
-    return '$error';
-  } finally {
-    await _deleteEmptyDirectory(wrapper);
+    return (changed: changed, error: '$error');
   }
 }
 

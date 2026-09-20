@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 
 void main() {
+  test('Update and Sync actions follow each plan independently', () {
+    const sync = BackupSyncPlan(
+      kind: BackupSyncKind.relocate,
+      from: WallpaperLibrary.workshop,
+      to: WallpaperLibrary.myProjects,
+    );
+    expect(actionsForUpdatePlan(const BackupUpdatePlan(updateContent: true)), [
+      BackupAction.update,
+    ]);
+    expect(actionsForUpdatePlan(const BackupUpdatePlan(sync: sync)), [
+      BackupAction.sync,
+    ]);
+    expect(
+      actionsForUpdatePlan(
+        const BackupUpdatePlan(updateContent: true, sync: sync),
+      ),
+      [BackupAction.update, BackupAction.sync],
+    );
+  });
+
   // Everything defaults to empty so each test names only the sets it cares
   // about. Ids are the folder names Steam and Wallpaper Engine actually use.
   const Map<String, CopyStanding> nothingCompared = <String, CopyStanding>{};
@@ -333,7 +353,7 @@ void main() {
       );
     });
 
-    test('equivalent duplicate backups are deterministic structure sync', () {
+    test('equivalent duplicate backups require explicit reconciliation', () {
       final BackupRuleDecision decision = backupRule(
         liveWorkshop: true,
         liveMyProjects: false,
@@ -341,8 +361,11 @@ void main() {
         backupMyProjects: true,
         backupCopiesEquivalent: true,
       );
-      expect(decision.kind, BackupRuleKind.structureSync);
-      expect(decision.reconcileReason, isNull);
+      expect(decision.kind, BackupRuleKind.reconcile);
+      expect(
+        decision.reconcileReason,
+        BackupReconcileReason.duplicateBackupCopies,
+      );
     });
 
     test('an unavailable duplicate-backup comparison stays ambiguous', () {
@@ -445,7 +468,7 @@ void main() {
       );
     });
 
-    test('equivalent duplicate backups are structure sync, not reconcile', () {
+    test('equivalent duplicate backups never offer Sync', () {
       final BackupDiffResult result = diff(
         liveWorkshop: const <String>{'793602574'},
         backupWorkshop: const <String>{'793602574'},
@@ -453,10 +476,12 @@ void main() {
         equivalentBackupCopies: const <String>{'793602574'},
       );
 
-      expect(result.cards, <BackupCard, BackupState>{
-        workshop('793602574'): BackupState.updateAvailable,
-      });
-      expect(result.reconcile, isEmpty);
+      expect(result.cards, isEmpty);
+      expect(result.updates, isEmpty);
+      expect(
+        result.reconcile.single.reason,
+        BackupReconcileReason.duplicateBackupCopies,
+      );
     });
 
     test('different duplicate backups still require reconcile', () {

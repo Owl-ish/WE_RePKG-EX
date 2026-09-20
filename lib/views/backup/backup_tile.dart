@@ -146,13 +146,6 @@ class BackupTileView extends StatelessWidget {
                 colour: look.colour,
               ),
           ];
-    final String? actionLabel = plan == null
-        ? null
-        : plan.updateContent && plan.needsSync
-        ? tr(AppI10n.backupStateUpdateAvailable)
-        : plan.needsSync
-        ? tr(AppI10n.backupTileSync)
-        : tr(AppI10n.backupTileUpdate);
     return _TileFrame(
       width: width,
       id: tile.card.id,
@@ -161,7 +154,6 @@ class BackupTileView extends StatelessWidget {
       folders: folders,
       onTap: onTap,
       action: actionForBackupState(tile.state),
-      actionLabelOverride: actionLabel,
       onAction: onAction,
       junkKind: junkKind,
       updatePlan: plan,
@@ -350,6 +342,22 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
+  Map<BackupAction, VoidCallback> get _availableActions {
+    final plan = widget.updatePlan;
+    final card = widget.backupCard;
+    if (plan != null && card != null) {
+      return {
+        for (final action in actionsForUpdatePlan(plan))
+          action: action == BackupAction.update && widget.onAction != null
+              ? widget.onAction!
+              : () => applyBackupAction(context, action, [card]),
+      };
+    }
+    final action = widget.action;
+    final callback = widget.onAction;
+    return action == null || callback == null ? {} : {action: callback};
+  }
+
   List<DetailAction> _actions({
     required WallpaperInfo wallpaper,
     VoidCallback? primaryAction,
@@ -358,13 +366,14 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   }) {
     final bool reconcile = widget.reconcileEntry != null;
     return <DetailAction>[
-      if (widget.action case final BackupAction action)
-        if (primaryAction ?? widget.onAction case final VoidCallback onAction)
-          DetailAction(
-            label: widget.actionLabelOverride ?? backupActionLabel(action),
-            onPressed: onAction,
-            destructive: backupActionIsDestructive(action),
-          ),
+      for (final entry in _availableActions.entries)
+        DetailAction(
+          label: widget.actionLabelOverride ?? backupActionLabel(entry.key),
+          onPressed: entry.key == BackupAction.update
+              ? primaryAction ?? entry.value
+              : entry.value,
+          destructive: backupActionIsDestructive(entry.key),
+        ),
       if (!reconcile && widget.updatePlan?.updateContent == true)
         if (widget.backupCard case final BackupCard card)
           DetailAction(
@@ -660,7 +669,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final ActionButtonTheme colours = Theme.of(context).actionButtons;
     final bool destructive = backupActionIsDestructive(action);
     return _BackupTileActionButton(
-      id: widget.id,
+      id: action == BackupAction.sync ? '${widget.id}-sync' : widget.id,
       icon: backupActionIcon(action),
       label: widget.actionLabelOverride ?? backupActionLabel(action),
       background: destructive
@@ -700,11 +709,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               details,
               onDetails: _openDetails,
               folders: _menuFolders(),
-              actionLabel: widget.action == null
-                  ? null
-                  : widget.actionLabelOverride ??
-                        backupActionLabel(widget.action!),
-              onAction: widget.onAction,
+              actions: [
+                for (final entry in _availableActions.entries)
+                  (
+                    label:
+                        widget.actionLabelOverride ??
+                        backupActionLabel(entry.key),
+                    onPressed: entry.value,
+                  ),
+              ],
             ),
             child: Container(
               width: widget.width,
@@ -738,15 +751,23 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                       top: 4,
                       child: TileBadgeStrip(badges: widget.badges),
                     ),
-                    if (widget.action case final BackupAction action)
-                      if (widget.onAction case final VoidCallback onAction)
-                        Positioned(
-                          right: LayoutNums.smallGap,
-                          bottom: 28,
-                          width: 34,
-                          height: 34,
-                          child: _actionButton(action, onAction),
+                    if (_availableActions.isNotEmpty)
+                      Positioned(
+                        right: LayoutNums.smallGap,
+                        bottom: 28,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          spacing: 6,
+                          children: [
+                            for (final entry in _availableActions.entries)
+                              SizedBox(
+                                width: 34,
+                                height: 34,
+                                child: _actionButton(entry.key, entry.value),
+                              ),
+                          ],
                         ),
+                      ),
                     if (checked) const SelectionTint(),
                   ],
                 ),
@@ -882,6 +903,9 @@ String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
       ),
       BackupReconcileReason.conflictingBackupCopies => tr(
         AppI10n.backupTileBackupsConflict,
+      ),
+      BackupReconcileReason.duplicateBackupCopies => tr(
+        AppI10n.backupDuplicateBackupsTitle,
       ),
       BackupReconcileReason.comparisonUnavailable => tr(
         AppI10n.backupTileComparisonUnavailable,

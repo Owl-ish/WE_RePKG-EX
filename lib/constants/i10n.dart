@@ -3,6 +3,10 @@
 // Run `dart run tool/generate_i10n_keys.dart` after editing locale JSON files.
 
 class AppI10n {
+  static const String backupDuplicateBackupsTitle =
+      'backupDuplicateBackupsTitle';
+  static const String backupDuplicateBackupsAbout =
+      'backupDuplicateBackupsAbout';
   static const String fileTreeExpandAll = 'fileTreeExpandAll';
   static const String fileTreeCollapseAll = 'fileTreeCollapseAll';
   static const String navExtract = 'nav.extract';
@@ -245,6 +249,10 @@ class AppI10n {
   static const String backupActionRecycle = 'backup.action.recycle';
   static const String backupActionRecycleAll = 'backup.action.recycleAll';
   static const String backupActionBackUpAll = 'backup.action.backUpAll';
+  static const String backupActionSyncAll = 'backup.action.syncAll';
+  static const String backupActionSyncTitle = 'backup.action.syncTitle';
+  static const String backupActionSyncOne = 'backup.action.syncOne';
+  static const String backupActionSyncMany = 'backup.action.syncMany';
   static const String backupActionUpdateAll = 'backup.action.updateAll';
   static const String backupActionRestoreAll = 'backup.action.restoreAll';
   static const String backupActionShowAgainAll = 'backup.action.showAgainAll';

@@ -365,6 +365,7 @@ class _Loaded extends ConsumerWidget {
   String _bulkActionText(BackupAction action) => switch (action) {
     BackupAction.backUp => AppI10n.backupActionBackUpAll,
     BackupAction.update => AppI10n.backupActionUpdateAll,
+    BackupAction.sync => AppI10n.backupActionSyncAll,
     BackupAction.restore => AppI10n.backupActionRestoreAll,
     BackupAction.recycleJunk => AppI10n.backupActionRecycleAll,
     BackupAction.ignoreUpdate => AppI10n.backupActionIgnoreAll,
@@ -449,7 +450,45 @@ class _Loaded extends ConsumerWidget {
             ],
           ),
         ),
-        if (action != null)
+        if (action == BackupAction.update)
+          Padding(
+            padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final kind in [BackupAction.update, BackupAction.sync])
+                    Builder(
+                      builder: (context) {
+                        final targets = [
+                          for (final entry in scan.updates.entries)
+                            if (scan.cards[entry.key] ==
+                                    BackupState.updateAvailable &&
+                                actionsForUpdatePlan(
+                                  entry.value,
+                                ).contains(kind))
+                              entry.key,
+                        ];
+                        return BackupBulkActionButton(
+                          label: tr(
+                            _bulkActionText(kind),
+                            namedArgs: {'count': '${targets.length}'},
+                          ),
+                          icon: backupActionIcon(kind),
+                          colour: looks[shown.state]!.colour,
+                          onPressed: targets.isEmpty
+                              ? null
+                              : () => applyBackupAction(context, kind, targets),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        if (action != null && action != BackupAction.update)
           Padding(
             padding: const EdgeInsets.only(top: LayoutNums.contentGap),
             child: Align(

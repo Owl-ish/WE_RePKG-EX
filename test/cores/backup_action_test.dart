@@ -385,7 +385,7 @@ void main() {
   });
 
   test(
-    'selective sync seeds the aligned backup before applying exceptions',
+    'selective update keeps exceptions in the existing misplaced backup',
     () async {
       final Directory liveWorkshop = Directory(
         path.join(temporary.path, 'live-workshop'),
@@ -428,73 +428,71 @@ void main() {
           skippedCopies: const <String>{'project.json'},
           keptBackupFiles: const <String>{'legacy.txt'},
         ),
-        trashFolder: (String claimed) async {
-          await Directory(claimed).delete(recursive: true);
-          return null;
-        },
       );
 
       final Directory aligned = Directory(
         path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
       );
       expect(result, (changed: true, error: null));
-      expect(misplaced.existsSync(), isFalse);
+      expect(misplaced.existsSync(), isTrue);
+      expect(aligned.existsSync(), isFalse);
       expect(
-        File(path.join(aligned.path, 'project.json')).readAsStringSync(),
+        File(path.join(misplaced.path, 'project.json')).readAsStringSync(),
         'old project',
       );
       expect(
-        File(path.join(aligned.path, 'legacy.txt')).readAsStringSync(),
+        File(path.join(misplaced.path, 'legacy.txt')).readAsStringSync(),
         'keep me',
       );
       expect(
-        File(path.join(aligned.path, 'new.txt')).readAsStringSync(),
+        File(path.join(misplaced.path, 'new.txt')).readAsStringSync(),
         'new file',
       );
     },
   );
 
-  test('update syncs a misplaced backup into the live library tree', () async {
-    final Directory liveWorkshop = Directory(
-      path.join(temporary.path, 'live-workshop'),
-    )..createSync();
-    final Directory liveMyProjects = Directory(
-      path.join(temporary.path, 'live-myprojects'),
-    )..createSync();
-    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
-      ..createSync();
-    final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
-      ..createSync();
-    File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
-    File(path.join(live.path, 'scene.json')).writeAsStringSync('current');
-    final Directory misplaced = Directory(
-      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
-    )..createSync(recursive: true);
-    File(path.join(misplaced.path, 'scene.json')).writeAsStringSync('old');
+  test(
+    'update changes misplaced backup files without relocating them',
+    () async {
+      final Directory liveWorkshop = Directory(
+        path.join(temporary.path, 'live-workshop'),
+      )..createSync();
+      final Directory liveMyProjects = Directory(
+        path.join(temporary.path, 'live-myprojects'),
+      )..createSync();
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory live = Directory(path.join(liveMyProjects.path, 'demo'))
+        ..createSync();
+      File(path.join(live.path, 'project.json')).writeAsStringSync('{}');
+      File(path.join(live.path, 'scene.json')).writeAsStringSync('current');
+      final Directory misplaced = Directory(
+        path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(path.join(misplaced.path, 'scene.json')).writeAsStringSync('old');
 
-    final result = await backUpWallpaper(
-      card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
-      backupRoot: backupRoot.path,
-      liveWorkshopPath: liveWorkshop.path,
-      liveMyProjectsPath: liveMyProjects.path,
-      acfPath: null,
-      mirror: true,
-      trashFolder: (String claimed) async {
-        await Directory(claimed).delete(recursive: true);
-        return null;
-      },
-    );
+      final result = await backUpWallpaper(
+        card: const BackupCard(WallpaperLibrary.myProjects, 'demo'),
+        backupRoot: backupRoot.path,
+        liveWorkshopPath: liveWorkshop.path,
+        liveMyProjectsPath: liveMyProjects.path,
+        acfPath: null,
+        mirror: true,
+      );
 
-    final Directory aligned = Directory(
-      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
-    );
-    expect(result, (changed: true, error: null));
-    expect(misplaced.existsSync(), isFalse);
-    expect(
-      File(path.join(aligned.path, 'scene.json')).readAsStringSync(),
-      'current',
-    );
-  });
+      final Directory aligned = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      );
+      expect(result, (changed: true, error: null));
+      expect(misplaced.existsSync(), isTrue);
+      expect(aligned.existsSync(), isFalse);
+      expect(
+        File(path.join(misplaced.path, 'scene.json')).readAsStringSync(),
+        'current',
+      );
+    },
+  );
 
   test('update refuses same-size conflicting duplicate backups', () async {
     final Directory liveWorkshop = Directory(
@@ -524,15 +522,123 @@ void main() {
       liveMyProjectsPath: liveMyProjects.path,
       acfPath: null,
       mirror: true,
-      trashFolder: (String claimed) async {
-        fail('conflicting backups must not be recycled');
-      },
     );
 
     expect(result.changed, isFalse);
     expect(result.error, isNotNull);
     expect(other.existsSync(), isTrue);
   });
+
+  for (final library in WallpaperLibrary.values) {
+    test(
+      'sync relocates without updating content in ${library.name}',
+      () async {
+        final workshop = Directory(path.join(temporary.path, 'live-workshop'))
+          ..createSync();
+        final projects = Directory(path.join(temporary.path, 'live-projects'))
+          ..createSync();
+        final root = Directory(path.join(temporary.path, 'backup'))
+          ..createSync();
+        final isWorkshop = library == WallpaperLibrary.workshop;
+        final live = Directory(
+          path.join(isWorkshop ? workshop.path : projects.path, 'demo'),
+        )..createSync();
+        File(
+          path.join(live.path, 'project.json'),
+        ).writeAsStringSync('new live content');
+        final old = Directory(
+          path.join(
+            isWorkshop
+                ? backupMyProjectsPath(root.path)!
+                : backupWorkshopPath(root.path)!,
+            'demo',
+          ),
+        )..createSync(recursive: true);
+        File(
+          path.join(old.path, 'project.json'),
+        ).writeAsStringSync('old backup content');
+        File(path.join(old.path, 'keep.txt')).writeAsStringSync('backup only');
+        final target = Directory(
+          path.join(
+            isWorkshop
+                ? backupWorkshopPath(root.path)!
+                : backupMyProjectsPath(root.path)!,
+            'demo',
+          ),
+        );
+        final result = await syncBackupWallpaper(
+          card: BackupCard(library, 'demo'),
+          backupRoot: root.path,
+          liveWorkshopPath: workshop.path,
+          liveMyProjectsPath: projects.path,
+        );
+        expect(result, (changed: true, error: null));
+        expect(old.existsSync(), isFalse);
+        expect(
+          File(path.join(target.path, 'project.json')).readAsStringSync(),
+          'old backup content',
+        );
+        expect(
+          File(path.join(target.path, 'keep.txt')).readAsStringSync(),
+          'backup only',
+        );
+        expect(
+          (await readBackupRecords(
+            root.path,
+          ))[BackupCard(library, 'demo').id]?.backedUpVersion,
+          isNull,
+        );
+      },
+    );
+  }
+
+  test(
+    'sync and update refuse duplicates without altering either copy',
+    () async {
+      final workshop = Directory(path.join(temporary.path, 'live-workshop'))
+        ..createSync();
+      final projects = Directory(path.join(temporary.path, 'live-projects'))
+        ..createSync();
+      final root = Directory(path.join(temporary.path, 'backup'))..createSync();
+      final live = Directory(path.join(projects.path, 'demo'))..createSync();
+      File(path.join(live.path, 'project.json')).writeAsStringSync('new live');
+      final copies = [
+        backupWorkshopPath(root.path)!,
+        backupMyProjectsPath(root.path)!,
+      ];
+      for (final copy in copies) {
+        Directory(path.join(copy, 'demo')).createSync(recursive: true);
+        File(
+          path.join(copy, 'demo', 'project.json'),
+        ).writeAsStringSync('same old backup');
+      }
+      const card = BackupCard(WallpaperLibrary.myProjects, 'demo');
+      final sync = await syncBackupWallpaper(
+        card: card,
+        backupRoot: root.path,
+        liveWorkshopPath: workshop.path,
+        liveMyProjectsPath: projects.path,
+      );
+      final update = await backUpWallpaper(
+        card: card,
+        backupRoot: root.path,
+        liveWorkshopPath: workshop.path,
+        liveMyProjectsPath: projects.path,
+        acfPath: null,
+        mirror: true,
+      );
+      for (final result in [sync, update]) {
+        expect(result.changed, isFalse);
+        expect(result.error, isNotNull);
+      }
+      for (final copy in copies) {
+        expect(
+          File(path.join(copy, 'demo', 'project.json')).readAsStringSync(),
+          'same old backup',
+        );
+      }
+    },
+  );
 
   test('ignore update records the current live version', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))

@@ -147,6 +147,10 @@ class _GridState extends ConsumerState<_Grid> {
           title: AppI10n.backupReconcileReasonConflictingBackupsTitle,
           about: AppI10n.backupReconcileReasonConflictingBackupsAbout,
         ),
+        BackupReconcileReason.duplicateBackupCopies => (
+          title: AppI10n.backupDuplicateBackupsTitle,
+          about: AppI10n.backupDuplicateBackupsAbout,
+        ),
         BackupReconcileReason.comparisonUnavailable => (
           title: AppI10n.backupReconcileReasonComparisonUnavailableTitle,
           about: AppI10n.backupReconcileReasonComparisonUnavailableAbout,

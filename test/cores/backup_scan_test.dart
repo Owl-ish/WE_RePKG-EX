@@ -840,18 +840,19 @@ void main() {
       );
     });
 
-    test('equivalent duplicate backups are sent to update/sync', () async {
+    test('equivalent duplicate backups are sent to reconcile', () async {
       filled(liveWorkshop, '793602574', 'same');
       filled(backupWorkshop(), '793602574', 'same');
       filled(backupMyProjects(), '793602574', 'same');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
+      expect(result.cards, isEmpty);
+      expect(result.updates, isEmpty);
       expect(
-        result.cards[const BackupCard(WallpaperLibrary.workshop, '793602574')],
-        BackupState.updateAvailable,
+        result.reconcile.single.reason,
+        BackupReconcileReason.duplicateBackupCopies,
       );
-      expect(result.reconcile, isEmpty);
     });
 
     test('different duplicate backups remain reconcile', () async {
@@ -1173,19 +1174,20 @@ void main() {
       expect(result.reconcile, isEmpty);
     });
 
-    // The live library determines which equivalent backup to keep.
-    test('equivalent duplicate backups go to update/sync', () async {
+    // Duplicate backups require an explicit choice even when their contents match.
+    test('equivalent duplicate backups go to reconcile', () async {
       filled(liveMyProjects, '793602574');
       filled(backupWorkshop(), '793602574');
       filled(backupMyProjects(), '793602574');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
-      expect(result.cards, <BackupCard, BackupState>{
-        const BackupCard(WallpaperLibrary.myProjects, '793602574'):
-            BackupState.updateAvailable,
-      });
-      expect(result.reconcile, isEmpty);
+      expect(result.cards, isEmpty);
+      expect(result.updates, isEmpty);
+      expect(
+        result.reconcile.single.reason,
+        BackupReconcileReason.duplicateBackupCopies,
+      );
     });
 
     test('a republished workshop item reads as an update', () async {
