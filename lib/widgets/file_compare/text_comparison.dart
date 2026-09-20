@@ -61,8 +61,8 @@ Future<void> _showTextDialog(
       key: const ValueKey<String>('file-text-compare-dialog'),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: min(1120.0, screen.width * .9),
-        height: min(760.0, screen.height * .82),
+        width: AppDialogSurface.fileViewSize(screen).width,
+        height: AppDialogSurface.fileViewSize(screen).height,
         child: _TextComparisonBody(
           first: first,
           second: second,
@@ -316,7 +316,7 @@ class _StructuredJsonComparison extends StatelessWidget {
   }
 }
 
-class _PlainTextComparison extends StatelessWidget {
+class _PlainTextComparison extends StatefulWidget {
   const _PlainTextComparison({
     super.key,
     required this.firstSide,
@@ -335,13 +335,26 @@ class _PlainTextComparison extends StatelessWidget {
   final String truncatedText;
 
   @override
+  State<_PlainTextComparison> createState() => _PlainTextComparisonState();
+}
+
+class _PlainTextComparisonState extends State<_PlainTextComparison> {
+  final LinkedVerticalScroll _scroll = LinkedVerticalScroll();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: <Widget>[
       _ComparisonModeHeader(
-        modeLabel: modeLabel,
-        first: firstSide,
-        second: secondSide,
+        modeLabel: widget.modeLabel,
+        first: widget.firstSide,
+        second: widget.secondSide,
       ),
       const SizedBox(height: 8),
       Expanded(
@@ -350,20 +363,36 @@ class _PlainTextComparison extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: _TextPane(
-                side: firstSide,
-                info: first,
-                truncatedText: truncatedText,
+                side: widget.firstSide,
+                info: widget.first,
+                truncatedText: widget.truncatedText,
+                controller: _scroll.first,
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              child: Icon(Icons.compare_arrows_rounded),
+            SizedBox(
+              width: 32,
+              child: Column(
+                children: <Widget>[
+                  ListenableBuilder(
+                    listenable: _scroll,
+                    builder: (context, _) => LinkedScrollToggle(
+                      key: const ValueKey<String>('file-text-link-scrolling'),
+                      linked: _scroll.linked,
+                      onPressed: _scroll.toggle,
+                      linkLabel: tr(AppI10n.backupLinkedScrolling),
+                      unlinkLabel: tr(AppI10n.backupIndependentScrolling),
+                    ),
+                  ),
+                  const Icon(Icons.compare_arrows_rounded, size: 18),
+                ],
+              ),
             ),
             Expanded(
               child: _TextPane(
-                side: secondSide,
-                info: second,
-                truncatedText: truncatedText,
+                side: widget.secondSide,
+                info: widget.second,
+                truncatedText: widget.truncatedText,
+                controller: _scroll.second,
               ),
             ),
           ],
@@ -378,11 +407,13 @@ class _TextPane extends StatelessWidget {
     required this.side,
     required this.info,
     required this.truncatedText,
+    required this.controller,
   });
 
   final FileComparisonSide side;
   final _TextFileInfo info;
   final String truncatedText;
+  final ScrollController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -410,11 +441,27 @@ class _TextPane extends StatelessWidget {
               ),
             const SizedBox(height: 6),
             Expanded(
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  info.text,
-                  key: ValueKey<String>('file-text-${side.path}'),
-                  style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
+                child: Scrollbar(
+                  controller: controller,
+                  thumbVisibility: true,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SingleChildScrollView(
+                      controller: controller,
+                      child: SelectableText(
+                        info.text,
+                        key: ValueKey<String>('file-text-${side.path}'),
+                        style: const TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

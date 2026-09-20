@@ -21,6 +21,12 @@ class AppDialogSurface extends StatelessWidget {
 
   static const double elevation = 16;
 
+  /// Common responsive footprint for file explorers and file comparisons.
+  static Size fileViewSize(Size available) => Size(
+    (available.width * .88).clamp(0, 1000),
+    (available.height * .88).clamp(0, 680),
+  );
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);

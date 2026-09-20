@@ -193,6 +193,9 @@ class AppI10n {
       'backup.about.updateDismissed';
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';
+  static const String backupLinkedScrolling = 'backup.linkedScrolling';
+  static const String backupIndependentScrolling =
+      'backup.independentScrolling';
   static const String backupOpenLiveFolder = 'backup.openLiveFolder';
   static const String backupOpenBackupFolder = 'backup.openBackupFolder';
   static const String backupOpenWorkshopLiveFolder =

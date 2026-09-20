@@ -29,8 +29,8 @@ Future<void> _showImageDialog(
       key: const ValueKey<String>('file-image-compare-dialog'),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: min(1080.0, screen.width * .88),
-        height: min(760.0, screen.height * .82),
+        width: AppDialogSurface.fileViewSize(screen).width,
+        height: AppDialogSurface.fileViewSize(screen).height,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           child: Column(
@@ -256,12 +256,6 @@ class _ImageComparisonPairState extends State<_ImageComparisonPair> {
             widget.blinkLabel,
             Icons.visibility_outlined,
             'blink',
-          ),
-          _modeChip(
-            _ImageComparisonMode.difference,
-            widget.differenceLabel,
-            Icons.difference_outlined,
-            'difference',
           ),
           if (_mode == _ImageComparisonMode.sideBySide)
             IconButton(

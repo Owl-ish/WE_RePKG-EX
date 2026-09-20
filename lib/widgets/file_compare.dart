@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:we_repkg/widgets/app_dialog_surface.dart';
 import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
+import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/utils/json_diff.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
+import 'package:we_repkg/widgets/linked_scroll.dart';
 
 export 'package:we_repkg/utils/json_diff.dart' show formatJsonFieldPath;
 

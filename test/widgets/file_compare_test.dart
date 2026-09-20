@@ -167,11 +167,21 @@ void main() {
       addTearDown(() {
         if (root.existsSync()) root.deleteSync(recursive: true);
       });
-      final File before = File(
-        '${root.path}${Platform.pathSeparator}before.json',
-      )..writeAsStringSync('old text that is not json');
+      final File before =
+          File('${root.path}${Platform.pathSeparator}before.json')
+            ..writeAsStringSync(
+              List<String>.generate(
+                120,
+                (int i) => 'old text that is not json line $i',
+              ).join('\n'),
+            );
       final File after = File('${root.path}${Platform.pathSeparator}after.json')
-        ..writeAsStringSync('{"valid":"json"}');
+        ..writeAsStringSync(
+          List<String>.generate(
+            30,
+            (int i) => 'new text that is not json line $i',
+          ).join('\n'),
+        );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -233,6 +243,44 @@ void main() {
         find.byKey(const ValueKey<String>('file-json-compare-content')),
         findsNothing,
       );
+      final List<SingleChildScrollView> panes = tester
+          .widgetList<SingleChildScrollView>(
+            find.descendant(
+              of: textContent,
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .toList();
+      expect(panes, hasLength(2));
+      final Finder bars = find.descendant(
+        of: textContent,
+        matching: find.byType(Scrollbar),
+      );
+      expect(bars, findsNWidgets(2));
+      for (int i = 0; i < panes.length; i++) {
+        final Rect viewport = tester.getRect(find.byWidget(panes[i]));
+        expect(viewport.right, lessThan(tester.getRect(bars.at(i)).right - 14));
+      }
+      final ScrollController left = panes[0].controller!;
+      final ScrollController right = panes[1].controller!;
+      left.jumpTo(left.position.maxScrollExtent);
+      await tester.pump();
+      expect(right.offset, closeTo(right.position.maxScrollExtent, .1));
+      expect(left.offset, greaterThan(right.offset));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('file-text-link-scrolling')),
+      );
+      await tester.pump();
+      right.jumpTo(0);
+      await tester.pump();
+      expect(left.offset, greaterThan(0));
+      left.jumpTo(80);
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('file-text-link-scrolling')),
+      );
+      await tester.pump();
+      expect(right.offset, closeTo(80, .1));
     });
 
     testWidgets('binary files show metadata and streamed SHA-256 differences', (

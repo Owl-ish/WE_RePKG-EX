@@ -144,6 +144,8 @@
       "name": "按名称",
       "date": "按日期"
     },
+    "linkedScrolling": "关联滚动",
+    "independentScrolling": "取消关联滚动",
     "openLiveFolder": "打开当前文件夹",
     "openBackupFolder": "打开备份文件夹",
     "openWorkshopLiveFolder": "打开创意工坊实时文件夹",

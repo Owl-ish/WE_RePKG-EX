@@ -144,6 +144,8 @@
       "name": "By name",
       "date": "By date"
     },
+    "linkedScrolling": "Link scrolling",
+    "independentScrolling": "Unlink scrolling",
     "openLiveFolder": "Open live folder",
     "openBackupFolder": "Open backup folder",
     "openWorkshopLiveFolder": "Open Workshop - Live",

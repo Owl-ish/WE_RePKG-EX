@@ -60,8 +60,8 @@ Future<void> _showBinaryDialog(
       key: const ValueKey<String>('file-binary-compare-dialog'),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: min(980.0, screen.width * .88),
-        height: min(620.0, screen.height * .76),
+        width: AppDialogSurface.fileViewSize(screen).width,
+        height: AppDialogSurface.fileViewSize(screen).height,
         child: _BinaryComparisonBody(
           first: first,
           second: second,
