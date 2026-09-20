@@ -154,6 +154,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('desktop tree clips CJK rows before fixed scrollbar gutters', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 120,
+              child: FileTreeScrollView(
+                key: const ValueKey<String>('cjk-gutter-tree'),
+                foreground: Colors.black,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    for (int i = 0; i < 24; i++)
+                      FileTreeRow(
+                        depth: 2,
+                        icon: Icons.insert_drive_file_outlined,
+                        label: '日本語中文한국어_非常に長いファイル名_${i}_scene.pkg',
+                        foreground: Colors.black,
+                        trailing: TextButton(
+                          onPressed: () {},
+                          child: const Text('Compare'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final Finder tree = find.byKey(const ValueKey<String>('cjk-gutter-tree'));
+    final Finder vertical = find.descendant(
+      of: tree,
+      matching: find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.vertical,
+      ),
+    );
+    final Finder horizontal = find.descendant(
+      of: tree,
+      matching: find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal,
+      ),
+    );
+    expect(vertical, findsOneWidget);
+    expect(horizontal, findsOneWidget);
+    expect(
+      find.descendant(of: tree, matching: find.byType(Scrollbar)),
+      findsNWidgets(2),
+    );
+    final Rect surface = tester.getRect(tree);
+    expect(tester.getRect(vertical).right, lessThan(surface.right - 14));
+    expect(tester.getRect(horizontal).right, lessThan(surface.right - 14));
+    expect(tester.getRect(vertical).bottom, lessThan(surface.bottom - 16));
+    final ScrollController horizontalController = tester
+        .widget<SingleChildScrollView>(horizontal)
+        .controller!;
+    expect(horizontalController.position.maxScrollExtent, greaterThan(0));
+    horizontalController.jumpTo(horizontalController.position.maxScrollExtent);
+    await tester.pump();
+    expect(tester.getRect(horizontal).right, lessThan(surface.right - 14));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'file tree rows with trailing actions show a compact hover background',
     (tester) async {

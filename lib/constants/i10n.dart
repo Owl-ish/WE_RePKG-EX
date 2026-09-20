@@ -3,6 +3,8 @@
 // Run `dart run tool/generate_i10n_keys.dart` after editing locale JSON files.
 
 class AppI10n {
+  static const String fileTreeExpandAll = 'fileTreeExpandAll';
+  static const String fileTreeCollapseAll = 'fileTreeCollapseAll';
   static const String navExtract = 'nav.extract';
   static const String navBackup = 'nav.backup';
   static const String backupNoRoot = 'backup.noRoot';
@@ -112,6 +114,22 @@ class AppI10n {
   static const String backupDetailValueMissing = 'backup.detail.valueMissing';
   static const String backupDetailInspectPackageAction =
       'backup.detail.inspectPackageAction';
+  static const String backupDetailSaveExtractedAction =
+      'backup.detail.saveExtractedAction';
+  static const String backupDetailSaveExtractedCopy =
+      'backup.detail.saveExtractedCopy';
+  static const String backupDetailSaveExtractedSuccess =
+      'backup.detail.saveExtractedSuccess';
+  static const String backupDetailSaveExtractedInvalidSource =
+      'backup.detail.saveExtractedInvalidSource';
+  static const String backupDetailSaveExtractedProtected =
+      'backup.detail.saveExtractedProtected';
+  static const String backupDetailSaveExtractedExists =
+      'backup.detail.saveExtractedExists';
+  static const String backupDetailSaveExtractedFailed =
+      'backup.detail.saveExtractedFailed';
+  static const String backupDetailSaveExtractedPartial =
+      'backup.detail.saveExtractedPartial';
   static const String backupDetailRepackingComingSoon =
       'backup.detail.repackingComingSoon';
   static const String backupDetailInspectPackageTitle =
@@ -193,9 +211,16 @@ class AppI10n {
       'backup.about.updateDismissed';
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';
+  static const String backupBrowseFiles = 'backup.browseFiles';
+  static const String backupLiveSource = 'backup.liveSource';
+  static const String backupMissingLive = 'backup.missingLive';
+  static const String backupMissingBackup = 'backup.missingBackup';
   static const String backupLinkedScrolling = 'backup.linkedScrolling';
   static const String backupIndependentScrolling =
       'backup.independentScrolling';
+  static const String backupBackupDestination = 'backup.backupDestination';
+  static const String backupLiveFiles = 'backup.liveFiles';
+  static const String backupBackupFiles = 'backup.backupFiles';
   static const String backupOpenLiveFolder = 'backup.openLiveFolder';
   static const String backupOpenBackupFolder = 'backup.openBackupFolder';
   static const String backupOpenWorkshopLiveFolder =

@@ -212,6 +212,26 @@ Future<void> _showWallpaperDetail(
     if (!context.mounted) return;
   }
 
+  await showWallpaperDetailSurface(
+    context: context,
+    origin: origin,
+    builder: (_) => WallpaperDetailDialog(
+      wallpaper: wallpaper,
+      stats: stats,
+      actions: actions,
+      extraContentBuilder: extraContentBuilder,
+      includePreview: includePreview,
+      layout: layout,
+    ),
+  );
+}
+
+/// Uses the card transition for related detail explorers.
+Future<void> showWallpaperDetailSurface({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  Rect? origin,
+}) async {
   final Size screen = MediaQuery.of(context).size;
   final Alignment from = origin == null
       ? Alignment.center
@@ -220,21 +240,14 @@ Future<void> _showWallpaperDetail(
           (origin.center.dy / screen.height) * 2 - 1,
         );
 
-  await showGeneralDialog<void>(
+  return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: tr(AppI10n.homeDetails),
     // Transparent, so the window behind is not repainted just to dim it.
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 240),
-    pageBuilder: (_, _, _) => WallpaperDetailDialog(
-      wallpaper: wallpaper,
-      stats: stats,
-      actions: actions,
-      extraContentBuilder: extraContentBuilder,
-      includePreview: includePreview,
-      layout: layout,
-    ),
+    pageBuilder: (context, _, _) => builder(context),
     transitionBuilder: (context, animation, _, child) {
       final Animation<double> dialogAnimation = CurvedAnimation(
         parent: animation,
@@ -675,6 +688,49 @@ class _DetailFocusHint extends StatelessWidget {
   );
 }
 
+/// Reuses the detail card's wallpaper treatment for caller-owned dialog content.
+class WallpaperDetailBackdrop extends StatefulWidget {
+  const WallpaperDetailBackdrop({
+    super.key,
+    required this.wallpaper,
+    required this.child,
+  });
+
+  final WallpaperInfo wallpaper;
+  final Widget child;
+  static const Color foreground = _GlassPanel.panelLuminance < .5
+      ? Colors.white
+      : Color(0xFF101010);
+
+  @override
+  State<WallpaperDetailBackdrop> createState() =>
+      _WallpaperDetailBackdropState();
+}
+
+class _WallpaperDetailBackdropState extends State<WallpaperDetailBackdrop> {
+  late Future<PreviewStats?> _stats = _previewStats(widget.wallpaper.previews);
+
+  @override
+  void didUpdateWidget(covariant WallpaperDetailBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.wallpaper.previews != widget.wallpaper.previews) {
+      _stats = _previewStats(widget.wallpaper.previews);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<PreviewStats?>(
+    future: _stats,
+    builder: (context, snapshot) => _GlassPanel(
+      wallpaper: widget.wallpaper,
+      onDark: _GlassPanel.panelLuminance < .5,
+      luminance: snapshot.data?.luminance ?? .5,
+      useWallpaperBackdrop: widget.wallpaper.previews.isNotEmpty,
+      child: widget.child,
+    ),
+  );
+}
+
 /// Frosted pane: its own copy of the wallpaper, blurred, under a scrim.
 ///
 /// Its own copy rather than a shared full-bleed one, which would have to cover
@@ -808,25 +864,25 @@ class _Actions extends ConsumerWidget {
       child: Column(
         spacing: _DetailActionLayout.spacing,
         children: [
-          _DetailActionButton(
+          DetailActionButton(
             onPressed: () => extractCurrent(ref, wallpaper),
             label: tr(AppI10n.homeExtractCurrent),
           ),
           if (wallpaper.type == WallpaperType.scene)
-            _DetailActionButton(
+            DetailActionButton(
               onPressed: () => extractProject(ref, [wallpaper]),
               label: tr(AppI10n.homeExtractForProject),
             ),
           if (wallpaper.type == WallpaperType.video)
-            _DetailActionButton(
+            DetailActionButton(
               onPressed: () => playVideo(wallpaper),
               label: tr(AppI10n.homePlayVideo),
             ),
-          _DetailActionButton(
+          DetailActionButton(
             onPressed: () => browserCurrent(wallpaper),
             label: tr(AppI10n.homeOpenFileLocation),
           ),
-          _DetailActionButton.destructive(
+          DetailActionButton.destructive(
             // No pop: the membership listener closes the dialog once the
             // wallpaper leaves the list. Popping here would beat the confirm
             // prompt.
@@ -855,12 +911,12 @@ class _GivenActions extends StatelessWidget {
         children: <Widget>[
           for (final DetailAction action in actions)
             if (action.destructive)
-              _DetailActionButton.destructive(
+              DetailActionButton.destructive(
                 label: action.label,
                 onPressed: action.onPressed,
               )
             else
-              _DetailActionButton(
+              DetailActionButton(
                 label: action.label,
                 onPressed: action.onPressed,
               ),
@@ -879,15 +935,22 @@ abstract final class _DetailActionLayout {
   static const double bottomInset = 14;
 }
 
-class _DetailActionButton extends StatelessWidget {
-  const _DetailActionButton({required this.label, required this.onPressed})
-    : _destructive = false;
+class DetailActionButton extends StatelessWidget {
+  const DetailActionButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  }) : _destructive = false;
 
-  const _DetailActionButton.destructive({
+  const DetailActionButton.destructive({
+    super.key,
+    this.icon,
     required this.label,
     required this.onPressed,
   }) : _destructive = true;
 
+  final IconData? icon;
   final String label;
   final VoidCallback onPressed;
   final bool _destructive;
@@ -901,7 +964,7 @@ class _DetailActionButton extends StatelessWidget {
           height: _DetailActionLayout.height,
           child: _destructive
               ? CustomBtn.destructive(onPressed: onPressed, label: label)
-              : CustomBtn(onPressed: onPressed, label: label),
+              : CustomBtn(onPressed: onPressed, label: label, icon: icon),
         ),
       ),
     );

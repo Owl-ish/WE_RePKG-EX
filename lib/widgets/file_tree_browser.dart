@@ -9,6 +9,7 @@ class FileTreePanel extends StatefulWidget {
     this.library,
     this.accent,
     this.maxHeight,
+    this.verticalController,
   });
 
   final String folderPath;
@@ -17,12 +18,20 @@ class FileTreePanel extends StatefulWidget {
   final Color? accent;
   final double? maxHeight;
 
+  /// The caller retains ownership when linking two folder views.
+  final ScrollController? verticalController;
+
   @override
   State<FileTreePanel> createState() => _FileTreePanelState();
 }
 
 class _FileTreePanelState extends State<FileTreePanel> {
   late Future<List<FileSystemEntity>> _children;
+  ({bool expanded, int revision}) _expansion = (expanded: true, revision: 0);
+
+  void _setExpanded(bool expanded) => setState(() {
+    _expansion = (expanded: expanded, revision: _expansion.revision + 1);
+  });
 
   @override
   void initState() {
@@ -47,6 +56,7 @@ class _FileTreePanelState extends State<FileTreePanel> {
       key: ValueKey<String>('file-tree-${widget.folderPath}'),
       foreground: widget.foreground,
       maxHeight: widget.maxHeight,
+      verticalController: widget.verticalController,
       child: FutureBuilder<List<FileSystemEntity>>(
         future: _children,
         builder:
@@ -57,6 +67,11 @@ class _FileTreePanelState extends State<FileTreePanel> {
               final List<FileSystemEntity>? children = snapshot.data;
               return FileTreeGroup(
                 title: path.basename(widget.folderPath),
+                trailing: FileTreeExpansionActions(
+                  foreground: widget.foreground,
+                  onExpandAll: () => _setExpanded(true),
+                  onCollapseAll: () => _setExpanded(false),
+                ),
                 count: children?.length,
                 accent: accent,
                 foreground: widget.foreground,
@@ -78,6 +93,7 @@ class _FileTreePanelState extends State<FileTreePanel> {
                     for (final FileSystemEntity child
                         in children ?? const <FileSystemEntity>[])
                       _TreeEntityNode(
+                        expansion: _expansion,
                         entity: child,
                         depth: 1,
                         foreground: widget.foreground,
@@ -120,11 +136,13 @@ Future<List<FileSystemEntity>> _listTreeChildren(String folderPath) async {
 class _TreeEntityNode extends StatefulWidget {
   const _TreeEntityNode({
     required this.entity,
+    required this.expansion,
     required this.depth,
     required this.foreground,
     this.accent,
   });
 
+  final ({bool expanded, int revision}) expansion;
   final FileSystemEntity entity;
   final int depth;
   final Color foreground;
@@ -149,14 +167,17 @@ class _TreeEntityNodeState extends State<_TreeEntityNode> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.entity.path != widget.entity.path) {
       _openDirectoryByDefault();
+    } else if (oldWidget.expansion != widget.expansion) {
+      _expanded = widget.entity is Directory && widget.expansion.expanded;
+      if (_expanded) _children ??= _listTreeChildren(widget.entity.path);
     }
   }
 
   void _openDirectoryByDefault() {
-    // Detail trees start expanded so the first view exposes useful contents.
+    // New branches follow the latest bulk action; individual toggles stay local.
     final bool directory = widget.entity is Directory;
-    _expanded = directory;
-    _children = directory ? _listTreeChildren(widget.entity.path) : null;
+    _expanded = directory && widget.expansion.expanded;
+    _children = _expanded ? _listTreeChildren(widget.entity.path) : null;
   }
 
   void _toggle() {
@@ -222,6 +243,7 @@ class _TreeEntityNodeState extends State<_TreeEntityNode> {
                       for (final FileSystemEntity child
                           in snapshot.data ?? const <FileSystemEntity>[])
                         _TreeEntityNode(
+                          expansion: widget.expansion,
                           entity: child,
                           depth: widget.depth + 1,
                           foreground: widget.foreground,

@@ -14,7 +14,6 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
-import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/widgets/context_menu.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
@@ -29,6 +28,7 @@ import 'package:we_repkg/utils/wallpaper_junk.dart';
 import 'package:we_repkg/views/backup/backup_action_ui.dart';
 import 'package:we_repkg/actions/backup_actions.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';
+import 'package:we_repkg/views/backup/details/backup_file_browser.dart';
 import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/views/content/title.dart';
@@ -350,7 +350,12 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  List<DetailAction> _actions({VoidCallback? primaryAction}) {
+  List<DetailAction> _actions({
+    required WallpaperInfo wallpaper,
+    VoidCallback? primaryAction,
+    BackupUpdateSelection? updateSelection,
+    String? updateBackupFolder,
+  }) {
     final bool reconcile = widget.reconcileEntry != null;
     return <DetailAction>[
       if (widget.action case final BackupAction action)
@@ -377,22 +382,39 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               label: tr(AppI10n.backupActionIgnore),
               onPressed: () => ignoreReconcileDetections(context, entry),
             ),
-      // Reconcile details expose only the concrete locations relevant to the
-      // detected reason. Generic folder buttons would hide which copy is opened.
-      if (!reconcile)
-        if (widget.folders.live case final String live)
-          DetailAction(
-            label: tr(AppI10n.backupOpenLiveFolder),
-            onPressed: () => browserFolder(live),
+      // Reconcile retains its concrete, reason-specific location controls.
+      if (!reconcile &&
+          (widget.folders.live != null || widget.folders.backup != null))
+        DetailAction(
+          label: tr(AppI10n.backupBrowseFiles),
+          onPressed: () => _openFileView(
+            wallpaper,
+            updateSelection: updateSelection,
+            updateBackupFolder: updateBackupFolder,
           ),
-      if (!reconcile)
-        if (widget.folders.backup case final String backup)
-          DetailAction(
-            label: tr(AppI10n.backupOpenBackupFolder),
-            onPressed: () => browserFolder(backup),
-          ),
+        ),
     ];
   }
+
+  Future<void> _openFileView(
+    WallpaperInfo wallpaper, {
+    BackupUpdateSelection? updateSelection,
+    String? updateBackupFolder,
+    bool showChanges = false,
+  }) => showWallpaperDetailSurface(
+    context: context,
+    builder: (_) => BackupFileBrowser(
+      wallpaperName: widget.name,
+      wallpaper: wallpaper,
+      liveFolder: widget.folders.live,
+      backupFolder: updateSelection == null
+          ? widget.folders.backup
+          : updateBackupFolder,
+      updateSelection: updateSelection,
+      showChanges: showChanges,
+      rePKGPath: ref.read(toolPathProvider),
+    ),
+  );
 
   String? _backupFolderFor(WallpaperLibrary library, String name) {
     final String? libraryPath = switch (library) {
@@ -512,11 +534,6 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final BackupUpdatePlan? updatePlan = widget.updatePlan;
     final bool hasUpdateDetails =
         updatePlan != null && widget.backupCard != null;
-    final bool updateNeedsFocus =
-        hasUpdateDetails &&
-        updatePlan.updateContent &&
-        widget.folders.live != null &&
-        updateBackupFolder != null;
     final bool updateHasContent = hasUpdateDetails && updatePlan.updateContent;
     final String? rePKGPath = ref.read(toolPathProvider);
     final BackupUpdateSelection? updateSelection =
@@ -556,7 +573,12 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         context,
         wallpaper,
         origin: origin,
-        actions: _actions(primaryAction: detailPrimaryAction),
+        actions: _actions(
+          wallpaper: wallpaper,
+          primaryAction: detailPrimaryAction,
+          updateSelection: updateSelection,
+          updateBackupFolder: updateBackupFolder,
+        ),
         includePreview: widget.junkKind == null,
         // Every preview-backed Backup state uses one inspector shell. Callers
         // only tune how much room their content needs inside that shared shell.
@@ -565,7 +587,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             : _backupDetailLayout(
                 extraCanFocus: widget.reconcileEntry != null
                     ? reconcileNeedsFocus || comparesDuplicateLive
-                    : updateNeedsFocus,
+                    : false,
               ),
         extraContentBuilder: widget.junkKind != null
             ? (
@@ -609,14 +631,13 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               ) => UpdatePlanDetailContent(
                 plan: updatePlan,
                 card: widget.backupCard!,
-                liveFolder: widget.folders.live,
-                backupFolder: updateBackupFolder,
                 foreground: foreground,
-                focused: focused,
-                needsFocus: updateNeedsFocus,
-                rePKGPath: rePKGPath,
-                selection: updateSelection,
-                onRequestFocus: requestFocus,
+                onOpenFileChanges: () => _openFileView(
+                  wallpaper,
+                  updateSelection: updateSelection,
+                  updateBackupFolder: updateBackupFolder,
+                  showChanges: true,
+                ),
               )
             : widget.detailText == null
             ? null

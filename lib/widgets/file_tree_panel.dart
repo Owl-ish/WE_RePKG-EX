@@ -4,6 +4,8 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:we_repkg/constants/i10n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -68,6 +70,7 @@ class FileTreeScrollView extends StatefulWidget {
     required this.child,
     this.maxHeight,
     this.semanticLabel,
+    this.verticalController,
   });
 
   final Color foreground;
@@ -75,17 +78,22 @@ class FileTreeScrollView extends StatefulWidget {
   final double? maxHeight;
   final String? semanticLabel;
 
+  /// The caller retains ownership when coordinating multiple viewports.
+  final ScrollController? verticalController;
+
   @override
   State<FileTreeScrollView> createState() => _FileTreeScrollViewState();
 }
 
 class _FileTreeScrollViewState extends State<FileTreeScrollView> {
-  final ScrollController _verticalController = ScrollController();
+  final ScrollController _ownedVerticalController = ScrollController();
+  ScrollController get _verticalController =>
+      widget.verticalController ?? _ownedVerticalController;
   final ScrollController _horizontalController = ScrollController();
 
   @override
   void dispose() {
-    _verticalController.dispose();
+    _ownedVerticalController.dispose();
     _horizontalController.dispose();
     super.dispose();
   }
@@ -111,21 +119,29 @@ class _FileTreeScrollViewState extends State<FileTreeScrollView> {
               interactive: true,
               notificationPredicate: (ScrollNotification notification) =>
                   notification.metrics.axis == Axis.vertical,
-              child: SingleChildScrollView(
-                controller: _verticalController,
-                scrollDirection: Axis.vertical,
+              // The painters fill the surface, while both scrollable clips end
+              // before their rails. Horizontal movement cannot move this gutter.
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16, bottom: 18),
                 child: SingleChildScrollView(
-                  controller: _horizontalController,
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: constraints.hasBoundedWidth
-                          ? constraints.maxWidth
-                          : 0,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 6, 16, 18),
-                      child: widget.child,
+                  controller: _verticalController,
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    controller: _horizontalController,
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minWidth: constraints.hasBoundedWidth
+                            ? (constraints.maxWidth - 16).clamp(
+                                0,
+                                double.infinity,
+                              )
+                            : 0,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: widget.child,
+                      ),
                     ),
                   ),
                 ),
@@ -143,7 +159,12 @@ class _FileTreeScrollViewState extends State<FileTreeScrollView> {
               child: scroll,
             );
           }
-          return scroll;
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: scroll,
+          );
         },
       ),
     );
@@ -288,11 +309,14 @@ class FileTreeGroupHeader extends StatelessWidget {
             children: <Widget>[
               Icon(Icons.folder_open_rounded, size: 17, color: groupColour),
               const SizedBox(width: 7),
-              Text(
-                count == null ? title : '$title ($count)',
-                style: TextStyle(
-                  color: foreground,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                fit: FlexFit.loose,
+                child: Text(
+                  count == null ? title : '$title ($count)',
+                  style: TextStyle(
+                    color: foreground,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -537,6 +561,39 @@ class FileTreeRowChoice extends StatelessWidget {
         icon: Icons.check_rounded,
         tooltip: acceptTooltip,
         key: acceptKey,
+      ),
+    ],
+  );
+}
+
+/// Folder actions shared by filesystem and comparison trees.
+class FileTreeExpansionActions extends StatelessWidget {
+  const FileTreeExpansionActions({
+    super.key,
+    required this.foreground,
+    required this.onExpandAll,
+    required this.onCollapseAll,
+  });
+  final Color foreground;
+  final VoidCallback onExpandAll;
+  final VoidCallback onCollapseAll;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      FileTreeAction(
+        key: const ValueKey('file-tree-expand-all'),
+        icon: Icons.unfold_more,
+        tooltip: tr(AppI10n.fileTreeExpandAll),
+        foreground: foreground,
+        onPressed: onExpandAll,
+      ),
+      FileTreeAction(
+        key: const ValueKey('file-tree-collapse-all'),
+        icon: Icons.unfold_less,
+        tooltip: tr(AppI10n.fileTreeCollapseAll),
+        foreground: foreground,
+        onPressed: onCollapseAll,
       ),
     ],
   );

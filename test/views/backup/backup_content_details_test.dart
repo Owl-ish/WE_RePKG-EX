@@ -15,6 +15,8 @@ import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/utils/storage.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
+import 'package:we_repkg/views/backup/details/backup_file_browser.dart';
+import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
 import 'package:we_repkg/widgets/input_controls.dart';
 
@@ -137,8 +139,8 @@ void main() {
     final Finder expandPrompt = find.byKey(
       const ValueKey<String>('backup-update-expand-file-changes'),
     );
-    final Finder focusTarget = find.byKey(
-      const ValueKey<String>('wallpaper-detail-extra-focus-target'),
+    final Finder detailPanel = find.byKey(
+      const ValueKey<String>('wallpaper-detail-panel-pane'),
     );
     for (
       int attempt = 0;
@@ -151,15 +153,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(expandPrompt, findsOneWidget);
-    expect(focusTarget, findsOneWidget);
+    expect(detailPanel, findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(tree, findsNothing);
     expect(find.text(AppI10n.backupDetailExpandFileChanges), findsOneWidget);
 
-    await tester.ensureVisible(expandPrompt);
+    await tester.pump(const Duration(milliseconds: 420));
+    final Rect promptBounds = tester.getRect(expandPrompt);
+    final Rect paneBounds = tester.getRect(detailPanel);
+    expect(promptBounds.top, greaterThanOrEqualTo(paneBounds.top));
+    expect(promptBounds.bottom, lessThanOrEqualTo(paneBounds.bottom));
     await tester.pump();
     await tester.tap(expandPrompt);
     await tester.pump();
@@ -171,7 +177,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(expandPrompt, findsNothing);
+    // The detail card remains mounted behind the shared file dialog.
+    expect(expandPrompt, findsOneWidget);
+    expect(find.byType(BackupFileBrowser), findsOneWidget);
+    expect(find.byType(WallpaperDetailBackdrop), findsOneWidget);
     expect(tree, findsOneWidget);
     expect(
       find.descendant(of: tree, matching: find.byType(FileTreeGroupHeader)),
@@ -202,12 +211,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('backup-file-compare-project.json')),
+      find.byKey(const ValueKey<String>('update-pair-compare-project.json')),
       findsOneWidget,
       reason: 'modified JSON should expose the shared file comparer',
     );
     expect(
-      find.byKey(const ValueKey<String>('backup-file-compare-scene.pkg')),
+      find.byKey(const ValueKey<String>('update-pair-compare-scene.pkg')),
       findsOneWidget,
       reason: 'scene.pkg itself should be comparable before inspection',
     );
@@ -225,6 +234,7 @@ void main() {
     expect(oldImageRow, findsOneWidget);
 
     await tester.ensureVisible(newImageRow);
+    await tester.pump();
     await tester.tap(newImageRow);
     await tester.pump();
     expect(tester.widget<FileTreeRow>(newImageRow).selected, isTrue);
@@ -232,6 +242,7 @@ void main() {
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.ensureVisible(oldImageRow);
+    await tester.pump();
     await tester.tap(oldImageRow);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
@@ -281,7 +292,7 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey<String>('file-image-mode-difference')),
-      findsOneWidget,
+      findsNothing,
     );
     await tester.tap(
       find.byKey(const ValueKey<String>('file-image-mode-overlay')),
@@ -295,24 +306,6 @@ void main() {
       find.byKey(const ValueKey<String>('file-image-composite-reset')),
       findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(const ValueKey<String>('file-image-mode-difference')),
-    );
-    await tester.pump();
-    expect(
-      find.byKey(const ValueKey<String>('file-image-difference-intensity')),
-      findsOneWidget,
-    );
-    final Finder intensityFinder = find.byKey(
-      const ValueKey<String>('file-image-difference-intensity'),
-    );
-    final Slider intensity = tester.widget<Slider>(intensityFinder);
-    expect(intensity.value, 4);
-    expect(intensity.min, 1);
-    expect(intensity.max, 16);
-    intensity.onChanged!(8);
-    await tester.pump();
-    expect(tester.widget<Slider>(intensityFinder).value, 8);
     await tester.tap(
       find.byKey(const ValueKey<String>('file-image-dialog-close')),
     );
@@ -356,6 +349,16 @@ void main() {
     await tester.tap(onlyLiveGroupReject);
     await tester.pump();
     expect(onlyLiveGroupChoice().selected, isFalse);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('backup-file-view-close')),
+    );
+    await settle(tester);
+    expect(expandPrompt, findsOneWidget);
+    await tester.tap(expandPrompt);
+    await settle(tester);
+    expect(onlyLiveGroupChoice().selected, isFalse);
+    await tester.ensureVisible(onlyLiveGroupAccept);
+    await tester.pump();
     await tester.tap(onlyLiveGroupAccept);
     await tester.pump();
     expect(onlyLiveGroupChoice().selected, isTrue);
@@ -369,16 +372,10 @@ void main() {
     await tester.pump();
     expect(find.text(AppI10n.backupDetailWillRemove), findsNWidgets(2));
 
-    final FileTreeRouteBanner updateRoute = tester.widget(
-      find.byType(FileTreeRouteBanner),
-    );
-    expect(updateRoute.source, endsWith('/ updated'));
-    expect(updateRoute.source.toLowerCase(), contains('workshop'));
-    expect(updateRoute.destination, endsWith('/ updated'));
-    expect(updateRoute.destination.toLowerCase(), contains('backup'));
-    expect(updateRoute.destination.toLowerCase(), contains('workshop'));
-    expect(find.text('project.json'), findsOneWidget);
-    expect(find.text('effects  ›  settings.json'), findsOneWidget);
+    expect(find.text(AppI10n.backupLiveSource), findsOneWidget);
+    expect(find.text(AppI10n.backupBackupDestination), findsOneWidget);
+    expect(find.text('project.json'), findsNWidgets(2));
+    expect(find.text('settings.json'), findsNWidgets(2));
     final Finder projectReject = find.byKey(
       const ValueKey<String>('backup-update-reject-project.json'),
     );
@@ -393,9 +390,34 @@ void main() {
     );
     expect(
       tester.getCenter(projectReject).dx,
-      greaterThan(tester.getCenter(find.text('project.json')).dx),
+      greaterThan(tester.getCenter(find.text('project.json').last).dx),
       reason: 'X/check controls belong on the right side of the file row',
     );
+    Future<void> openFileDetails(String relative) async {
+      final Finder row = find.byKey(
+        ValueKey<String>(
+          'update-row-${relative == 'scene.pkg' ? 'live' : 'backup'}-$relative',
+        ),
+      );
+      await tester.ensureVisible(row);
+      await tester.tap(
+        find.descendant(
+          of: row,
+          matching: find.text(relative.split(Platform.pathSeparator).last),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+
+    Future<void> closeFileDetails() async {
+      await tester.tap(
+        find.byKey(const ValueKey<String>('update-file-details-close')),
+      );
+      await settle(tester);
+    }
+
+    await openFileDetails('project.json');
     final Finder projectJsonRow = find.byKey(
       const ValueKey<String>('backup-json-project.json'),
     );
@@ -419,11 +441,9 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey<String>('backup-json-project.json')),
     );
-    await tester.ensureVisible(find.text('effects  ›  settings.json'));
-    await tester.tap(find.text('effects  ›  settings.json'));
     for (
       int attempt = 0;
-      attempt < 40 && find.text('strength').evaluate().isEmpty;
+      attempt < 40 && find.text('title').evaluate().isEmpty;
       attempt++
     ) {
       await tester.runAsync(() async {
@@ -442,13 +462,33 @@ void main() {
     expect(expandedProjectJson.disclosure, Icons.keyboard_arrow_down_rounded);
     expect(find.text('title'), findsOneWidget);
     expect(find.text('"Old"  →  "Updated"'), findsOneWidget);
+    await closeFileDetails();
+    await openFileDetails('effects${Platform.pathSeparator}settings.json');
+    await tester.tap(
+      find.byKey(
+        ValueKey<String>(
+          'backup-json-effects${Platform.pathSeparator}settings.json',
+        ),
+      ),
+    );
+    for (
+      int attempt = 0;
+      attempt < 40 && find.text('strength').evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 25)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('strength'), findsOneWidget);
     expect(find.text('["a.b"]'), findsOneWidget);
     expect(find.text('1  →  9'), findsOneWidget);
     expect(find.text('1  →  2'), findsOneWidget);
-    expect(find.text('scene.pkg'), findsOneWidget);
+    await closeFileDetails();
+    expect(find.text('scene.pkg'), findsNWidgets(2));
     final Finder imageCompare = find.byKey(
-      const ValueKey<String>('backup-image-compare-preview.png'),
+      const ValueKey<String>('update-pair-compare-preview.png'),
     );
     expect(imageCompare, findsOneWidget);
     await tester.ensureVisible(imageCompare);
@@ -484,11 +524,10 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey<String>('backup-scene-pkg-inspect')),
-      findsOneWidget,
-      reason: 'scene.pkg must not be unpacked until the user asks',
+      findsNothing,
     );
     expect(find.text(AppI10n.backupDetailInspectPackageWorking), findsNothing);
-    expect(find.text('materials  ›  new.tex'), findsOneWidget);
+    expect(find.text('new.tex'), findsOneWidget);
     expect(find.text('legacy.txt'), findsOneWidget);
     expect(find.text(AppI10n.backupDetailWillRemove), findsNWidgets(2));
     final Finder legacyReject = find.byKey(
@@ -510,12 +549,11 @@ void main() {
       reason: 'scene.pkg uses the same top-level selection skeleton',
     );
 
+    await openFileDetails('scene.pkg');
     final Finder inspectPackage = find.byKey(
       const ValueKey<String>('backup-scene-pkg-inspect'),
     );
-    await tester.ensureVisible(inspectPackage);
-    await tester.pump();
-    await tester.tap(inspectPackage);
+    expect(inspectPackage, findsNothing);
     final Finder packageConfirmTitle = find.text(
       AppI10n.backupDetailInspectPackageTitle,
     );
@@ -668,39 +706,32 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 220));
 
-      final Finder inspect = find.byKey(
-        const ValueKey<String>('backup-scene-pkg-inspect'),
+      final Finder packageRow = find.byKey(
+        const ValueKey<String>('update-row-live-scene.pkg'),
       );
       for (
         int attempt = 0;
-        attempt < 40 && inspect.evaluate().isEmpty;
+        attempt < 40 && packageRow.evaluate().isEmpty;
         attempt++
       ) {
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 25));
-        });
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 25)),
+        );
         await tester.pump(const Duration(milliseconds: 50));
       }
-      expect(inspect, findsOneWidget);
-      expect(
-        find.byKey(const ValueKey<String>('backup-file-compare-scene.pkg')),
-        findsOneWidget,
+      final Finder inspectLive = find.byKey(
+        const ValueKey<String>('update-inspect-package-live-scene.pkg'),
       );
-      final Finder packageContainer = find.byKey(
-        const ValueKey<String>('backup-scene-pkg-container-scene.pkg'),
-      );
-      expect(packageContainer, findsOneWidget);
-      expect(tester.widget(packageContainer), isA<KeyedSubtree>());
       expect(
         find.byKey(
-          const ValueKey<String>('backup-scene-pkg-semantics-scene.pkg'),
+          const ValueKey<String>('update-inspect-package-backup-scene.pkg'),
         ),
-        findsNothing,
-        reason: 'package inspection must not add a nested AX semantics root',
+        findsOneWidget,
       );
-      await tester.ensureVisible(inspect);
+      await tester.ensureVisible(inspectLive);
+      await tester.tap(inspectLive);
       await tester.pump();
-      await tester.tap(inspect);
+      await tester.pump(const Duration(milliseconds: 250));
       for (int attempt = 0; attempt < 40; attempt++) {
         if (find
             .text(AppI10n.backupDetailInspectPackageTitle)
@@ -718,6 +749,38 @@ void main() {
         findsOneWidget,
       );
 
+      final packageWindow = find.byKey(
+        const ValueKey<String>('update-package-close'),
+      );
+      expect(
+        packageWindow,
+        findsNothing,
+        reason: 'confirmation must not construct an explorer behind it',
+      );
+      await tester.tap(find.text(AppI10n.cancel));
+      await settleToast(tester);
+      expect(packageWindow, findsNothing);
+      expect(inspectLive, findsOneWidget);
+      await tester.tap(inspectLive);
+      for (
+        int attempt = 0;
+        attempt < 40 &&
+            find
+                .text(AppI10n.backupDetailInspectPackageTitle)
+                .evaluate()
+                .isEmpty;
+        attempt++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 25)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        find.text(AppI10n.backupDetailInspectPackageTitle),
+        findsOneWidget,
+      );
+      expect(packageWindow, findsNothing);
       await tester.tap(
         find.widgetWithText(
           FilledButton,
@@ -738,6 +801,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
+      expect(packageWindow, findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(
         find.text(AppI10n.backupDetailInspectPackageNoTool),

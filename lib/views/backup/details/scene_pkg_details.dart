@@ -1,5 +1,29 @@
 part of 'content_details.dart';
 
+Future<bool> _confirmPackageInspection(
+  BuildContext context,
+  ScenePkgInspectionSession session,
+) async {
+  await session.prepareTemporaryBase();
+  if (!context.mounted) return false;
+  final String tempBasePath = session.temporaryBasePath;
+  return showConfirmDialog(
+    title: tr(AppI10n.backupDetailInspectPackageTitle),
+    message: tr(AppI10n.backupDetailInspectPackageMessage),
+    confirmLabel: tr(AppI10n.backupDetailInspectPackageAction),
+    destructive: false,
+    pathDetails: <ConfirmPathDetail>[
+      (
+        label: tr(AppI10n.backupDetailTemporaryFolder),
+        path: tempBasePath,
+        copyTooltip: tr(AppI10n.backupDetailCopyTemporaryFolder),
+        openTooltip: tr(AppI10n.backupDetailOpenTemporaryFolder),
+        onOpen: () => browserFolder(tempBasePath),
+      ),
+    ],
+  );
+}
+
 //========================
 // scene.pkg Inspection UI
 //========================
@@ -25,6 +49,7 @@ List<Widget> _nestedDifferenceRows({
   Set<String> compareSelection = const <String>{},
   FileTreeCompareAction? manualCompareAction,
   void Function(FileTreeCompareCandidate, bool, bool)? onCompareSelect,
+  Widget Function(String)? saveAction,
 }) {
   final List<String> ordered = List<String>.from(paths)
     ..sort((String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -105,6 +130,7 @@ List<Widget> _nestedDifferenceRows({
         compareSelection: compareSelection,
         manualCompareAction: manualCompareAction,
         onCompareSelect: onCompareSelect,
+        extraTrailing: saveAction?.call(filePath),
         hoverHighlight: false,
       ),
   ];
@@ -125,6 +151,8 @@ class _ScenePkgInspector extends StatefulWidget {
     this.leftOnlyLabel,
     this.rightOnlyLabel,
     this.selection,
+    this.confirmedSession,
+    this.fullView = false,
   });
 
   final String wallpaperName;
@@ -140,6 +168,8 @@ class _ScenePkgInspector extends StatefulWidget {
   final String? leftOnlyLabel;
   final String? rightOnlyLabel;
   final BackupUpdateSelection? selection;
+  final ScenePkgInspectionSession? confirmedSession;
+  final bool fullView;
 
   @override
   State<_ScenePkgInspector> createState() => _ScenePkgInspectorState();
@@ -148,8 +178,111 @@ class _ScenePkgInspector extends StatefulWidget {
 class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
   Future<ScenePkgInspectionResult?>? _inspection;
   String? _preflightError;
-  final ScenePkgInspectionSession _session = ScenePkgInspectionSession();
+  late final ScenePkgInspectionSession _session =
+      widget.confirmedSession ?? ScenePkgInspectionSession();
   final FileTreeCompareSelection _manualCompare = FileTreeCompareSelection();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.confirmedSession != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_startInspection());
+      });
+    }
+  }
+
+  Future<void> _saveExtracted(
+    ScenePkgInspectionResult result,
+    String filePath,
+    bool live,
+  ) async {
+    try {
+      final FileSaveLocation? location = await getSaveLocation(
+        suggestedName: path.basename(filePath),
+      );
+      if (location == null || !mounted) return;
+      await _session.saveExtractedFile(
+        result: result,
+        relativePath: filePath,
+        live: live,
+        destination: location.path,
+        liveFolder: widget.leftFolder,
+        backupFolder: widget.rightFolder,
+      );
+      if (!mounted) return;
+      showNoticeToast(tr(AppI10n.backupDetailSaveExtractedSuccess));
+    } on ScenePkgSaveException catch (error) {
+      if (!mounted) return;
+      final String message = switch (error.reason) {
+        ScenePkgSaveFailure.invalidSource => tr(
+          AppI10n.backupDetailSaveExtractedInvalidSource,
+        ),
+        ScenePkgSaveFailure.protectedDestination => tr(
+          AppI10n.backupDetailSaveExtractedProtected,
+        ),
+        ScenePkgSaveFailure.exists => tr(
+          AppI10n.backupDetailSaveExtractedExists,
+        ),
+        ScenePkgSaveFailure.writeFailed =>
+          error.possiblePartialFile
+              ? tr(AppI10n.backupDetailSaveExtractedPartial)
+              : tr(AppI10n.backupDetailSaveExtractedFailed),
+      };
+      showErrorToast(message);
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(tr(AppI10n.backupDetailSaveExtractedFailed));
+    }
+  }
+
+  Widget _saveAction(
+    ScenePkgInspectionResult result,
+    String filePath, {
+    required bool live,
+    bool both = false,
+  }) => both
+      ? PopupMenuButton<bool>(
+          key: ValueKey<String>('backup-package-save-$filePath'),
+          tooltip: tr(AppI10n.backupDetailSaveExtractedAction),
+          icon: const Icon(Icons.save_alt_rounded, size: 18),
+          padding: EdgeInsets.zero,
+          onSelected: (bool selectedLive) =>
+              _saveExtracted(result, filePath, selectedLive),
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<bool>>[
+            PopupMenuItem<bool>(
+              value: true,
+              child: Text(
+                tr(
+                  AppI10n.backupDetailSaveExtractedCopy,
+                  namedArgs: <String, String>{
+                    'source':
+                        widget.leftLabel ?? path.basename(widget.leftFolder),
+                  },
+                ),
+              ),
+            ),
+            PopupMenuItem<bool>(
+              value: false,
+              child: Text(
+                tr(
+                  AppI10n.backupDetailSaveExtractedCopy,
+                  namedArgs: <String, String>{
+                    'source':
+                        widget.rightLabel ?? path.basename(widget.rightFolder),
+                  },
+                ),
+              ),
+            ),
+          ],
+        )
+      : FileTreeAction(
+          key: ValueKey<String>('backup-package-save-$filePath'),
+          tooltip: tr(AppI10n.backupDetailSaveExtractedAction),
+          icon: Icons.save_alt_rounded,
+          foreground: widget.foreground,
+          onPressed: () => _saveExtracted(result, filePath, live),
+        );
 
   @override
   void dispose() {
@@ -159,25 +292,11 @@ class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
 
   Future<void> _confirmInspection() async {
     if (_inspection != null) return;
-    await _session.prepareTemporaryBase();
-    final String tempBasePath = _session.temporaryBasePath;
-    final bool confirmed = await showConfirmDialog(
-      title: tr(AppI10n.backupDetailInspectPackageTitle),
-      message: tr(AppI10n.backupDetailInspectPackageMessage),
-      confirmLabel: tr(AppI10n.backupDetailInspectPackageAction),
-      destructive: false,
-      pathDetails: <ConfirmPathDetail>[
-        (
-          label: tr(AppI10n.backupDetailTemporaryFolder),
-          path: tempBasePath,
-          copyTooltip: tr(AppI10n.backupDetailCopyTemporaryFolder),
-          openTooltip: tr(AppI10n.backupDetailOpenTemporaryFolder),
-          onOpen: () => browserFolder(tempBasePath),
-        ),
-      ],
-    );
-    if (!confirmed || !mounted) return;
+    if (!await _confirmPackageInspection(context, _session) || !mounted) return;
+    await _startInspection();
+  }
 
+  Future<void> _startInspection() async {
     final String? tool = widget.rePKGPath;
     if (tool == null || !await File(tool).exists()) {
       if (!mounted) return;
@@ -233,6 +352,105 @@ class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.fullView) return _buildInspectionTree(context);
+    return FutureBuilder<ScenePkgInspectionResult?>(
+      future: _inspection,
+      builder: (context, snapshot) {
+        final ScenePkgInspectionResult? result = snapshot.data;
+        if (result == null) {
+          return FileTreeScrollView(
+            foreground: widget.foreground,
+            child: _buildInspectionTree(context),
+          );
+        }
+        final candidates = <FileTreeCompareCandidate>[
+          ..._manualCompareCandidates(
+            paths: result.changes.onlyLive,
+            side: 'live',
+            folder: result.leftFolder,
+            label: widget.leftLabel,
+          ),
+          ..._manualCompareCandidates(
+            paths: result.changes.onlyBackup,
+            side: 'backup',
+            folder: result.rightFolder,
+            label: widget.rightLabel,
+          ),
+        ];
+        return _PairedUpdateTree(
+          configuration: UpdateFileChanges(
+            wallpaperName: widget.wallpaperName,
+            liveFolder: result.leftFolder,
+            backupFolder: result.rightFolder,
+            sourceLabel: widget.leftLabel ?? path.basename(widget.leftFolder),
+            destinationLabel:
+                widget.rightLabel ?? path.basename(widget.rightFolder),
+            rePKGPath: null,
+            foreground: widget.foreground,
+            selection: null,
+          ),
+          changes: result.changes,
+          inspectPackages: false,
+          fileAction: (file, live) => _saveAction(result, file, live: live),
+          manualSelection: _manualCompare,
+          manualAction: _selectedManualCompareAction(
+            candidates: candidates,
+            selectedIds: _manualCompare.selected,
+            foreground: widget.foreground,
+          ),
+          onCompareSelect: (candidate, control, shift) =>
+              _selectManualCompare(candidates, candidate, control, shift),
+          toolbar: Column(
+            children: <Widget>[
+              Text(tr(AppI10n.backupDetailRepackingComingSoon)),
+              Wrap(
+                spacing: 12,
+                children: <Widget>[
+                  if (result.changes.modified.isNotEmpty)
+                    Text(
+                      '${tr(AppI10n.backupDetailModified)} (${result.changes.modified.length})',
+                    ),
+                  if (result.changes.onlyLive.isNotEmpty)
+                    Text(
+                      '${tr(AppI10n.backupDetailAddedFiles)} (${result.changes.onlyLive.length})',
+                    ),
+                  if (result.changes.onlyBackup.isNotEmpty)
+                    Text(
+                      '${tr(AppI10n.backupDetailRemovedFiles)} (${result.changes.onlyBackup.length})',
+                    ),
+                  if (result.changes.modified.isEmpty &&
+                      result.changes.onlyLive.isEmpty &&
+                      result.changes.onlyBackup.isEmpty)
+                    Text(tr(AppI10n.backupDetailInspectPackageNoDifferences)),
+                ],
+              ),
+              _temporaryFolderRow(result),
+              if (candidates.length >= 2)
+                FileTreeCompareBar(
+                  keyBase: 'backup-package-manual-compare',
+                  candidates: candidates,
+                  selection: _manualCompare,
+                  foreground: widget.foreground,
+                  label: tr(AppI10n.backupDetailCompareFiles),
+                  clearTooltip: tr(AppI10n.backupDetailDeselectAll),
+                  actionBuilder: (key, first, second) => _fileCompareAction(
+                    key: key,
+                    firstLabel: first.label,
+                    firstPath: first.path,
+                    secondLabel: second.label,
+                    secondPath: second.path,
+                    foreground: widget.foreground,
+                  ),
+                  onClear: () => setState(_manualCompare.clear),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInspectionTree(BuildContext context) {
     final Future<ScenePkgInspectionResult?>? inspection = _inspection;
     final String firstFolder = widget.directionalVisual
         ? widget.rightFolder
@@ -472,6 +690,12 @@ class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
                             ? widget.selection
                             : null,
                         packagePath: widget.filePath,
+                        saveAction: (String filePath) => _saveAction(
+                          result,
+                          filePath,
+                          live: true,
+                          both: true,
+                        ),
                       ),
                       ..._nestedDifferenceRows(
                         title:
@@ -486,6 +710,8 @@ class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
                             ? widget.selection
                             : null,
                         packagePath: widget.filePath,
+                        saveAction: (String filePath) =>
+                            _saveAction(result, filePath, live: true),
                         compareSide: 'package-left',
                         compareSelection: _manualCompare.selected,
                         manualCompareAction: manualCompareAction,
@@ -514,6 +740,8 @@ class _ScenePkgInspectorState extends State<_ScenePkgInspector> {
                             ? widget.selection
                             : null,
                         packagePath: widget.filePath,
+                        saveAction: (String filePath) =>
+                            _saveAction(result, filePath, live: false),
                         deletion: widget.directionalVisual,
                         compareSide: 'package-right',
                         compareSelection: _manualCompare.selected,

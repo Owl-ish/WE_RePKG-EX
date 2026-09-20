@@ -87,8 +87,6 @@ class BackupDetailExpandPrompt extends StatelessWidget {
                     ),
                     Text(
                       subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: foreground.withValues(alpha: .68),
                         fontSize: 11,

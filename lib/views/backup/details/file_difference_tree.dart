@@ -566,7 +566,6 @@ class _ChangedFileGroup extends StatelessWidget {
     this.leftOnlyLabel,
     this.rightOnlyLabel,
     this.selection,
-    this.groupChoiceKey,
   });
 
   final String title;
@@ -583,7 +582,6 @@ class _ChangedFileGroup extends StatelessWidget {
   final String? leftOnlyLabel;
   final String? rightOnlyLabel;
   final BackupUpdateSelection? selection;
-  final String? groupChoiceKey;
 
   @override
   Widget build(BuildContext context) {
@@ -598,21 +596,11 @@ class _ChangedFileGroup extends StatelessWidget {
     final String? secondLabel = directionalVisual
         ? _newImageLabel(leftLabel)
         : rightLabel;
-    final BackupUpdateSelection? activeSelection = selection;
-    final String? activeGroupChoiceKey = groupChoiceKey;
     return FileTreeGroup(
       title: title,
       count: ordered.length,
       accent: colour,
       foreground: foreground,
-      trailing: activeSelection == null || activeGroupChoiceKey == null
-          ? null
-          : _copyGroupChoice(
-              activeSelection,
-              ordered,
-              foreground,
-              keyBase: activeGroupChoiceKey,
-            ),
       children: <Widget>[
         for (final String filePath in ordered)
           if (_pathNamed(filePath, WallpaperFiles.packedScene) &&

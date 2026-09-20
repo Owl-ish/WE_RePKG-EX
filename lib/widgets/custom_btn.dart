@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:we_repkg/config/theme_extensions.dart';
 
 class CustomBtn extends StatelessWidget {
-  const CustomBtn({super.key, required this.label, this.onPressed})
+  const CustomBtn({super.key, required this.label, this.onPressed, this.icon})
     : _variant = _CustomBtnVariant.primary;
 
-  const CustomBtn.destructive({super.key, required this.label, this.onPressed})
-    : _variant = _CustomBtnVariant.destructive;
+  const CustomBtn.destructive({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.icon,
+  }) : _variant = _CustomBtnVariant.destructive;
 
+  final IconData? icon;
   final String label;
   final VoidCallback? onPressed;
   final _CustomBtnVariant _variant;
@@ -48,10 +53,22 @@ class CustomBtn extends StatelessWidget {
       // fixed heights these sit at.
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        child: Text(
-          label,
-          maxLines: 1,
-          style: TextStyle(fontSize: 14, fontFamily: 'Microsoft YaHei'),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              label,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 14,
+                fontFamily: 'Microsoft YaHei',
+              ),
+            ),
+          ],
         ),
       ),
     );

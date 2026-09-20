@@ -17,6 +17,7 @@ class _JsonFileDiff extends StatefulWidget {
     required this.foreground,
     this.subtitle,
     this.choice,
+    this.extraTrailing,
     this.hoverHighlight = true,
   });
 
@@ -30,6 +31,7 @@ class _JsonFileDiff extends StatefulWidget {
   final Color foreground;
   final String? subtitle;
   final FileTreeRowChoice? choice;
+  final Widget? extraTrailing;
   final bool hoverHighlight;
 
   @override
@@ -110,6 +112,7 @@ class _JsonFileDiffState extends State<_JsonFileDiff> {
             ),
           ],
           compareAction,
+          if (widget.extraTrailing case final Widget action) action,
         ],
       ),
       choice: widget.choice,
@@ -226,6 +229,7 @@ Widget _differenceFileEntry({
   bool directional = false,
   String? subtitle,
   FileTreeRowChoice? choice,
+  Widget? extraTrailing,
   FileTreeCompareCandidate? compareCandidate,
   Set<String> compareSelection = const <String>{},
   FileTreeCompareAction? manualCompareAction,
@@ -245,6 +249,7 @@ Widget _differenceFileEntry({
       foreground: foreground,
       subtitle: subtitle,
       choice: choice,
+      extraTrailing: extraTrailing,
       hoverHighlight: hoverHighlight,
     );
   }
@@ -260,6 +265,7 @@ Widget _differenceFileEntry({
     directional: directional,
     subtitle: subtitle,
     choice: choice,
+    extraTrailing: extraTrailing,
     compareCandidate: compareCandidate,
     compareSelection: compareSelection,
     manualCompareAction: manualCompareAction,
@@ -300,11 +306,15 @@ Widget _differenceFileRow({
   bool directional = false,
   String? subtitle,
   FileTreeRowChoice? choice,
+  Widget? extraTrailing,
   FileTreeCompareCandidate? compareCandidate,
   Set<String> compareSelection = const <String>{},
   FileTreeCompareAction? manualCompareAction,
   void Function(FileTreeCompareCandidate, bool, bool)? onCompareSelect,
   bool hoverHighlight = true,
+  String? displayLabel,
+  VoidCallback? onOpenDetails,
+  FileTreeCompareAction? pairedCompareAction,
 }) {
   final bool image = isPreviewableImagePath(filePath);
   final bool hasFirst = firstFolder != null && firstLabel != null;
@@ -366,8 +376,8 @@ Widget _differenceFileRow({
       compareSelection.contains(compareCandidate.id) &&
       manualCompareAction != null;
   final List<FileTreeContextAction> contextActions = <FileTreeContextAction>[
-    if (directCompareAction != null)
-      _compareContextAction(directCompareAction)
+    if (pairedCompareAction ?? directCompareAction case final action?)
+      _compareContextAction(action)
     else if (compareCandidate != null)
       FileTreeContextAction(
         label: tr(AppI10n.backupDetailCompareFiles),
@@ -383,7 +393,9 @@ Widget _differenceFileRow({
     depth: depth,
     icon: image ? Icons.image_outlined : Icons.insert_drive_file_outlined,
     iconColor: colour,
-    label: _treePath(filePath),
+    label: displayLabel ?? _treePath(filePath),
+    disclosure: onOpenDetails == null ? null : Icons.open_in_full_rounded,
+    tooltip: onOpenDetails == null ? null : tr(AppI10n.homeDetails),
     key: compareCandidate == null
         ? null
         : ValueKey<String>('backup-manual-compare-${compareCandidate.id}'),
@@ -396,7 +408,13 @@ Widget _differenceFileRow({
         ? null
         : (bool control, bool shift) =>
               onCompareSelect(compareCandidate, control, shift),
-    trailing: trailing,
+    onTap: compareCandidate == null ? onOpenDetails : null,
+    trailing: extraTrailing == null
+        ? trailing
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[?trailing, extraTrailing],
+          ),
     choice: choice,
     hoverHighlight: hoverHighlight,
     contextActions: contextActions,

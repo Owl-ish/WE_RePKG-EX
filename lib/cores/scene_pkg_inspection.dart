@@ -29,6 +29,21 @@ class ScenePkgInspectionException implements Exception {
   const ScenePkgInspectionException();
 }
 
+/// A selected extraction cannot be saved without changing another file.
+class ScenePkgSaveException implements Exception {
+  const ScenePkgSaveException(this.reason, {this.possiblePartialFile = false});
+
+  final ScenePkgSaveFailure reason;
+  final bool possiblePartialFile;
+}
+
+enum ScenePkgSaveFailure {
+  invalidSource,
+  protectedDestination,
+  exists,
+  writeFailed,
+}
+
 const Duration _staleSessionAge = Duration(days: 1);
 
 /// Removes abandoned extraction sessions without touching recently active ones.
@@ -173,6 +188,34 @@ class ScenePkgInspectionSession {
     }
   }
 
+  /// Saves one inspected file as a new, user-chosen copy outside either library.
+  /// Existing destinations are never replaced. A failed write removes its
+  /// incomplete copy when possible and reports if cleanup could not finish.
+  Future<void> saveExtractedFile({
+    required ScenePkgInspectionResult result,
+    required String relativePath,
+    required bool live,
+    required String destination,
+    required String liveFolder,
+    required String backupFolder,
+  }) async {
+    final Directory? retained = _retainedTempRoot;
+    if (_disposed ||
+        retained == null ||
+        !path.equals(retained.path, result.rootFolder) ||
+        path.isAbsolute(relativePath)) {
+      throw const ScenePkgSaveException(ScenePkgSaveFailure.invalidSource);
+    }
+    await saveScenePkgExtractedFile(
+      result: result,
+      relativePath: relativePath,
+      live: live,
+      destination: destination,
+      liveFolder: liveFolder,
+      backupFolder: backupFolder,
+    );
+  }
+
   /// Cancels active work and removes any extraction retained for previews.
   Future<void> dispose() async {
     _disposed = true;
@@ -180,6 +223,93 @@ class ScenePkgInspectionSession {
     final Directory? root = _retainedTempRoot;
     _retainedTempRoot = null;
     if (root != null) await _deleteTempDirectory(root);
+  }
+}
+
+/// Saves a file from an already-extracted comparison without overwriting files.
+/// The caller must keep the extraction alive until this operation completes.
+Future<void> saveScenePkgExtractedFile({
+  required ScenePkgInspectionResult result,
+  required String relativePath,
+  required bool live,
+  required String destination,
+  required String liveFolder,
+  required String backupFolder,
+}) async {
+  if (path.isAbsolute(relativePath)) {
+    throw const ScenePkgSaveException(ScenePkgSaveFailure.invalidSource);
+  }
+  final String extractedRoot = live ? result.leftFolder : result.rightFolder;
+  final String sourcePath = path.normalize(
+    path.join(extractedRoot, relativePath),
+  );
+  if (!path.isWithin(extractedRoot, sourcePath) ||
+      await FileSystemEntity.type(sourcePath, followLinks: false) !=
+          FileSystemEntityType.file) {
+    throw const ScenePkgSaveException(ScenePkgSaveFailure.invalidSource);
+  }
+  final String resolvedSession = await Directory(
+    result.rootFolder,
+  ).resolveSymbolicLinks();
+  final String resolvedRoot = await Directory(
+    extractedRoot,
+  ).resolveSymbolicLinks();
+  final String resolvedSource = await File(sourcePath).resolveSymbolicLinks();
+  if (!path.isWithin(resolvedSession, resolvedRoot) ||
+      !path.isWithin(resolvedRoot, resolvedSource)) {
+    throw const ScenePkgSaveException(ScenePkgSaveFailure.invalidSource);
+  }
+
+  final String destinationPath = path.normalize(path.absolute(destination));
+  final String destinationParent = await Directory(
+    path.dirname(destinationPath),
+  ).resolveSymbolicLinks();
+  final String resolvedDestination = path.join(
+    destinationParent,
+    path.basename(destinationPath),
+  );
+  for (final String library in <String>[
+    liveFolder,
+    backupFolder,
+    result.rootFolder,
+  ]) {
+    final String absoluteLibrary = path.normalize(path.absolute(library));
+    if (path.equals(absoluteLibrary, destinationPath) ||
+        path.isWithin(absoluteLibrary, destinationPath)) {
+      throw const ScenePkgSaveException(
+        ScenePkgSaveFailure.protectedDestination,
+      );
+    }
+    final String resolvedLibrary = await Directory(
+      library,
+    ).resolveSymbolicLinks();
+    if (path.equals(resolvedLibrary, resolvedDestination) ||
+        path.isWithin(resolvedLibrary, resolvedDestination)) {
+      throw const ScenePkgSaveException(
+        ScenePkgSaveFailure.protectedDestination,
+      );
+    }
+  }
+
+  final File output = File(destinationPath);
+  try {
+    await output.create(exclusive: true);
+  } on PathExistsException {
+    throw const ScenePkgSaveException(ScenePkgSaveFailure.exists);
+  }
+  try {
+    await File(sourcePath).openRead().pipe(output.openWrite());
+  } catch (_) {
+    bool possiblePartialFile = false;
+    try {
+      await output.delete();
+    } on FileSystemException {
+      possiblePartialFile = true;
+    }
+    throw ScenePkgSaveException(
+      ScenePkgSaveFailure.writeFailed,
+      possiblePartialFile: possiblePartialFile,
+    );
   }
 }
 
