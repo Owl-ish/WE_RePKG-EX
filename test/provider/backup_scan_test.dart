@@ -284,4 +284,237 @@ void main() {
       everyElement(BackupState.synced),
     );
   });
+
+  test('resolving one reconcile card keeps the cached scan', () async {
+    int scans = 0;
+    final BackupScan scan = (
+      cards: <BackupCard, BackupState>{},
+      updates: <BackupCard, BackupUpdatePlan>{},
+      ignoredUpdates: <BackupCard>{},
+      presence: {},
+      junk: {},
+      reconcile: const <ReconcileEntry>[
+        ReconcileEntry(
+          name: 'double-live',
+          reason: BackupReconcileReason.duplicateLiveCopies,
+          states: <WallpaperLibrary, BackupState>{
+            WallpaperLibrary.workshop: BackupState.synced,
+            WallpaperLibrary.myProjects: BackupState.synced,
+          },
+          backupWorkshop: false,
+          backupMyProjects: false,
+        ),
+      ],
+      acfRead: true,
+      missing: {},
+    );
+    final ProviderContainer container = ProviderContainer(
+      overrides: [
+        backupScanProvider.overrideWith((Ref ref) async {
+          scans++;
+          return scan;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(backupScanProvider.future);
+    expect(container.read(backupStateFilterProvider).reconcile, isTrue);
+
+    container.read(backupResolvedIssuesProvider.notifier).resolveReconcile(
+      scan,
+      'double-live',
+      <BackupReconcileReason>{BackupReconcileReason.duplicateLiveCopies},
+    );
+
+    expect(container.read(backupStateFilterProvider).reconcile, isFalse);
+    expect(
+      visibleBackupReconcileEntries(
+        scan,
+        container.read(backupResolvedIssuesProvider),
+      ),
+      isEmpty,
+    );
+    await container.read(backupScanProvider.future);
+    expect(scans, 1);
+  });
+
+  test('completion removes only the finished Update or Sync action', () {
+    const BackupCard card = BackupCard(WallpaperLibrary.workshop, 'combined');
+    const BackupUpdatePlan plan = BackupUpdatePlan(
+      updateContent: true,
+      sync: BackupSyncPlan(
+        kind: BackupSyncKind.relocate,
+        from: WallpaperLibrary.myProjects,
+        to: WallpaperLibrary.workshop,
+      ),
+    );
+    final BackupScan scan = (
+      cards: <BackupCard, BackupState>{card: BackupState.updateAvailable},
+      updates: <BackupCard, BackupUpdatePlan>{card: plan},
+      ignoredUpdates: <BackupCard>{},
+      presence: {},
+      junk: {},
+      reconcile: <ReconcileEntry>[],
+      acfRead: true,
+      missing: {},
+    );
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+    final BackupResolvedIssues resolved = container.read(
+      backupResolvedIssuesProvider.notifier,
+    );
+
+    resolved.completeCards(scan, BackupAction.update, <BackupCard>[card]);
+
+    expect(
+      visibleBackupCardStates(
+        scan,
+        container.read(backupResolvedIssuesProvider),
+      ),
+      {card: BackupState.updateAvailable},
+    );
+    expect(
+      visibleBackupUpdatePlan(
+        scan,
+        container.read(backupResolvedIssuesProvider),
+        card,
+      ),
+      BackupUpdatePlan(sync: plan.sync),
+    );
+
+    resolved.completeCards(scan, BackupAction.sync, <BackupCard>[card]);
+
+    expect(
+      visibleBackupCardStates(
+        scan,
+        container.read(backupResolvedIssuesProvider),
+      ),
+      isEmpty,
+    );
+  });
+
+  test('reconcile completion preserves other reasons for the wallpaper', () {
+    final BackupScan scan = (
+      cards: <BackupCard, BackupState>{},
+      updates: <BackupCard, BackupUpdatePlan>{},
+      ignoredUpdates: <BackupCard>{},
+      presence: {},
+      junk: {},
+      reconcile: const <ReconcileEntry>[
+        ReconcileEntry(
+          name: 'multi-issue',
+          reason: BackupReconcileReason.duplicateLiveCopies,
+          additionalReasons: <BackupReconcileReason>{
+            BackupReconcileReason.conflictingBackupCopies,
+          },
+          states: <WallpaperLibrary, BackupState>{},
+          backupWorkshop: true,
+          backupMyProjects: true,
+        ),
+      ],
+      acfRead: true,
+      missing: {},
+    );
+    final ProviderContainer container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    container.read(backupResolvedIssuesProvider.notifier).resolveReconcile(
+      scan,
+      'multi-issue',
+      <BackupReconcileReason>{BackupReconcileReason.duplicateLiveCopies},
+    );
+
+    final List<ReconcileEntry> visible = visibleBackupReconcileEntries(
+      scan,
+      container.read(backupResolvedIssuesProvider),
+    );
+    expect(visible, hasLength(1));
+    expect(visible.single.reasons, <BackupReconcileReason>{
+      BackupReconcileReason.conflictingBackupCopies,
+    });
+  });
+
+  test(
+    'ignored reconcile reason moves between active and ignored views without rescanning',
+    () async {
+      int scans = 0;
+      const ReconcileEntry entry = ReconcileEntry(
+        name: 'double-live',
+        reason: BackupReconcileReason.duplicateLiveCopies,
+        states: <WallpaperLibrary, BackupState>{
+          WallpaperLibrary.workshop: BackupState.synced,
+          WallpaperLibrary.myProjects: BackupState.synced,
+        },
+        backupWorkshop: false,
+        backupMyProjects: false,
+      );
+      final BackupScan scan = (
+        cards: <BackupCard, BackupState>{},
+        updates: <BackupCard, BackupUpdatePlan>{},
+        ignoredUpdates: <BackupCard>{},
+        presence: {},
+        junk: {},
+        reconcile: const <ReconcileEntry>[entry],
+        acfRead: true,
+        missing: {},
+      );
+      final ProviderContainer container = ProviderContainer(
+        overrides: [
+          backupScanProvider.overrideWith((Ref ref) async {
+            scans++;
+            return scan;
+          }),
+          backupReconcileTilesProvider.overrideWith(
+            (Ref ref) async => const <ReconcileTile>[
+              (entry: entry, face: null),
+            ],
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(backupScanProvider.future);
+      await container.read(backupReconcileTilesProvider.future);
+
+      container.read(backupResolvedIssuesProvider.notifier).ignoreReconcile(
+        scan,
+        entry.name,
+        <BackupReconcileReason>{BackupReconcileReason.duplicateLiveCopies},
+      );
+      container.read(backupStateFilterProvider.notifier).showReconcile();
+      expect(
+        container.read(backupVisibleReconcileTilesProvider).requireValue,
+        isEmpty,
+      );
+      container.read(backupStateFilterProvider.notifier).showIgnored();
+      final List<ReconcileTile> ignored = container
+          .read(backupVisibleReconcileTilesProvider)
+          .requireValue;
+      expect(ignored, hasLength(1));
+      expect(ignored.single.entry.activeReasons, isEmpty);
+      expect(ignored.single.entry.ignoredReasons, <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+      });
+
+      container.read(backupResolvedIssuesProvider.notifier).showReconcile(
+        scan,
+        entry.name,
+        <BackupReconcileReason>{BackupReconcileReason.duplicateLiveCopies},
+      );
+      container.read(backupStateFilterProvider.notifier).showIgnored();
+      expect(
+        container.read(backupVisibleReconcileTilesProvider).requireValue,
+        isEmpty,
+      );
+      container.read(backupStateFilterProvider.notifier).showReconcile();
+      final List<ReconcileTile> restored = container
+          .read(backupVisibleReconcileTilesProvider)
+          .requireValue;
+      expect(restored, hasLength(1));
+      expect(restored.single.entry.activeReasons, <BackupReconcileReason>{
+        BackupReconcileReason.duplicateLiveCopies,
+      });
+      expect(scans, 1);
+    },
+  );
 }

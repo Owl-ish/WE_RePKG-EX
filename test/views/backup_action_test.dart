@@ -84,7 +84,7 @@ void main() {
   testWidgets('Cancel leaves the backup action untouched', (tester) async {
     final BuildContext context = await show(tester);
     int calls = 0;
-    final Future<void> action = applyBackupAction(
+    final Future<bool> action = applyBackupAction(
       context,
       BackupAction.backUp,
       const <BackupCard>[BackupCard(WallpaperLibrary.workshop, 'demo')],
@@ -116,7 +116,7 @@ void main() {
       ),
       keptBackupFiles: const <String>{'legacy.txt'},
     );
-    final Future<void> action = applyBackupAction(
+    final Future<bool> action = applyBackupAction(
       context,
       BackupAction.update,
       const <BackupCard>[BackupCard(WallpaperLibrary.workshop, 'demo')],
@@ -141,7 +141,7 @@ void main() {
   ) async {
     final BuildContext context = await show(tester);
     final List<List<BackupCard>> received = <List<BackupCard>>[];
-    final Future<void> action = applyBackupAction(
+    final Future<bool> action = applyBackupAction(
       context,
       BackupAction.restore,
       const <BackupCard>[

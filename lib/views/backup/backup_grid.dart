@@ -602,6 +602,9 @@ class _GridState extends ConsumerState<_Grid> {
     final String? workshop = ref.watch(wallpaperPathProvider);
     final String? myProjects = ref.watch(myProjectsLibraryProvider);
     final BackupScan scan = ref.watch(backupScanProvider).requireValue;
+    final BackupResolvedIssuesState resolved = ref.watch(
+      backupResolvedIssuesProvider,
+    );
     final Map<String, ({bool live, bool backup})> presence = scan.presence;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
     late final Widget grid;
@@ -646,7 +649,7 @@ class _GridState extends ConsumerState<_Grid> {
               key: ValueKey<String>(tile.card.id),
               width: width,
               tile: tile,
-              updatePlan: scan.updates[tile.card],
+              updatePlan: visibleBackupUpdatePlan(scan, resolved, tile.card),
               backupRoot: backupRoot,
               folders: cardFolders(
                 library: tile.card.library,

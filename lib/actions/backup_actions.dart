@@ -21,14 +21,14 @@ typedef BackupActionRunner =
       List<BackupCard> cards,
     );
 
-Future<void> applyBackupAction(
+Future<bool> applyBackupAction(
   BuildContext context,
   BackupAction action,
   List<BackupCard> cards, {
   BackupActionRunner? runAction,
   BackupSelectiveUpdatePlan? selectiveUpdate,
 }) async {
-  if (cards.isEmpty) return;
+  if (cards.isEmpty) return false;
   final ProviderContainer container = ProviderScope.containerOf(
     context,
     listen: false,
@@ -57,12 +57,13 @@ Future<void> applyBackupAction(
           ]
         : const <ConfirmDetail>[],
   );
-  if (!confirmed) return;
+  if (!confirmed) return false;
 
   final CancelFunc close = BotToast.showLoading();
   final List<String> errors = <String>[];
   int completed = 0;
   bool mutated = false;
+  final Set<BackupCard> changedCards = <BackupCard>{};
   try {
     for (final List<BackupCard> target in targets) {
       final BackupActionResult result = runAction != null
@@ -74,6 +75,7 @@ Future<void> applyBackupAction(
               selectiveUpdate: selectiveUpdate,
             );
       mutated = mutated || result.changed;
+      if (result.changed) changedCards.addAll(target);
       if (result.error != null) {
         errors.add('${target.first.name}: ${result.error}');
       } else if (result.changed) {
@@ -84,15 +86,14 @@ Future<void> applyBackupAction(
     close();
   }
   if (mutated) {
-    container
-        .read(backupSelectionProvider.notifier)
-        .setExactly(const <String>{});
-    container.invalidate(backupScanProvider);
-    container.invalidate(backupTilesProvider);
-    if (action != BackupAction.showUpdateAgain &&
-        action != BackupAction.ignoreUpdate) {
-      container.invalidate(integrityScanProvider);
-    }
+    _completeCachedIssues(
+      container,
+      action: action,
+      cards: changedCards,
+      refreshIntegrity:
+          action != BackupAction.showUpdateAgain &&
+          action != BackupAction.ignoreUpdate,
+    );
     if (action == BackupAction.restore &&
         container.read(currentLibraryProvider) == WallpaperLibrary.myProjects) {
       container.read(wallpaperListProvider.notifier).clear();
@@ -110,6 +111,7 @@ Future<void> applyBackupAction(
     }
   }
   if (errors.isNotEmpty) showErrorToast(errors.join('\n'));
+  return mutated;
 }
 
 Future<BackupActionResult> _runOne(
@@ -157,7 +159,7 @@ Future<BackupActionResult> _runOne(
   ),
 };
 
-Future<void> ignoreReconcileDetections(
+Future<bool> ignoreReconcileDetections(
   BuildContext context,
   ReconcileEntry entry,
 ) async {
@@ -168,7 +170,7 @@ Future<void> ignoreReconcileDetections(
             if (entry.issueFingerprints[reason] case final String fingerprint)
               reason: fingerprint,
       };
-  if (fingerprints.isEmpty) return;
+  if (fingerprints.isEmpty) return false;
   final bool confirmed = await showConfirmDialog(
     title: tr(AppI10n.backupActionIgnoreReconcileTitle),
     message: tr(AppI10n.backupActionIgnoreReconcileOne),
@@ -177,7 +179,7 @@ Future<void> ignoreReconcileDetections(
       (label: tr(AppI10n.backupActionWallpaper), value: entry.name),
     ],
   );
-  if (!confirmed || !context.mounted) return;
+  if (!confirmed || !context.mounted) return false;
   final ProviderContainer container = ProviderScope.containerOf(
     context,
     listen: false,
@@ -187,15 +189,18 @@ Future<void> ignoreReconcileDetections(
     fingerprints: fingerprints,
     backupRoot: container.read(backupRootProvider),
   );
-  if (!context.mounted) return;
-  _finishIgnoredMetadataAction(
+  if (!context.mounted) return false;
+  return _finishIgnoredMetadataAction(
     container,
     result,
     completed: fingerprints.length,
+    ignoredReconcileReasons: <String, Set<BackupReconcileReason>>{
+      entry.name: fingerprints.keys.toSet(),
+    },
   );
 }
 
-Future<void> showReconcileDetectionAgain(
+Future<bool> showReconcileDetectionAgain(
   BuildContext context,
   ReconcileEntry entry,
   BackupReconcileReason reason,
@@ -208,7 +213,7 @@ Future<void> showReconcileDetectionAgain(
       (label: tr(AppI10n.backupActionWallpaper), value: entry.name),
     ],
   );
-  if (!confirmed || !context.mounted) return;
+  if (!confirmed || !context.mounted) return false;
   final ProviderContainer container = ProviderScope.containerOf(
     context,
     listen: false,
@@ -218,19 +223,26 @@ Future<void> showReconcileDetectionAgain(
     reasons: <BackupReconcileReason>{reason},
     backupRoot: container.read(backupRootProvider),
   );
-  if (!context.mounted) return;
-  _finishIgnoredMetadataAction(container, result);
+  if (!context.mounted) return false;
+  return _finishIgnoredMetadataAction(
+    container,
+    result,
+    shownReconcileReasons: <String, Set<BackupReconcileReason>>{
+      entry.name: <BackupReconcileReason>{reason},
+    },
+  );
 }
 
-Future<void> showAllIgnoredDetections(
-  BuildContext context,
-  BackupScan scan,
-) async {
+Future<bool> showAllIgnoredDetections(
+  BuildContext context, {
+  required Set<BackupCard> ignoredUpdates,
+  required List<ReconcileEntry> reconcileEntries,
+}) async {
   final int count = ignoredDetectionCount(
-    updates: scan.ignoredUpdates,
-    reconcile: scan.reconcile,
+    updates: ignoredUpdates,
+    reconcile: reconcileEntries,
   );
-  if (count == 0) return;
+  if (count == 0) return false;
   final bool confirmed = await showConfirmDialog(
     title: tr(AppI10n.backupActionShowAgainTitle),
     message: tr(
@@ -239,40 +251,96 @@ Future<void> showAllIgnoredDetections(
     ),
     confirmLabel: tr(AppI10n.backupActionShowAgain),
   );
-  if (!confirmed || !context.mounted) return;
+  if (!confirmed || !context.mounted) return false;
   final ProviderContainer container = ProviderScope.containerOf(
     context,
     listen: false,
   );
   final BackupActionResult result = await showAllIgnoredIssues(
     backupRoot: container.read(backupRootProvider),
-    ignoredUpdates: scan.ignoredUpdates,
-    reconcileEntries: scan.reconcile,
+    ignoredUpdates: ignoredUpdates,
+    reconcileEntries: reconcileEntries,
   );
-  if (!context.mounted) return;
-  _finishIgnoredMetadataAction(container, result, completed: count);
+  if (!context.mounted) return false;
+  return _finishIgnoredMetadataAction(
+    container,
+    result,
+    completed: count,
+    action: BackupAction.showUpdateAgain,
+    cards: ignoredUpdates,
+    shownReconcileReasons: <String, Set<BackupReconcileReason>>{
+      for (final ReconcileEntry entry in reconcileEntries)
+        if (entry.ignoredReasons.isNotEmpty) entry.name: entry.ignoredReasons,
+    },
+  );
 }
 
-void _finishIgnoredMetadataAction(
+bool _finishIgnoredMetadataAction(
   ProviderContainer container,
   BackupActionResult result, {
   int completed = 1,
+  BackupAction? action,
+  Iterable<BackupCard> cards = const <BackupCard>[],
+  Map<String, Set<BackupReconcileReason>> ignoredReconcileReasons =
+      const <String, Set<BackupReconcileReason>>{},
+  Map<String, Set<BackupReconcileReason>> shownReconcileReasons =
+      const <String, Set<BackupReconcileReason>>{},
 }) {
   if (result.error case final String error) {
     showErrorToast(error);
-    return;
+    return false;
   }
-  if (!result.changed) return;
-  container.read(backupSelectionProvider.notifier).setExactly(const <String>{});
-  container.invalidate(backupScanProvider);
-  container.invalidate(backupTilesProvider);
-  container.invalidate(backupReconcileTilesProvider);
+  if (!result.changed) return false;
+  _completeCachedIssues(
+    container,
+    action: action,
+    cards: cards,
+    ignoredReconcileReasons: ignoredReconcileReasons,
+    shownReconcileReasons: shownReconcileReasons,
+  );
   showNoticeToast(
     tr(
       AppI10n.backupActionDone,
       namedArgs: <String, String>{'count': '$completed'},
     ),
   );
+  return true;
+}
+
+void _completeCachedIssues(
+  ProviderContainer container, {
+  BackupAction? action,
+  Iterable<BackupCard> cards = const <BackupCard>[],
+  Map<String, Set<BackupReconcileReason>> resolvedReconcileReasons =
+      const <String, Set<BackupReconcileReason>>{},
+  Map<String, Set<BackupReconcileReason>> ignoredReconcileReasons =
+      const <String, Set<BackupReconcileReason>>{},
+  Map<String, Set<BackupReconcileReason>> shownReconcileReasons =
+      const <String, Set<BackupReconcileReason>>{},
+  bool refreshIntegrity = false,
+}) {
+  container.read(backupSelectionProvider.notifier).setExactly(const <String>{});
+  if (container.read(backupScanProvider) case AsyncData<BackupScan>(
+    :final BackupScan value,
+  )) {
+    final BackupResolvedIssues resolved = container.read(
+      backupResolvedIssuesProvider.notifier,
+    );
+    if (action != null) resolved.completeCards(value, action, cards);
+    for (final MapEntry<String, Set<BackupReconcileReason>> entry
+        in resolvedReconcileReasons.entries) {
+      resolved.resolveReconcile(value, entry.key, entry.value);
+    }
+    for (final MapEntry<String, Set<BackupReconcileReason>> entry
+        in ignoredReconcileReasons.entries) {
+      resolved.ignoreReconcile(value, entry.key, entry.value);
+    }
+    for (final MapEntry<String, Set<BackupReconcileReason>> entry
+        in shownReconcileReasons.entries) {
+      resolved.showReconcile(value, entry.key, entry.value);
+    }
+  }
+  if (refreshIntegrity) container.invalidate(integrityScanProvider);
 }
 
 List<List<BackupCard>> _restoreTargets(List<BackupCard> cards) {

@@ -374,10 +374,25 @@ class _Loaded extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final BackupResolvedIssuesState resolved = ref.watch(
+      backupResolvedIssuesProvider,
+    );
+    final Map<BackupCard, BackupState> states = visibleBackupCardStates(
+      scan,
+      resolved,
+    );
+    final Set<BackupCard> ignoredUpdates = visibleBackupIgnoredUpdates(
+      scan,
+      resolved,
+    );
+    final List<ReconcileEntry> reconcile = visibleBackupReconcileEntries(
+      scan,
+      resolved,
+    );
     final totals = backupPillCounts(
-      states: scan.cards.values,
-      ignoredUpdates: scan.ignoredUpdates,
-      reconcile: scan.reconcile,
+      states: states.values,
+      ignoredUpdates: ignoredUpdates,
+      reconcile: reconcile,
     );
     final Map<BackupState, int> counts = totals.states;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
@@ -463,13 +478,12 @@ class _Loaded extends ConsumerWidget {
                     Builder(
                       builder: (context) {
                         final targets = [
-                          for (final entry in scan.updates.entries)
-                            if (scan.cards[entry.key] ==
-                                    BackupState.updateAvailable &&
-                                actionsForUpdatePlan(
-                                  entry.value,
-                                ).contains(kind))
-                              entry.key,
+                          for (final card in states.keys)
+                            if (states[card] == BackupState.updateAvailable)
+                              if (visibleBackupUpdatePlan(scan, resolved, card)
+                                  case final BackupUpdatePlan plan)
+                                if (actionsForUpdatePlan(plan).contains(kind))
+                                  card,
                         ];
                         return BackupBulkActionButton(
                           label: tr(
@@ -506,7 +520,7 @@ class _Loaded extends ConsumerWidget {
                     ? null
                     : () => applyBackupAction(context, action, <BackupCard>[
                         for (final MapEntry<BackupCard, BackupState> entry
-                            in scan.cards.entries)
+                            in states.entries)
                           if (entry.value == shown.state) entry.key,
                       ]),
               ),
@@ -524,7 +538,11 @@ class _Loaded extends ConsumerWidget {
                 ),
                 icon: backupActionIcon(BackupAction.showUpdateAgain),
                 colour: Theme.of(context).status.muted,
-                onPressed: () => showAllIgnoredDetections(context, scan),
+                onPressed: () => showAllIgnoredDetections(
+                  context,
+                  ignoredUpdates: ignoredUpdates,
+                  reconcileEntries: reconcile,
+                ),
               ),
             ),
           ),

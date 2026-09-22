@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show Notifier, NotifierProvider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/cores/backup.dart';
@@ -49,6 +51,306 @@ Future<BackupScan> backupScan(Ref ref) async {
   }
   return scan;
 }
+
+typedef BackupResolvedIssuesState = ({
+  BackupScan? scan,
+  Map<String, Set<BackupAction>> cardActions,
+  Map<String, bool> ignoredCards,
+  Map<String, Set<BackupReconcileReason>> resolvedReconcileReasons,
+  Map<String, Set<BackupReconcileReason>> ignoredReconcileReasons,
+  Map<String, Set<BackupReconcileReason>> shownReconcileReasons,
+});
+
+/// Action results applied to the current cached scan without rescanning disk.
+///
+/// The scan object scopes these names to one result. A later explicit scan uses
+/// a new object and automatically restores whatever that scan still detects.
+class BackupResolvedIssues extends Notifier<BackupResolvedIssuesState> {
+  @override
+  BackupResolvedIssuesState build() => (
+    scan: null,
+    cardActions: const <String, Set<BackupAction>>{},
+    ignoredCards: const <String, bool>{},
+    resolvedReconcileReasons: const <String, Set<BackupReconcileReason>>{},
+    ignoredReconcileReasons: const <String, Set<BackupReconcileReason>>{},
+    shownReconcileReasons: const <String, Set<BackupReconcileReason>>{},
+  );
+
+  void completeCards(
+    BackupScan scan,
+    BackupAction action,
+    Iterable<BackupCard> cards,
+  ) {
+    final bool sameScan = identical(state.scan, scan);
+    final Map<String, Set<BackupAction>> actions = <String, Set<BackupAction>>{
+      if (sameScan)
+        for (final MapEntry<String, Set<BackupAction>> entry
+            in state.cardActions.entries)
+          entry.key: <BackupAction>{...entry.value},
+    };
+    final Map<String, bool> ignored = <String, bool>{
+      if (sameScan) ...state.ignoredCards,
+    };
+    for (final BackupCard card in cards) {
+      final String id = card.id.toLowerCase();
+      final Set<BackupAction> completed = actions.putIfAbsent(
+        id,
+        () => <BackupAction>{},
+      );
+      if (action == BackupAction.showUpdateAgain) {
+        completed.remove(BackupAction.ignoreUpdate);
+        ignored[id] = false;
+      } else {
+        completed.add(action);
+        if (action == BackupAction.ignoreUpdate) ignored[id] = true;
+      }
+    }
+    state = (
+      scan: scan,
+      cardActions: actions,
+      ignoredCards: ignored,
+      resolvedReconcileReasons: sameScan
+          ? state.resolvedReconcileReasons
+          : const <String, Set<BackupReconcileReason>>{},
+      ignoredReconcileReasons: sameScan
+          ? state.ignoredReconcileReasons
+          : const <String, Set<BackupReconcileReason>>{},
+      shownReconcileReasons: sameScan
+          ? state.shownReconcileReasons
+          : const <String, Set<BackupReconcileReason>>{},
+    );
+  }
+
+  void resolveReconcile(
+    BackupScan scan,
+    String name,
+    Iterable<BackupReconcileReason> reasons,
+  ) => _changeReconcile(scan, name, resolved: reasons);
+
+  void ignoreReconcile(
+    BackupScan scan,
+    String name,
+    Iterable<BackupReconcileReason> reasons,
+  ) => _changeReconcile(scan, name, ignored: reasons);
+
+  void showReconcile(
+    BackupScan scan,
+    String name,
+    Iterable<BackupReconcileReason> reasons,
+  ) => _changeReconcile(scan, name, shown: reasons);
+
+  void _changeReconcile(
+    BackupScan scan,
+    String name, {
+    Iterable<BackupReconcileReason> resolved = const <BackupReconcileReason>[],
+    Iterable<BackupReconcileReason> ignored = const <BackupReconcileReason>[],
+    Iterable<BackupReconcileReason> shown = const <BackupReconcileReason>[],
+  }) {
+    final bool sameScan = identical(state.scan, scan);
+    Map<String, Set<BackupReconcileReason>> copy(
+      Map<String, Set<BackupReconcileReason>> source,
+    ) => <String, Set<BackupReconcileReason>>{
+      if (sameScan)
+        for (final MapEntry<String, Set<BackupReconcileReason>> entry
+            in source.entries)
+          entry.key: <BackupReconcileReason>{...entry.value},
+    };
+    final Map<String, Set<BackupReconcileReason>> resolvedReasons = copy(
+      state.resolvedReconcileReasons,
+    );
+    final Map<String, Set<BackupReconcileReason>> ignoredReasons = copy(
+      state.ignoredReconcileReasons,
+    );
+    final Map<String, Set<BackupReconcileReason>> shownReasons = copy(
+      state.shownReconcileReasons,
+    );
+    final String key = name.toLowerCase();
+    resolvedReasons
+        .putIfAbsent(key, () => <BackupReconcileReason>{})
+        .addAll(resolved);
+    ignoredReasons.putIfAbsent(key, () => <BackupReconcileReason>{})
+      ..addAll(ignored)
+      ..removeAll(shown);
+    shownReasons.putIfAbsent(key, () => <BackupReconcileReason>{})
+      ..addAll(shown)
+      ..removeAll(ignored);
+    state = (
+      scan: scan,
+      cardActions: sameScan
+          ? state.cardActions
+          : const <String, Set<BackupAction>>{},
+      ignoredCards: sameScan ? state.ignoredCards : const <String, bool>{},
+      resolvedReconcileReasons: resolvedReasons,
+      ignoredReconcileReasons: ignoredReasons,
+      shownReconcileReasons: shownReasons,
+    );
+  }
+}
+
+final NotifierProvider<BackupResolvedIssues, BackupResolvedIssuesState>
+backupResolvedIssuesProvider =
+    NotifierProvider<BackupResolvedIssues, BackupResolvedIssuesState>(
+      BackupResolvedIssues.new,
+    );
+
+List<ReconcileEntry> visibleBackupReconcileEntries(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+) {
+  if (!identical(resolved.scan, scan)) {
+    return scan.reconcile;
+  }
+  final List<ReconcileEntry> entries = <ReconcileEntry>[];
+  for (final ReconcileEntry entry in scan.reconcile) {
+    final String key = entry.name.toLowerCase();
+    final Set<BackupReconcileReason> reasons = entry.reasons.difference(
+      resolved.resolvedReconcileReasons[key] ?? const <BackupReconcileReason>{},
+    );
+    if (reasons.isEmpty) continue;
+    final Set<BackupReconcileReason> ignored =
+        <BackupReconcileReason>{
+            ...entry.ignoredReasons,
+            ...?resolved.ignoredReconcileReasons[key],
+          }
+          ..removeAll(
+            resolved.shownReconcileReasons[key] ??
+                const <BackupReconcileReason>{},
+          )
+          ..retainAll(reasons);
+    final BackupReconcileReason primary = reasons.contains(entry.reason)
+        ? entry.reason
+        : reasons.first;
+    entries.add(
+      ReconcileEntry(
+        name: entry.name,
+        reason: primary,
+        additionalReasons: reasons.difference(<BackupReconcileReason>{primary}),
+        ignoredReasons: ignored,
+        issueFingerprints: entry.issueFingerprints,
+        states: entry.states,
+        backupWorkshop: entry.backupWorkshop,
+        backupMyProjects: entry.backupMyProjects,
+        backupDifference: entry.backupDifference,
+      ),
+    );
+  }
+  return entries;
+}
+
+Set<BackupAction> _completedCardActions(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+  BackupCard card,
+) => identical(resolved.scan, scan)
+    ? resolved.cardActions[card.id.toLowerCase()] ?? const <BackupAction>{}
+    : const <BackupAction>{};
+
+BackupUpdatePlan? visibleBackupUpdatePlan(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+  BackupCard card,
+) {
+  final BackupState? original = scan.cards[card];
+  final bool wasUpdate =
+      original == BackupState.updateAvailable ||
+      scan.ignoredUpdates.contains(card);
+  if (!wasUpdate) return null;
+  final BackupUpdatePlan plan =
+      scan.updates[card] ?? const BackupUpdatePlan(updateContent: true);
+  final Set<BackupAction> completed = _completedCardActions(
+    scan,
+    resolved,
+    card,
+  );
+  final bool updateContent =
+      plan.updateContent &&
+      !backupCardIsIgnored(scan, resolved, card) &&
+      !completed.contains(BackupAction.update) &&
+      !completed.contains(BackupAction.ignoreUpdate);
+  final BackupSyncPlan? sync =
+      plan.needsSync && !completed.contains(BackupAction.sync)
+      ? plan.sync
+      : null;
+  return updateContent || sync != null
+      ? BackupUpdatePlan(updateContent: updateContent, sync: sync)
+      : null;
+}
+
+bool backupCardIsIgnored(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+  BackupCard card,
+) {
+  final bool? override = identical(resolved.scan, scan)
+      ? resolved.ignoredCards[card.id.toLowerCase()]
+      : null;
+  if (override != null) {
+    return override;
+  }
+  return scan.ignoredUpdates.contains(card);
+}
+
+BackupState? visibleBackupCardState(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+  BackupCard card,
+  BackupState original,
+) {
+  if (original == BackupState.updateAvailable ||
+      original == BackupState.updateDismissed) {
+    return visibleBackupUpdatePlan(scan, resolved, card) == null
+        ? null
+        : BackupState.updateAvailable;
+  }
+  final BackupAction? action = actionForBackupState(original);
+  return action != null &&
+          _completedCardActions(scan, resolved, card).contains(action)
+      ? null
+      : original;
+}
+
+Map<BackupCard, BackupState> visibleBackupCardStates(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+) {
+  final Map<BackupCard, BackupState> states = <BackupCard, BackupState>{};
+  for (final MapEntry<BackupCard, BackupState> entry in scan.cards.entries) {
+    final BackupState? visible = visibleBackupCardState(
+      scan,
+      resolved,
+      entry.key,
+      entry.value,
+    );
+    if (visible != null) states[entry.key] = visible;
+  }
+  for (final BackupCard card in scan.ignoredUpdates) {
+    if (states.containsKey(card) || backupCardIsIgnored(scan, resolved, card)) {
+      continue;
+    }
+    if (visibleBackupUpdatePlan(scan, resolved, card) != null) {
+      states[card] = BackupState.updateAvailable;
+    }
+  }
+  return states;
+}
+
+Set<BackupCard> visibleBackupIgnoredUpdates(
+  BackupScan scan,
+  BackupResolvedIssuesState resolved,
+) => <BackupCard>{
+  for (final BackupCard card in <BackupCard>{
+    ...scan.cards.keys,
+    ...scan.ignoredUpdates,
+  })
+    if (backupCardIsIgnored(scan, resolved, card) &&
+        (scan.updates[card]?.updateContent ?? true) &&
+        !_completedCardActions(
+          scan,
+          resolved,
+          card,
+        ).contains(BackupAction.update))
+      card,
+};
 
 /// The scan's cards in grid order, each with the title and preview to draw.
 ///
@@ -150,19 +452,32 @@ class BackupStateFilter extends _$BackupStateFilter {
     // Returning the scan-adjusted selection lets Riverpod publish it after the
     // dependency rebuild. A listener that assigned state here could fire while
     // Flutter was building the Backup toolbar.
+    final BackupResolvedIssuesState resolved = ref.watch(
+      backupResolvedIssuesProvider,
+    );
     _shown = switch (ref.watch(backupScanProvider)) {
-      AsyncData<BackupScan>(:final BackupScan value) => _holding(_shown, value),
+      AsyncData<BackupScan>(:final BackupScan value) => _holding(
+        _shown,
+        visibleBackupCardStates(value, resolved),
+        visibleBackupIgnoredUpdates(value, resolved),
+        visibleBackupReconcileEntries(value, resolved),
+      ),
       _ => _shown,
     };
     return _shown;
   }
 
   /// Keeps a non-empty pill selected, falling back in priority order.
-  static BackupShown _holding(BackupShown shown, BackupScan scan) {
+  static BackupShown _holding(
+    BackupShown shown,
+    Map<BackupCard, BackupState> states,
+    Set<BackupCard> ignoredUpdates,
+    List<ReconcileEntry> reconcile,
+  ) {
     final totals = backupPillCounts(
-      states: scan.cards.values,
-      ignoredUpdates: scan.ignoredUpdates,
-      reconcile: scan.reconcile,
+      states: states.values,
+      ignoredUpdates: ignoredUpdates,
+      reconcile: reconcile,
     );
     final int activeReconcile = totals.reconcile;
     final int ignored = totals.ignored;
@@ -250,10 +565,16 @@ class BackupSortAscending extends _$BackupSortAscending {
 AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
   return ref.watch(backupTilesProvider).whenData((List<BackupTile> tiles) {
     final BackupShown shown = ref.watch(backupStateFilterProvider);
+    final BackupScan scan = ref.watch(backupScanProvider).requireValue;
+    final BackupResolvedIssuesState resolved = ref.watch(
+      backupResolvedIssuesProvider,
+    );
     if (shown.ignored) {
       final Set<String> ignoredIds = <String>{
-        for (final BackupCard card
-            in ref.watch(backupScanProvider).requireValue.ignoredUpdates)
+        for (final BackupCard card in visibleBackupIgnoredUpdates(
+          scan,
+          resolved,
+        ))
           card.id,
       };
       return visibleBackupTilesMatching(
@@ -274,7 +595,12 @@ AsyncValue<List<BackupTile>> backupVisibleTiles(Ref ref) {
       );
     }
     return visibleBackupTiles(
-      tiles: tiles,
+      tiles: <BackupTile>[
+        for (final BackupTile tile in tiles)
+          if (visibleBackupCardState(scan, resolved, tile.card, tile.state)
+              case final BackupState state)
+            (card: tile.card, state: state, face: tile.face),
+      ],
       state: shown.state,
       needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
       filter: ref.watch(filterStateProvider),
@@ -291,13 +617,23 @@ AsyncValue<List<ReconcileTile>> backupVisibleReconcileTiles(Ref ref) {
     List<ReconcileTile> tiles,
   ) {
     final BackupShown shown = ref.watch(backupStateFilterProvider);
+    final BackupScan scan = ref.watch(backupScanProvider).requireValue;
+    final Map<String, ReconcileEntry> visibleEntries = <String, ReconcileEntry>{
+      for (final ReconcileEntry entry in visibleBackupReconcileEntries(
+        scan,
+        ref.watch(backupResolvedIssuesProvider),
+      ))
+        entry.name.toLowerCase(): entry,
+    };
     return visibleReconcileTiles(
       tiles: <ReconcileTile>[
         for (final ReconcileTile tile in tiles)
-          if (shown.ignored
-              ? tile.entry.ignoredReasons.isNotEmpty
-              : tile.entry.activeReasons.isNotEmpty)
-            tile,
+          if (visibleEntries[tile.entry.name.toLowerCase()]
+              case final ReconcileEntry entry)
+            if ((shown.ignored
+                ? entry.ignoredReasons.isNotEmpty
+                : entry.activeReasons.isNotEmpty))
+              (entry: entry, face: tile.face),
       ],
       needle: ref.watch(backupSearchProvider).trim().toLowerCase(),
       filter: ref.watch(filterStateProvider),

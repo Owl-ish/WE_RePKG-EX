@@ -99,10 +99,10 @@ void main() {
 
   Future<void> finish(
     WidgetTester tester,
-    Future<void> Function() start,
+    Future<bool> Function() start,
     String label,
   ) async {
-    late Future<void> action;
+    late Future<bool> action;
     // Start the operation in the real async zone so file reads can complete
     // after confirmation; only the dialog animation uses the fake clock.
     await tester.runAsync(() async {
@@ -129,9 +129,9 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
-  Future<void> expectRefresh({required bool changed}) async {
+  Future<void> expectCompletion({required bool changed}) async {
     await container.read(backupScanProvider.future);
-    expect(scanReads, changed ? 2 : 1);
+    expect(scanReads, 1);
     expect(
       container.read(backupSelectionProvider),
       changed ? isEmpty : {card.id},
@@ -144,54 +144,59 @@ void main() {
   }
 
   for (final mode in ['back up', 'full update', 'selective update']) {
-    testWidgets('$mode reaches the real file worker and refreshes Backup', (
-      tester,
-    ) async {
-      final live = path.join(projects, card.name);
-      final backup = path.join(backupMyProjectsPath(backupRoot)!, card.name);
-      write(live, 'project.json', '{}');
-      final source = write(live, 'scene.json', 'new contents');
-      final target = write(backup, 'scene.json', 'old');
-      final residue = write(backup, 'legacy.txt', 'keep if not a full update');
-      final context = await host(tester);
-      final selective = mode == 'selective update';
-      final action = mode == 'back up'
-          ? BackupAction.backUp
-          : BackupAction.update;
-      final selection = selective
-          ? BackupSelectiveUpdatePlan(
-              expectedChanges: (
-                modified: ['scene.json'],
-                onlyLive: ['project.json'],
-                onlyBackup: ['legacy.txt'],
-              ),
-              keptBackupFiles: {'legacy.txt'},
-            )
-          : null;
+    testWidgets(
+      '$mode reaches the real file worker without rescanning Backup',
+      (tester) async {
+        final live = path.join(projects, card.name);
+        final backup = path.join(backupMyProjectsPath(backupRoot)!, card.name);
+        write(live, 'project.json', '{}');
+        final source = write(live, 'scene.json', 'new contents');
+        final target = write(backup, 'scene.json', 'old');
+        final residue = write(
+          backup,
+          'legacy.txt',
+          'keep if not a full update',
+        );
+        final context = await host(tester);
+        final selective = mode == 'selective update';
+        final action = mode == 'back up'
+            ? BackupAction.backUp
+            : BackupAction.update;
+        final selection = selective
+            ? BackupSelectiveUpdatePlan(
+                expectedChanges: (
+                  modified: ['scene.json'],
+                  onlyLive: ['project.json'],
+                  onlyBackup: ['legacy.txt'],
+                ),
+                keptBackupFiles: {'legacy.txt'},
+              )
+            : null;
 
-      await finish(
-        tester,
-        () => applyBackupAction(context, action, [
-          card,
-        ], selectiveUpdate: selection),
-        action == BackupAction.backUp
-            ? AppI10n.backupActionBackUp
-            : AppI10n.backupActionUpdate,
-      );
+        await finish(
+          tester,
+          () => applyBackupAction(context, action, [
+            card,
+          ], selectiveUpdate: selection),
+          action == BackupAction.backUp
+              ? AppI10n.backupActionBackUp
+              : AppI10n.backupActionUpdate,
+        );
 
-      expect(target.readAsStringSync(), 'new contents');
-      expect(source.readAsStringSync(), 'new contents');
-      expect(residue.existsSync(), mode != 'full update');
-      final records = await tester.runAsync(
-        () => readBackupRecords(backupRoot),
-      );
-      expect(
-        records?[card.id]?.backedUpVersion,
-        selective ? isNull : isNotNull,
-      );
-      await expectRefresh(changed: true);
-      await dismissToasts(tester);
-    });
+        expect(target.readAsStringSync(), 'new contents');
+        expect(source.readAsStringSync(), 'new contents');
+        expect(residue.existsSync(), mode != 'full update');
+        final records = await tester.runAsync(
+          () => readBackupRecords(backupRoot),
+        );
+        expect(
+          records?[card.id]?.backedUpVersion,
+          selective ? isNull : isNotNull,
+        );
+        await expectCompletion(changed: true);
+        await dismissToasts(tester);
+      },
+    );
   }
 
   testWidgets(
@@ -208,7 +213,7 @@ void main() {
         Directory(backupMyProjectsPath(backupRoot)!).existsSync(),
         isFalse,
       );
-      await expectRefresh(changed: false);
+      await expectCompletion(changed: false);
       await dismissToasts(tester);
     },
   );
@@ -227,31 +232,30 @@ void main() {
       findsOneWidget,
     );
     expect(Directory(backupMyProjectsPath(backupRoot)!).existsSync(), isFalse);
-    await expectRefresh(changed: false);
+    await expectCompletion(changed: false);
     await dismissToasts(tester);
   });
 
-  testWidgets(
-    'partial failure still refreshes Backup and clears its selection',
-    (tester) async {
-      final context = await host(tester);
-      await finish(
-        tester,
-        () => applyBackupAction(
-          context,
-          BackupAction.update,
-          [card],
-          runAction: (_, _) async =>
-              (changed: true, error: 'source changed during copy'),
-        ),
-        AppI10n.backupActionUpdate,
-      );
-      expect(find.textContaining('source changed during copy'), findsOneWidget);
-      expect(find.textContaining(AppI10n.backupActionDone), findsNothing);
-      await expectRefresh(changed: true);
-      await dismissToasts(tester);
-    },
-  );
+  testWidgets('partial failure clears selection without rescanning Backup', (
+    tester,
+  ) async {
+    final context = await host(tester);
+    await finish(
+      tester,
+      () => applyBackupAction(
+        context,
+        BackupAction.update,
+        [card],
+        runAction: (_, _) async =>
+            (changed: true, error: 'source changed during copy'),
+      ),
+      AppI10n.backupActionUpdate,
+    );
+    expect(find.textContaining('source changed during copy'), findsOneWidget);
+    expect(find.textContaining(AppI10n.backupActionDone), findsNothing);
+    await expectCompletion(changed: true);
+    await dismissToasts(tester);
+  });
 
   testWidgets('Restore publishes to MyProjects and resets its loaded state', (
     tester,
@@ -284,7 +288,7 @@ void main() {
     expect(Directory(path.join(workshop, card.name)).existsSync(), isFalse);
     expect(container.read(currentStateProvider), RunState.initial);
     expect(container.read(checkedIdsProvider), isEmpty);
-    await expectRefresh(changed: true);
+    await expectCompletion(changed: true);
     await dismissToasts(tester);
   });
 
@@ -306,7 +310,7 @@ void main() {
     final ignored = await tester.runAsync(() => readBackupRecords(backupRoot));
     expect(ignored?[card.id]?.dismissedVersion, isNotNull);
     expect(ignored?[card.id]?.backedUpVersion, 'saved-baseline');
-    await expectRefresh(changed: true);
+    await expectCompletion(changed: true);
     await dismissToasts(tester);
 
     await finish(
@@ -353,7 +357,7 @@ void main() {
         ignored?[reconcileIgnoreRecordId('demo')]?.ignoredReconcileIssues,
         {duplicate: 'live-evidence', conflict: 'backup-evidence'},
       );
-      await expectRefresh(changed: true);
+      await expectCompletion(changed: true);
       await dismissToasts(tester);
 
       await finish(
@@ -400,7 +404,11 @@ void main() {
       );
       await finish(
         tester,
-        () => showAllIgnoredDetections(context, scan),
+        () => showAllIgnoredDetections(
+          context,
+          ignoredUpdates: scan.ignoredUpdates,
+          reconcileEntries: scan.reconcile,
+        ),
         AppI10n.backupActionShowAgain,
       );
       final shown = await tester.runAsync(() => readBackupRecords(backupRoot));
@@ -428,7 +436,7 @@ void main() {
     );
     expect(source.readAsStringSync(), '{}');
     expect(target.readAsStringSync(), '{}');
-    await expectRefresh(changed: false);
+    await expectCompletion(changed: false);
     await dismissToasts(tester);
   });
 }
