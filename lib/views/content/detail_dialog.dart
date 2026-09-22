@@ -99,19 +99,30 @@ Future<PreviewStats?> _previewStats(String previews) {
   }).timeout(const Duration(seconds: 2), onTimeout: () => null);
 }
 
-/// One button down the right of the dialog.
+/// One action in the shared detail-dialog button group.
 class DetailAction {
   const DetailAction({
+    this.key,
     required this.label,
     required this.onPressed,
+    this.icon,
+    this.semanticHint,
     this.destructive = false,
   });
 
-  const DetailAction.destructive({required this.label, required this.onPressed})
-    : destructive = true;
+  const DetailAction.destructive({
+    this.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.semanticHint,
+  }) : destructive = true;
 
+  final Key? key;
   final String label;
   final VoidCallback onPressed;
+  final IconData? icon;
+  final String? semanticHint;
   final bool destructive;
 }
 
@@ -901,6 +912,24 @@ class _GivenActions extends StatelessWidget {
 
   final List<DetailAction> actions;
 
+  Widget _button(DetailAction action) {
+    final Widget button = action.destructive
+        ? DetailActionButton.destructive(
+            key: action.key,
+            icon: action.icon,
+            label: action.label,
+            onPressed: action.onPressed,
+          )
+        : DetailActionButton(
+            key: action.key,
+            icon: action.icon,
+            label: action.label,
+            onPressed: action.onPressed,
+          );
+    final String? hint = action.semanticHint;
+    return hint == null ? button : Semantics(hint: hint, child: button);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -909,17 +938,7 @@ class _GivenActions extends StatelessWidget {
       child: Column(
         spacing: _DetailActionLayout.spacing,
         children: <Widget>[
-          for (final DetailAction action in actions)
-            if (action.destructive)
-              DetailActionButton.destructive(
-                label: action.label,
-                onPressed: action.onPressed,
-              )
-            else
-              DetailActionButton(
-                label: action.label,
-                onPressed: action.onPressed,
-              ),
+          for (final DetailAction action in actions) _button(action),
         ],
       ),
     );

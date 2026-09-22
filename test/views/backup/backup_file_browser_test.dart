@@ -346,7 +346,10 @@ void main() {
     await tester.pump();
     expect(find.text('child.txt'), findsNothing);
     await tester.tap(find.text(AppI10n.backupDetailCompareFiles));
-    await _waitFor(tester, find.byType(FolderDifferenceFileTree));
+    await _waitFor(
+      tester,
+      find.byKey(const ValueKey<String>('backup-update-file-tree')),
+    );
     await tester.tap(find.text(AppI10n.backupBrowseFiles));
     await tester.pump();
     expect(find.text('child.txt'), findsNothing);
@@ -373,7 +376,7 @@ void main() {
   });
 
   testWidgets(
-    'comparison lists matching files and reports unavailable folders',
+    'comparison uses the paired tree for matching and unavailable folders',
     (tester) async {
       final Directory root = Directory.systemTemp.createTempSync(
         'browser_matching_',
@@ -397,13 +400,17 @@ void main() {
         await tester.tap(find.text(AppI10n.backupDetailCompareFiles));
         await _waitFor(
           tester,
-          find.text(
-            available
-                ? AppI10n.backupDetailMatchingFiles
-                : AppI10n.backupDetailFileComparisonUnavailable,
-          ),
+          available
+              ? find.byKey(const ValueKey<String>('backup-update-file-tree'))
+              : find.text(AppI10n.backupDetailFileComparisonUnavailable),
         );
-        if (available) expect(find.text('same.txt'), findsOneWidget);
+        if (available) {
+          expect(find.text('same.txt'), findsNWidgets(2));
+          expect(
+            find.byKey(const ValueKey<String>('update-pair-compare-same.txt')),
+            findsOneWidget,
+          );
+        }
         expect(tester.takeException(), isNull);
       }
       await tester.pumpWidget(const SizedBox());
@@ -443,12 +450,21 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.byType(FileTreePanel), findsNWidgets(2));
-        expect(find.byType(FolderDifferenceFileTree), findsNothing);
+        expect(
+          find.byKey(const ValueKey<String>('backup-update-file-tree')),
+          findsNothing,
+        );
         await tester.tap(find.text(AppI10n.backupDetailCompareFiles));
-        await _waitFor(tester, find.byType(FolderDifferenceFileTree));
+        await _waitFor(
+          tester,
+          find.byKey(const ValueKey<String>('backup-update-file-tree')),
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(find.byType(FolderDifferenceFileTree), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('backup-update-file-tree')),
+          findsOneWidget,
+        );
         await tester.tap(find.text(AppI10n.backupBrowseFiles));
         await tester.pumpAndSettle();
         expect(find.byType(FileTreePanel), findsNWidgets(2));

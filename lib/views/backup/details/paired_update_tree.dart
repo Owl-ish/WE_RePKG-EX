@@ -5,6 +5,7 @@ class _PairedUpdateTree extends StatefulWidget {
     super.key,
     required this.configuration,
     required this.changes,
+    this.matching = const <String>[],
     required this.toolbar,
     required this.manualSelection,
     required this.manualAction,
@@ -17,6 +18,7 @@ class _PairedUpdateTree extends StatefulWidget {
   final bool inspectPackages;
   final UpdateFileChanges configuration;
   final BackupFileChanges changes;
+  final List<String> matching;
   final Widget toolbar;
   final FileTreeCompareSelection manualSelection;
   final FileTreeCompareAction? manualAction;
@@ -33,6 +35,7 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
   late Set<String> _added;
   late Set<String> _removed;
   late Set<String> _modified;
+  late Set<String> _matching;
 
   UpdateFileChanges get config => widget.configuration;
   Color get foreground => config.foreground;
@@ -48,12 +51,14 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
     _added = widget.changes.onlyLive.toSet();
     _removed = widget.changes.onlyBackup.toSet();
     _modified = widget.changes.modified.toSet();
+    _matching = widget.matching.toSet();
   }
 
   @override
   void didUpdateWidget(covariant _PairedUpdateTree oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.changes != widget.changes) {
+    if (oldWidget.changes != widget.changes ||
+        oldWidget.matching != widget.matching) {
       _indexChanges();
       _collapsed.clear();
     }
@@ -87,6 +92,7 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
         ...widget.changes.modified,
         ...widget.changes.onlyLive,
         ...widget.changes.onlyBackup,
+        ...widget.matching,
       ])
         relative.replaceAll('\\', '/'): relative,
     };
@@ -309,7 +315,9 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
         ? Theme.of(context).status.good
         : removed
         ? Theme.of(context).status.note
-        : Theme.of(context).status.warn;
+        : _modified.contains(row.relative)
+        ? Theme.of(context).status.warn
+        : Theme.of(context).status.good;
     if (missing) {
       return FileTreeRow(
         depth: row.depth,
@@ -353,7 +361,7 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
       onCompareSelect: widget.onCompareSelect,
       onOpenDetails: inspectablePackage
           ? () => _inspectPackage(row.relative)
-          : !added && !removed
+          : _modified.contains(row.relative)
           ? () => _inspect(row.relative)
           : null,
       extraTrailing:
@@ -441,7 +449,10 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
                       SizedBox(
                         height: rowHeight,
                         child: Center(
-                          child: !row.folder && _modified.contains(row.relative)
+                          child:
+                              !row.folder &&
+                                  (_modified.contains(row.relative) ||
+                                      _matching.contains(row.relative))
                               ? _fileCompareAction(
                                   key: ValueKey<String>(
                                     'update-pair-compare-${row.relative}',
@@ -486,37 +497,28 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
                     child: Column(
                       children: <Widget>[
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Expanded(
-                              child: Text(
-                                widget.inspectPackages
-                                    ? tr(AppI10n.backupLiveSource)
-                                    : config.sourceLabel,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: foreground,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: _paneHeader(
+                                config.sourceLabel,
+                                config.sourceActions,
                               ),
                             ),
                             SizedBox(
                               width: 32,
                               child: Icon(
-                                Icons.arrow_forward_rounded,
+                                config.bidirectional
+                                    ? Icons.compare_arrows_rounded
+                                    : Icons.arrow_forward_rounded,
                                 size: 22,
                                 color: foreground,
                               ),
                             ),
                             Expanded(
-                              child: Text(
-                                widget.inspectPackages
-                                    ? tr(AppI10n.backupBackupDestination)
-                                    : config.destinationLabel,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: foreground,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: _paneHeader(
+                                config.destinationLabel,
+                                config.destinationActions,
                               ),
                             ),
                           ],
@@ -578,4 +580,16 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
       ),
     );
   }
+
+  Widget _paneHeader(String label, Widget? actions) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
+      ),
+      if (actions != null) ...<Widget>[const SizedBox(height: 6), actions],
+    ],
+  );
 }

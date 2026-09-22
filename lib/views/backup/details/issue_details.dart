@@ -7,7 +7,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:we_repkg/constants/i10n.dart';
-import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
@@ -204,85 +203,7 @@ class _DetectedFolderCopy extends StatelessWidget {
   }
 }
 
-typedef _DeferredFolderComparisonBuilder =
-    Widget Function(
-      FolderFileComparison? comparison,
-      bool comparing,
-      bool comparisonFailed,
-    );
-
-/// Starts an exact folder comparison only after the user presses Compare Files.
-/// Expanding the surrounding detail pane alone never starts disk work. The result
-/// is retained while that dialog is open, so restoring the preview does not rescan.
-class _DeferredFolderComparison extends StatefulWidget {
-  const _DeferredFolderComparison({
-    required this.active,
-    required this.load,
-    required this.builder,
-  });
-
-  final bool active;
-  final Future<FolderFileComparison?> Function()? load;
-  final _DeferredFolderComparisonBuilder builder;
-
-  @override
-  State<_DeferredFolderComparison> createState() =>
-      _DeferredFolderComparisonState();
-}
-
-class _DeferredFolderComparisonState extends State<_DeferredFolderComparison> {
-  Future<FolderFileComparison?>? _comparison;
-
-  void _startIfNeeded() {
-    if (!widget.active || _comparison != null) return;
-    final Future<FolderFileComparison?> Function()? load = widget.load;
-    if (load != null) _comparison = load();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _startIfNeeded();
-  }
-
-  @override
-  void didUpdateWidget(covariant _DeferredFolderComparison oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _startIfNeeded();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.active) {
-      return widget.builder(null, false, false);
-    }
-    final Future<FolderFileComparison?>? comparison = _comparison;
-    if (comparison == null) {
-      return widget.builder(null, false, true);
-    }
-    return FutureBuilder<FolderFileComparison?>(
-      future: comparison,
-      builder:
-          (
-            BuildContext context,
-            AsyncSnapshot<FolderFileComparison?> snapshot,
-          ) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return widget.builder(null, true, false);
-            }
-            if (snapshot.hasError || snapshot.data == null) {
-              return widget.builder(null, false, true);
-            }
-            return widget.builder(snapshot.data, false, false);
-          },
-    );
-  }
-}
-
-/// Presents the safe diagnostic detail for one unresolved Reconcile state.
-///
-/// Reconcile remains view-only here; this widget does not choose or mutate an
-/// authoritative copy when the filesystem state is ambiguous.
+/// Presents the diagnostic detail and delegates explicit resolution actions.
 class ReconcileDetailContent extends StatefulWidget {
   const ReconcileDetailContent({
     super.key,
@@ -297,7 +218,6 @@ class ReconcileDetailContent extends StatefulWidget {
     required this.myProjectsBackupFolder,
     required this.rePKGPath,
     this.ignoredMode = false,
-    this.loadDuplicateLiveChanges,
     this.onRequestFocus,
   });
 
@@ -312,7 +232,6 @@ class ReconcileDetailContent extends StatefulWidget {
   final String? myProjectsBackupFolder;
   final String? rePKGPath;
   final bool ignoredMode;
-  final Future<FolderFileComparison?> Function()? loadDuplicateLiveChanges;
   final VoidCallback? onRequestFocus;
 
   @override
@@ -330,8 +249,6 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
   String? get workshopBackupFolder => widget.workshopBackupFolder;
   String? get myProjectsBackupFolder => widget.myProjectsBackupFolder;
   String? get rePKGPath => widget.rePKGPath;
-  Future<FolderFileComparison?> Function()? get loadDuplicateLiveChanges =>
-      widget.loadDuplicateLiveChanges;
 
   void _requestComparison() {
     if (_compareRequested) return;
@@ -349,12 +266,6 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
       _compareRequested = false;
     }
   }
-
-  bool _hasDuplicateLiveDifferences(FolderFileChanges? changes) =>
-      changes != null &&
-      (changes.modified.isNotEmpty ||
-          changes.onlyFirst.isNotEmpty ||
-          changes.onlySecond.isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -419,7 +330,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
             : entry.activePrimaryReason) ??
         entry.reason;
     return switch (primary) {
-      BackupReconcileReason.duplicateLiveCopies => _duplicateLiveAsyncDetails(),
+      BackupReconcileReason.duplicateLiveCopies => const SizedBox.shrink(),
       BackupReconcileReason.duplicateBackupCopies => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: _detectedLocationCards(
@@ -519,176 +430,6 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
         _compareFilesPrompt(promptKey),
       ],
     );
-  }
-
-  Widget _duplicateLiveAsyncDetails() {
-    final Future<FolderFileComparison?> Function()? load =
-        loadDuplicateLiveChanges;
-    return _DeferredFolderComparison(
-      active: _compareRequested,
-      load: load,
-      builder:
-          (
-            FolderFileComparison? comparison,
-            bool comparing,
-            bool comparisonFailed,
-          ) {
-            if (comparing) {
-              return _duplicateLiveOverview(comparing: true);
-            }
-            if (comparisonFailed) {
-              return _duplicateLiveOverview(comparisonFailed: true);
-            }
-            if (!_compareRequested) {
-              return _duplicateLiveOverview(showComparePrompt: load != null);
-            }
-            return _duplicateLiveDetails(
-              comparison: comparison,
-              showTree: _hasDuplicateLiveDifferences(comparison?.changes),
-            );
-          },
-    );
-  }
-
-  Widget _duplicateLiveOverview({
-    FolderFileComparison? comparison,
-    bool comparing = false,
-    bool comparisonFailed = false,
-    bool showComparePrompt = false,
-  }) {
-    final List<Widget> copies = _detectedLocationCards(
-      includeLive: true,
-      includeBackup: true,
-    );
-    if (showComparePrompt) {
-      return _locationsWithComparePrompt(
-        copies,
-        promptKey: const ValueKey<String>(
-          'backup-reconcile-expand-live-differences',
-        ),
-      );
-    }
-
-    final FolderFileChanges? changes = comparison?.changes;
-    final bool hasDifferences = _hasDuplicateLiveDifferences(changes);
-    return BackupDetailScrollView(
-      padding: const EdgeInsets.only(right: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (int index = 0; index < copies.length; index++) ...<Widget>[
-            copies[index],
-            if (index != copies.length - 1) const SizedBox(height: 5),
-          ],
-          if (comparing) ...<Widget>[
-            if (copies.isNotEmpty) const SizedBox(height: 12),
-            Row(
-              key: const ValueKey<String>(
-                'backup-duplicate-live-comparison-progress',
-              ),
-              children: <Widget>[
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: foreground,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tr(AppI10n.backupDetailComparingFiles),
-                    style: TextStyle(
-                      color: foreground,
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ] else if (comparisonFailed) ...<Widget>[
-            if (copies.isNotEmpty) const SizedBox(height: 12),
-            BackupDetailGroup(
-              title: tr(AppI10n.backupDetailFileChanges),
-              items: <String>[
-                tr(AppI10n.backupDetailFileComparisonUnavailable),
-              ],
-              foreground: foreground,
-            ),
-          ] else if (comparison != null && !hasDifferences) ...<Widget>[
-            if (copies.isNotEmpty) const SizedBox(height: 10),
-            BackupDetailGroup(
-              key: const ValueKey<String>(
-                'backup-duplicate-live-matching-files',
-              ),
-              title: tr(AppI10n.backupDetailMatchingFiles),
-              items: comparison.matching.isEmpty
-                  ? <String>[tr(AppI10n.backupDetailSame)]
-                  : <String>[
-                      for (final String filePath in comparison.matching)
-                        '✓ $filePath',
-                    ],
-              foreground: foreground,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _duplicateLiveDetails({
-    required FolderFileComparison? comparison,
-    required bool showTree,
-  }) {
-    final FolderFileChanges? changes = comparison?.changes;
-    if (showTree && changes != null) {
-      final String workshopLabel =
-          '${tr(AppI10n.backupDetailWorkshopLive)} / ${entry.name}';
-      final String myProjectsLabel =
-          '${tr(AppI10n.backupDetailMyProjectsLive)} / ${entry.name}';
-      final Widget tree = FolderDifferenceFileTree(
-        key: const ValueKey<String>('backup-duplicate-live-file-tree'),
-        wallpaperName: entry.name,
-        changes: changes,
-        firstFolder: workshopLiveFolder,
-        secondFolder: myProjectsLiveFolder,
-        firstLabel: workshopLabel,
-        secondLabel: myProjectsLabel,
-        modifiedTitle: tr(AppI10n.backupDetailModified),
-        firstOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
-        secondOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
-        semanticLabel: tr(AppI10n.backupDetailLiveDifferences),
-        unavailableText: tr(AppI10n.backupDetailFileComparisonUnavailable),
-        openFolderTooltip: tr(AppI10n.backupOpenLiveFolder),
-        keyBase: 'backup-duplicate-live',
-        firstSideId: 'duplicate-live-workshop',
-        secondSideId: 'duplicate-live-myprojects',
-        firstFolderActionKey: 'backup-duplicate-live-workshop-button',
-        secondFolderActionKey: 'backup-duplicate-live-myprojects-button',
-        rePKGPath: rePKGPath,
-        foreground: foreground,
-      );
-      final List<Widget> backupCopies = _detectedLocationCards(
-        includeLive: false,
-        includeBackup: true,
-      );
-      if (backupCopies.isEmpty) return tree;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (int index = 0; index < backupCopies.length; index++) ...<Widget>[
-            backupCopies[index],
-            if (index != backupCopies.length - 1) const SizedBox(height: 5),
-          ],
-          const SizedBox(height: 10),
-          Expanded(child: tree),
-        ],
-      );
-    }
-
-    return _duplicateLiveOverview(comparison: comparison);
   }
 
   Widget _comparisonUnavailableDetails() {

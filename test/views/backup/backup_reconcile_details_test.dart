@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -13,318 +12,13 @@ import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
 import 'package:we_repkg/views/backup/backup_tile.dart';
+import 'package:we_repkg/views/backup/details/backup_file_browser.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
-import 'package:we_repkg/widgets/input_controls.dart';
 
 void main() {
-  testWidgets('duplicate live details expose every detected location', (
-    tester,
-  ) async {
-    Future<FolderFileComparison?> loadComparison() async => null;
-
-    const ReconcileEntry entry = ReconcileEntry(
-      name: 'double-live',
-      reason: BackupReconcileReason.duplicateLiveCopies,
-      states: <WallpaperLibrary, BackupState>{
-        WallpaperLibrary.workshop: BackupState.synced,
-        WallpaperLibrary.myProjects: BackupState.synced,
-      },
-      backupWorkshop: true,
-      backupMyProjects: false,
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 320,
-              height: 230,
-              child: ReconcileDetailContent(
-                entry: entry,
-                foreground: Colors.black,
-                focused: false,
-                needsFocus: false,
-                workshopLiveFolder: r'C:\workshop\431960\double-live',
-                myProjectsLiveFolder:
-                    r'C:\wallpaper_engine\projects\myprojects\double-live',
-                workshopBackupFolder: r'C:\backup\431960\double-live',
-                myProjectsBackupFolder: null,
-                rePKGPath: null,
-                loadDuplicateLiveChanges: loadComparison,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-live-workshop')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-live-myprojects')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-backup-workshop')),
-      findsOneWidget,
-    );
-    expect(find.text(r'C:\workshop\431960\double-live'), findsOneWidget);
-    expect(
-      find.text(r'C:\wallpaper_engine\projects\myprojects\double-live'),
-      findsOneWidget,
-    );
-    expect(find.text(r'C:\backup\431960\double-live'), findsOneWidget);
-    expect(find.byType(PathActionBox), findsNWidgets(3));
-    for (final PathActionBox box in tester.widgetList<PathActionBox>(
-      find.byType(PathActionBox),
-    )) {
-      expect(box.compact, isTrue);
-    }
-    expect(find.byIcon(Icons.copy_rounded), findsNWidgets(3));
-    expect(find.byIcon(Icons.folder_open_rounded), findsNWidgets(3));
-    final SingleChildScrollView scroll = tester.widget<SingleChildScrollView>(
-      find.byType(SingleChildScrollView),
-    );
-    expect(scroll.padding, const EdgeInsets.only(right: 10));
-    final Finder detailScrollbars = find.descendant(
-      of: find.byType(ReconcileDetailContent),
-      matching: find.byType(Scrollbar),
-    );
-    expect(detailScrollbars, findsOneWidget);
-    final Scrollbar scrollbar = tester.widget<Scrollbar>(detailScrollbars);
-    expect(scrollbar.thumbVisibility, isTrue);
-    expect(
-      scroll.controller!.position.maxScrollExtent,
-      greaterThan(0),
-      reason: 'overflowing location evidence should advertise that it scrolls',
-    );
-    final Finder comparePrompt = find.byKey(
-      const ValueKey<String>('backup-reconcile-expand-live-differences'),
-    );
-    expect(comparePrompt, findsOneWidget);
-    expect(
-      find.descendant(
-        of: comparePrompt,
-        matching: find.text(AppI10n.backupDetailCompareFiles),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: comparePrompt,
-        matching: find.text(AppI10n.backupDetailCompareFilesHint),
-      ),
-      findsOneWidget,
-    );
-    final Rect detailRect = tester.getRect(find.byType(ReconcileDetailContent));
-    final Rect promptRect = tester.getRect(comparePrompt);
-    expect(
-      promptRect.bottom,
-      lessThanOrEqualTo(detailRect.bottom + .5),
-      reason: 'Compare Files must stay visible below a three-location list',
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'duplicate live comparison stays idle until Compare Files is pressed',
-    (tester) async {
-      final Completer<FolderFileComparison?> comparison =
-          Completer<FolderFileComparison?>();
-      int loads = 0;
-      Future<FolderFileComparison?> loadComparison() {
-        loads++;
-        return comparison.future;
-      }
-
-      const ReconcileEntry entry = ReconcileEntry(
-        name: 'pending-double-live',
-        reason: BackupReconcileReason.duplicateLiveCopies,
-        states: <WallpaperLibrary, BackupState>{
-          WallpaperLibrary.workshop: BackupState.synced,
-          WallpaperLibrary.myProjects: BackupState.synced,
-        },
-        backupWorkshop: false,
-        backupMyProjects: false,
-      );
-
-      Widget detail({required bool focused}) => MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 320,
-            height: 230,
-            child: ReconcileDetailContent(
-              entry: entry,
-              foreground: Colors.black,
-              focused: focused,
-              needsFocus: false,
-              workshopLiveFolder: r'C:\workshop\pending-double-live',
-              myProjectsLiveFolder: r'C:\myprojects\pending-double-live',
-              workshopBackupFolder: null,
-              myProjectsBackupFolder: null,
-              rePKGPath: null,
-              loadDuplicateLiveChanges: loadComparison,
-            ),
-          ),
-        ),
-      );
-
-      await tester.pumpWidget(detail(focused: false));
-
-      expect(loads, 0);
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-        ),
-        findsNothing,
-      );
-      final Finder comparePrompt = find.byKey(
-        const ValueKey<String>('backup-reconcile-expand-live-differences'),
-      );
-      expect(comparePrompt, findsOneWidget);
-      expect(
-        find.descendant(
-          of: comparePrompt,
-          matching: find.text(AppI10n.backupDetailCompareFiles),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: comparePrompt,
-          matching: find.text(AppI10n.backupDetailCompareFilesHint),
-        ),
-        findsOneWidget,
-      );
-
-      await tester.pumpWidget(detail(focused: true));
-      await tester.pump();
-
-      expect(
-        loads,
-        0,
-        reason: 'expanding the right pane alone must not start comparison',
-      );
-      expect(comparePrompt, findsOneWidget);
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-        ),
-        findsNothing,
-      );
-
-      await tester.tap(comparePrompt);
-      await tester.pump();
-
-      expect(loads, 1);
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-        ),
-        findsOneWidget,
-      );
-
-      comparison.complete((
-        changes: (
-          modified: <String>['scene.pkg'],
-          onlyFirst: <String>[],
-          onlySecond: <String>[],
-        ),
-        matching: <String>['project.json'],
-      ));
-      await tester.pump();
-      await tester.pump();
-
-      expect(loads, 1);
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('backup-duplicate-live-file-tree')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('duplicate live identical comparison lists matching files', (
-    tester,
-  ) async {
-    const ReconcileEntry entry = ReconcileEntry(
-      name: 'same-double-live',
-      reason: BackupReconcileReason.duplicateLiveCopies,
-      states: <WallpaperLibrary, BackupState>{
-        WallpaperLibrary.workshop: BackupState.synced,
-        WallpaperLibrary.myProjects: BackupState.synced,
-      },
-      backupWorkshop: false,
-      backupMyProjects: false,
-    );
-
-    Future<FolderFileComparison?> loadComparison() async => (
-      changes: (
-        modified: <String>[],
-        onlyFirst: <String>[],
-        onlySecond: <String>[],
-      ),
-      matching: <String>['project.json', 'preview.jpg', 'scene.pkg'],
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 320,
-            height: 280,
-            child: ReconcileDetailContent(
-              entry: entry,
-              foreground: Colors.black,
-              focused: true,
-              needsFocus: false,
-              workshopLiveFolder: r'C:\workshop\same-double-live',
-              myProjectsLiveFolder: r'C:\myprojects\same-double-live',
-              workshopBackupFolder: null,
-              myProjectsBackupFolder: null,
-              rePKGPath: null,
-              loadDuplicateLiveChanges: loadComparison,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    final Finder comparePrompt = find.byKey(
-      const ValueKey<String>('backup-reconcile-expand-live-differences'),
-    );
-    expect(comparePrompt, findsOneWidget);
-
-    await tester.tap(comparePrompt);
-    await tester.pump();
-    await tester.pump();
-
-    expect(
-      find.byKey(
-        const ValueKey<String>('backup-duplicate-live-matching-files'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text(AppI10n.backupDetailMatchingFiles), findsOneWidget);
-    expect(find.text('✓ project.json'), findsOneWidget);
-    expect(find.text('✓ preview.jpg'), findsOneWidget);
-    expect(find.text('✓ scene.pkg'), findsOneWidget);
-    expect(find.text(AppI10n.backupDetailSame), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('reconcile context menu exposes every detected location', (
     tester,
   ) async {
@@ -470,7 +164,7 @@ void main() {
     expect(find.textContaining(AppI10n.backupStateSynced), findsNothing);
   });
 
-  testWidgets('duplicate live comparison starts only from Compare Files', (
+  testWidgets('duplicate live opens the shared explorer with delete actions', (
     tester,
   ) async {
     final Directory root = Directory.systemTemp.createTempSync(
@@ -535,9 +229,7 @@ void main() {
       ),
     );
 
-    // Change the second live copy only after the tile exists. The grid and
-    // ordinary detail opening must stay cheap; the explicit differences click
-    // below is the first point allowed to start exact recursive comparison.
+    // The explorer must compare the current disk state, not cached tile data.
     File(
       '${myProjects.path}${Platform.pathSeparator}scene.pkg',
     ).writeAsStringSync('diff');
@@ -553,12 +245,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(tileFinder);
 
-    final Finder focusTarget = find.byKey(
-      const ValueKey<String>('wallpaper-detail-extra-focus-target'),
+    final Finder openFiles = find.byKey(
+      const ValueKey<String>('backup-duplicate-live-open-files'),
     );
     for (
       int attempt = 0;
-      attempt < 60 && focusTarget.evaluate().isEmpty;
+      attempt < 60 && openFiles.evaluate().isEmpty;
       attempt++
     ) {
       await tester.runAsync(() async {
@@ -567,95 +259,45 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(focusTarget, findsOneWidget);
-    expect(
-      find.byKey(
-        const ValueKey<String>('backup-reconcile-expand-live-differences'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-      ),
-      findsNothing,
-      reason: 'opening Duplicate Live details must not start the file scan',
-    );
-    expect(
-      find.byKey(const ValueKey<String>('backup-duplicate-live-file-tree')),
-      findsNothing,
-    );
-
-    final Finder comparePrompt = find.byKey(
-      const ValueKey<String>('backup-reconcile-expand-live-differences'),
-    );
-
-    await tester.tap(focusTarget);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 220));
-
-    expect(
-      comparePrompt,
-      findsOneWidget,
-      reason: 'expanding the pane must not consume the explicit compare action',
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('backup-duplicate-live-comparison-progress'),
-      ),
-      findsNothing,
-      reason: 'blank-pane expansion must not start recursive comparison',
-    );
-    expect(
-      find.byKey(const ValueKey<String>('backup-duplicate-live-file-tree')),
-      findsNothing,
-    );
-
-    await tester.tap(comparePrompt);
-    await tester.pump();
-
-    final Finder tree = find.byKey(
-      const ValueKey<String>('backup-duplicate-live-detail-scroll'),
-    );
-    for (int attempt = 0; attempt < 60 && tree.evaluate().isEmpty; attempt++) {
+    expect(openFiles, findsOneWidget);
+    expect(find.byType(BackupFileBrowser), findsNothing);
+    for (int attempt = 0; attempt < 5; attempt++) {
+      await tester.tap(openFiles);
+    }
+    await tester.pump(const Duration(milliseconds: 250));
+    for (
+      int attempt = 0;
+      attempt < 60 && find.byType(BackupFileBrowser).evaluate().isEmpty;
+      attempt++
+    ) {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 25));
       });
       await tester.pump(const Duration(milliseconds: 50));
     }
-    expect(tree, findsOneWidget);
+
+    expect(find.byType(BackupFileBrowser), findsOneWidget);
+    expect(find.text(AppI10n.backupDetailComparingFiles), findsNothing);
     expect(
-      find.byKey(const ValueKey<String>('backup-scene-pkg-inspect')),
+      find.byKey(const ValueKey<String>('backup-file-view-delete-source')),
       findsOneWidget,
     );
     expect(
-      find.byKey(
-        const ValueKey<String>(
-          'backup-manual-compare-duplicate-live-workshop::workshop-only.txt',
-        ),
-      ),
+      find.byKey(const ValueKey<String>('backup-file-view-delete-destination')),
       findsOneWidget,
     );
     expect(
-      find.byKey(
-        const ValueKey<String>(
-          'backup-manual-compare-duplicate-live-myprojects::myprojects-only.txt',
-        ),
-      ),
+      find.byKey(const ValueKey<String>('backup-update-file-tree')),
       findsOneWidget,
     );
-    final FileTreeRouteBanner route = tester.widget(
-      find.byType(FileTreeRouteBanner),
+    expect(find.text('scene.pkg'), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey<String>('update-pair-compare-scene.pkg')),
+      findsOneWidget,
     );
-    expect(route.source, endsWith('/ double-live-diff'));
-    expect(route.source.toLowerCase(), contains('workshop'));
-    expect(route.destination, endsWith('/ double-live-diff'));
-    expect(route.destination.toLowerCase(), contains('myprojects'));
     expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('conflicting backup details expose only detected backup paths', (

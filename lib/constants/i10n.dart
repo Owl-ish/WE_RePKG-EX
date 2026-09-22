@@ -257,6 +257,14 @@ class AppI10n {
   static const String backupActionRestoreAll = 'backup.action.restoreAll';
   static const String backupActionShowAgainAll = 'backup.action.showAgainAll';
   static const String backupActionShowAgain = 'backup.action.showAgain';
+  static const String backupActionDeleteLiveVersion =
+      'backup.action.deleteLiveVersion';
+  static const String backupActionDeleteLiveVersionButton =
+      'backup.action.deleteLiveVersionButton';
+  static const String backupActionDeleteLiveVersionTitle =
+      'backup.action.deleteLiveVersionTitle';
+  static const String backupActionDeleteLiveVersionMessage =
+      'backup.action.deleteLiveVersionMessage';
   static const String backupActionBackUpTitle = 'backup.action.backUpTitle';
   static const String backupActionUpdateTitle = 'backup.action.updateTitle';
   static const String backupActionRestoreTitle = 'backup.action.restoreTitle';

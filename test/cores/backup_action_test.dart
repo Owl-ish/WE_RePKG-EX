@@ -739,6 +739,69 @@ void main() {
     expect(record.dismissedVersion, isNull);
   });
 
+  test('duplicate live resolution recycles only the chosen copy', () async {
+    final Directory workshopRoot = Directory(
+      path.join(temporary.path, 'workshop'),
+    )..createSync();
+    final Directory projectsRoot = Directory(
+      path.join(temporary.path, 'projects'),
+    )..createSync();
+    final Directory workshop = Directory(path.join(workshopRoot.path, 'demo'))
+      ..createSync();
+    final Directory projects = Directory(path.join(projectsRoot.path, 'demo'))
+      ..createSync();
+    File(path.join(workshop.path, 'workshop.txt')).writeAsStringSync('keep');
+    File(path.join(projects.path, 'projects.txt')).writeAsStringSync('remove');
+
+    final result = await recycleDuplicateLiveCopy(
+      name: 'demo',
+      removedLibrary: WallpaperLibrary.myProjects,
+      liveWorkshopPath: workshopRoot.path,
+      liveMyProjectsPath: projectsRoot.path,
+      trashFolder: (String claimed) async {
+        expect(projects.existsSync(), isFalse);
+        expect(workshop.existsSync(), isTrue);
+        await Directory(claimed).delete(recursive: true);
+        return null;
+      },
+    );
+
+    expect(result, (changed: true, error: null));
+    expect(projects.existsSync(), isFalse);
+    expect(workshop.existsSync(), isTrue);
+  });
+
+  test(
+    'duplicate live resolution stops when the other copy vanished',
+    () async {
+      final Directory workshopRoot = Directory(
+        path.join(temporary.path, 'workshop'),
+      )..createSync();
+      final Directory projectsRoot = Directory(
+        path.join(temporary.path, 'projects'),
+      )..createSync();
+      final Directory workshop = Directory(path.join(workshopRoot.path, 'demo'))
+        ..createSync();
+      int trashCalls = 0;
+
+      final result = await recycleDuplicateLiveCopy(
+        name: 'demo',
+        removedLibrary: WallpaperLibrary.workshop,
+        liveWorkshopPath: workshopRoot.path,
+        liveMyProjectsPath: projectsRoot.path,
+        trashFolder: (String claimed) async {
+          trashCalls++;
+          return null;
+        },
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(trashCalls, 0);
+      expect(workshop.existsSync(), isTrue);
+    },
+  );
+
   test(
     'empty cleanup recycles the claimed folder, not a replacement',
     () async {

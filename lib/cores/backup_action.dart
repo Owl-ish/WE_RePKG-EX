@@ -528,6 +528,48 @@ Future<BackupActionResult> recycleBackupJunk({
   return (changed: changed, error: errors.isEmpty ? null : errors.join('\n'));
 }
 
+/// Recycles one explicitly chosen live copy while the other duplicate survives.
+/// The target is claimed before recycling so a changed duplicate state can be
+/// restored without deleting a replacement that appeared at the same path.
+Future<BackupActionResult> recycleDuplicateLiveCopy({
+  required String name,
+  required WallpaperLibrary removedLibrary,
+  required String? liveWorkshopPath,
+  required String? liveMyProjectsPath,
+  BackupTrash? trashFolder,
+}) async {
+  if (name.isEmpty || path.basename(name) != name) {
+    return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+  }
+  final String? targetLibrary = switch (removedLibrary) {
+    WallpaperLibrary.workshop => liveWorkshopPath,
+    WallpaperLibrary.myProjects => liveMyProjectsPath,
+  };
+  final String? survivingLibrary = switch (removedLibrary) {
+    WallpaperLibrary.workshop => liveMyProjectsPath,
+    WallpaperLibrary.myProjects => liveWorkshopPath,
+  };
+  if (targetLibrary == null || survivingLibrary == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  if (path.equals(targetLibrary, survivingLibrary)) {
+    return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+  }
+  final Directory target = Directory(path.join(targetLibrary, name));
+  final Directory survivor = Directory(path.join(survivingLibrary, name));
+  try {
+    return await _recycleCheckedFolder(
+      target: target,
+      library: targetLibrary,
+      check: (Directory candidate) async =>
+          await candidate.exists() && await survivor.exists(),
+      trashFolder: trashFolder,
+    );
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
 typedef _JunkCheck = Future<bool> Function(Directory folder);
 
 /// Rechecks junk before and after moving it aside for recycling.

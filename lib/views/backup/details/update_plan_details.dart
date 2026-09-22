@@ -13,13 +13,11 @@ class UpdatePlanDetailContent extends StatelessWidget {
     required this.plan,
     required this.card,
     required this.foreground,
-    required this.onOpenFileChanges,
   });
 
   final BackupUpdatePlan plan;
   final BackupCard card;
   final Color foreground;
-  final VoidCallback onOpenFileChanges;
 
   String _backupLabel(WallpaperLibrary library) {
     final String root = tr(switch (library) {
@@ -67,16 +65,6 @@ class UpdatePlanDetailContent extends StatelessWidget {
                   ],
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Semantics(
-            hint: tr(AppI10n.backupDetailExpandFileChanges),
-            child: DetailActionButton(
-              key: const ValueKey<String>('backup-update-expand-file-changes'),
-              icon: Icons.account_tree_outlined,
-              label: tr(AppI10n.backupDetailFileChanges),
-              onPressed: onOpenFileChanges,
             ),
           ),
         ],
@@ -203,6 +191,11 @@ FileTreeCompareAction? _selectedManualCompareAction({
   );
 }
 
+typedef _DisplayedFileChanges = ({
+  BackupFileChanges changes,
+  List<String> matching,
+});
+
 /// Update comparison using the detail session's existing file choices.
 class UpdateFileChanges extends StatefulWidget {
   const UpdateFileChanges({
@@ -216,6 +209,13 @@ class UpdateFileChanges extends StatefulWidget {
     required this.rePKGPath,
     required this.foreground,
     required this.selection,
+    this.includeMatchingFiles = false,
+    this.sourceOnlyTitle,
+    this.destinationOnlyTitle,
+    this.sourceActions,
+    this.destinationActions,
+    this.bidirectional = false,
+    this.overview,
   });
 
   final WallpaperInfo? wallpaper;
@@ -227,19 +227,26 @@ class UpdateFileChanges extends StatefulWidget {
   final String? rePKGPath;
   final Color foreground;
   final BackupUpdateSelection? selection;
+  final bool includeMatchingFiles;
+  final String? sourceOnlyTitle;
+  final String? destinationOnlyTitle;
+  final Widget? sourceActions;
+  final Widget? destinationActions;
+  final bool bidirectional;
+  final FolderFileOverview? overview;
 
   @override
   State<UpdateFileChanges> createState() => _UpdateFileChangesState();
 }
 
 class _UpdateFileChangesState extends State<UpdateFileChanges> {
-  late Future<BackupFileChanges?> _changes;
+  late Future<_DisplayedFileChanges?> _changes;
   final FileTreeCompareSelection _manualCompare = FileTreeCompareSelection();
 
   @override
   void initState() {
     super.initState();
-    _changes = widget.selection?.changes ?? _read();
+    _changes = _loadChanges();
   }
 
   @override
@@ -247,18 +254,58 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.liveFolder != widget.liveFolder ||
         oldWidget.backupFolder != widget.backupFolder ||
-        oldWidget.selection != widget.selection) {
-      _changes = widget.selection?.changes ?? _read();
+        oldWidget.selection != widget.selection ||
+        oldWidget.includeMatchingFiles != widget.includeMatchingFiles ||
+        oldWidget.overview != widget.overview) {
+      _changes = _loadChanges();
       _manualCompare.clear();
     }
   }
 
-  Future<BackupFileChanges?> _read() async {
+  Future<_DisplayedFileChanges?> _loadChanges() async {
+    final BackupUpdateSelection? selection = widget.selection;
+    if (selection == null) {
+      final FolderFileOverview? overview = widget.overview;
+      return overview == null ? _read() : _displayedOverview(overview);
+    }
+    final BackupFileChanges? changes = await selection.changes;
+    return changes == null
+        ? null
+        : (changes: changes, matching: const <String>[]);
+  }
+
+  Future<_DisplayedFileChanges?> _read() async {
     final String? live = widget.liveFolder;
     final String? backup = widget.backupFolder;
     if (live == null || backup == null) return null;
-    return compareBackupFileChanges(liveFolder: live, backupFolder: backup);
+    final FolderFileComparison? comparison = await compareFolderFilesDetailed(
+      firstFolder: live,
+      secondFolder: backup,
+    );
+    return comparison == null ? null : _displayedComparison(comparison);
   }
+
+  _DisplayedFileChanges _displayedComparison(FolderFileComparison comparison) {
+    return (
+      changes: (
+        modified: comparison.changes.modified,
+        onlyLive: comparison.changes.onlyFirst,
+        onlyBackup: comparison.changes.onlySecond,
+      ),
+      matching: widget.includeMatchingFiles
+          ? comparison.matching
+          : const <String>[],
+    );
+  }
+
+  _DisplayedFileChanges _displayedOverview(FolderFileOverview overview) => (
+    changes: (
+      modified: overview.differentSize,
+      onlyLive: overview.onlyFirst,
+      onlyBackup: overview.onlySecond,
+    ),
+    matching: overview.shared,
+  );
 
   void _selectManualCompare(
     List<FileTreeCompareCandidate> visible,
@@ -282,11 +329,19 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
   }
 
   Widget _buildChanges(BuildContext context) =>
-      FutureBuilder<BackupFileChanges?>(
+      FutureBuilder<_DisplayedFileChanges?>(
         future: _changes,
+        initialData: widget.overview == null
+            ? null
+            : _displayedOverview(widget.overview!),
         builder:
-            (BuildContext context, AsyncSnapshot<BackupFileChanges?> snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
+            (
+              BuildContext context,
+              AsyncSnapshot<_DisplayedFileChanges?> snapshot,
+            ) {
+              final _DisplayedFileChanges? displayed = snapshot.data;
+              if (displayed == null &&
+                  snapshot.connectionState != ConnectionState.done) {
                 return FileTreeSurface(
                   foreground: widget.foreground,
                   child: Padding(
@@ -312,17 +367,20 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
                   ),
                 );
               }
-              final BackupFileChanges? changes = snapshot.data;
-              if (snapshot.hasError || changes == null) {
+              if (snapshot.hasError || displayed == null) {
                 return _fileChangeMessage(
                   tr(AppI10n.backupDetailFileComparisonUnavailable),
                 );
               }
+              final BackupFileChanges changes = displayed.changes;
               final int total =
                   changes.modified.length +
                   changes.onlyLive.length +
-                  changes.onlyBackup.length;
-              if (total == 0) {
+                  changes.onlyBackup.length +
+                  displayed.matching.length;
+              if (total == 0 &&
+                  widget.sourceActions == null &&
+                  widget.destinationActions == null) {
                 return _fileChangeMessage(
                   tr(AppI10n.backupDetailNoFileDifferences),
                 );
@@ -354,6 +412,7 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
                 key: const ValueKey<String>('backup-update-file-tree'),
                 configuration: widget,
                 changes: changes,
+                matching: displayed.matching,
                 manualSelection: _manualCompare,
                 manualAction: manualCompareAction,
                 onCompareSelect: (candidate, control, shift) =>
@@ -408,7 +467,9 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
                           ),
                         if (changes.onlyLive.isNotEmpty)
                           FileTreeGroupHeader(
-                            title: tr(AppI10n.backupDetailAddedFiles),
+                            title:
+                                widget.sourceOnlyTitle ??
+                                tr(AppI10n.backupDetailAddedFiles),
                             count: changes.onlyLive.length,
                             accent: colours.good,
                             foreground: widget.foreground,
@@ -423,7 +484,9 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
                           ),
                         if (changes.onlyBackup.isNotEmpty)
                           FileTreeGroupHeader(
-                            title: tr(AppI10n.backupDetailRemovedFiles),
+                            title:
+                                widget.destinationOnlyTitle ??
+                                tr(AppI10n.backupDetailRemovedFiles),
                             count: changes.onlyBackup.length,
                             accent: colours.note,
                             foreground: widget.foreground,
@@ -435,6 +498,13 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
                                     widget.foreground,
                                     keyBase: 'only-backup',
                                   ),
+                          ),
+                        if (displayed.matching.isNotEmpty)
+                          FileTreeGroupHeader(
+                            title: tr(AppI10n.backupDetailMatchingFiles),
+                            count: displayed.matching.length,
+                            accent: colours.good,
+                            foreground: widget.foreground,
                           ),
                       ],
                     ),

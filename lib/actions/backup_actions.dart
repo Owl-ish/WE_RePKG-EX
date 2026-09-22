@@ -2,6 +2,7 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/backup_action.dart';
@@ -231,6 +232,79 @@ Future<bool> showReconcileDetectionAgain(
       entry.name: <BackupReconcileReason>{reason},
     },
   );
+}
+
+/// Resolves Duplicate Live only after the user chooses the copy to recycle.
+Future<bool> deleteDuplicateLiveVersion(
+  BuildContext context, {
+  required String name,
+  required WallpaperLibrary library,
+  required String versionLabel,
+}) async {
+  final ProviderContainer container = ProviderScope.containerOf(
+    context,
+    listen: false,
+  );
+  final String? libraryRoot = switch (library) {
+    WallpaperLibrary.workshop => container.read(wallpaperPathProvider),
+    WallpaperLibrary.myProjects => container.read(myProjectsLibraryProvider),
+  };
+  if (libraryRoot == null) {
+    showErrorToast(tr(AppI10n.backupActionFolderUnavailable));
+    return false;
+  }
+  final String folder = path.join(libraryRoot, name);
+  final bool confirmed = await showConfirmDialog(
+    title: tr(
+      AppI10n.backupActionDeleteLiveVersionTitle,
+      namedArgs: <String, String>{'version': versionLabel},
+    ),
+    message: tr(
+      AppI10n.backupActionDeleteLiveVersionMessage,
+      namedArgs: <String, String>{'version': versionLabel},
+    ),
+    confirmLabel: tr(AppI10n.backupActionDeleteLiveVersion),
+    details: <ConfirmDetail>[(label: versionLabel, value: folder)],
+  );
+  if (!confirmed || !context.mounted) return false;
+
+  final CancelFunc close = BotToast.showLoading();
+  late final BackupActionResult result;
+  try {
+    result = await recycleDuplicateLiveCopy(
+      name: name,
+      removedLibrary: library,
+      liveWorkshopPath: container.read(wallpaperPathProvider),
+      liveMyProjectsPath: container.read(myProjectsLibraryProvider),
+    );
+  } catch (error) {
+    result = (changed: false, error: '$error');
+  } finally {
+    close();
+  }
+  if (result.changed) {
+    _completeCachedIssues(
+      container,
+      resolvedReconcileReasons: <String, Set<BackupReconcileReason>>{
+        name: <BackupReconcileReason>{
+          BackupReconcileReason.duplicateLiveCopies,
+        },
+      },
+      refreshIntegrity: true,
+    );
+    if (container.read(currentLibraryProvider) == library) {
+      container.read(wallpaperListProvider.notifier).clear();
+      container.read(checkedIdsProvider.notifier).clear();
+      container.read(selectedWallpaperProvider.notifier).update(null);
+      container.read(currentStateProvider.notifier).update(RunState.initial);
+    }
+  }
+  if (result.error case final String error) {
+    showErrorToast('${tr(AppI10n.dialogDeleteFailed)} $error');
+  } else if (result.changed) {
+    showDeleteToast();
+  }
+  return result.changed;
 }
 
 Future<bool> showAllIgnoredDetections(

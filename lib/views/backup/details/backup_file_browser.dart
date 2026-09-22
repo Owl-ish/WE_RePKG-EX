@@ -23,7 +23,19 @@ class BackupFileBrowser extends StatefulWidget {
     this.rePKGPath,
     this.updateSelection,
     this.wallpaper,
+    this.overview,
     this.showChanges = false,
+    this.comparisonOnly = false,
+    this.sourceLabel,
+    this.destinationLabel,
+    this.sourceOnlyTitle,
+    this.destinationOnlyTitle,
+    this.sourceOpenLabel,
+    this.destinationOpenLabel,
+    this.sourceDeleteLabel,
+    this.destinationDeleteLabel,
+    this.onDeleteSource,
+    this.onDeleteDestination,
   });
 
   final String wallpaperName;
@@ -32,7 +44,19 @@ class BackupFileBrowser extends StatefulWidget {
   final String? rePKGPath;
   final BackupUpdateSelection? updateSelection;
   final WallpaperInfo? wallpaper;
+  final FolderFileOverview? overview;
   final bool showChanges;
+  final bool comparisonOnly;
+  final String? sourceLabel;
+  final String? destinationLabel;
+  final String? sourceOnlyTitle;
+  final String? destinationOnlyTitle;
+  final String? sourceOpenLabel;
+  final String? destinationOpenLabel;
+  final String? sourceDeleteLabel;
+  final String? destinationDeleteLabel;
+  final Future<bool> Function()? onDeleteSource;
+  final Future<bool> Function()? onDeleteDestination;
 
   @override
   State<BackupFileBrowser> createState() => _BackupFileBrowserState();
@@ -40,14 +64,18 @@ class BackupFileBrowser extends StatefulWidget {
 
 class _BackupFileBrowserState extends State<BackupFileBrowser> {
   final LinkedVerticalScroll _scroll = LinkedVerticalScroll();
-  Future<FolderFileComparison?>? _comparison;
   bool _showComparison = false;
   bool _comparisonRequested = false;
+  bool _deleting = false;
+
+  String get _sourceLabel => widget.sourceLabel ?? tr(AppI10n.backupLiveFiles);
+  String get _destinationLabel =>
+      widget.destinationLabel ?? tr(AppI10n.backupBackupFiles);
 
   @override
   void initState() {
     super.initState();
-    if (widget.showChanges &&
+    if ((widget.showChanges || widget.comparisonOnly) &&
         widget.liveFolder != null &&
         widget.backupFolder != null) {
       _requestComparison();
@@ -55,18 +83,24 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
   }
 
   void _requestComparison() {
-    if (widget.updateSelection == null) {
-      _comparison ??= compareFolderFilesDetailed(
-        firstFolder: widget.liveFolder!,
-        secondFolder: widget.backupFolder!,
-      );
-    }
     _comparisonRequested = true;
     _showComparison = true;
   }
 
   void _compare() {
     setState(_requestComparison);
+  }
+
+  Future<void> _delete(Future<bool> Function() action) async {
+    if (_deleting) return;
+    setState(() => _deleting = true);
+    final bool resolved = await action();
+    if (!mounted) return;
+    if (resolved) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _deleting = false);
+    }
   }
 
   @override
@@ -123,24 +157,20 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
           final String folder = liveFolder ?? backupFolder!;
           return _folder(
             folder,
-            tr(
-              liveFolder != null
-                  ? AppI10n.backupLiveFiles
-                  : AppI10n.backupBackupFiles,
-            ),
+            liveFolder != null ? _sourceLabel : _destinationLabel,
             foreground,
             _scroll.first,
           );
         }
         final Widget live = _folder(
           liveFolder,
-          tr(AppI10n.backupLiveFiles),
+          _sourceLabel,
           foreground,
           _scroll.first,
         );
         final Widget backup = _folder(
           backupFolder,
-          tr(AppI10n.backupBackupFiles),
+          _destinationLabel,
           foreground,
           _scroll.second,
         );
@@ -179,68 +209,92 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
   }
 
   Widget _changes(Color foreground) {
-    if (widget.updateSelection case final BackupUpdateSelection selection) {
-      return UpdateFileChanges(
-        wallpaper: widget.wallpaper,
-        wallpaperName: widget.wallpaperName,
-        liveFolder: widget.liveFolder,
-        backupFolder: widget.backupFolder,
-        sourceLabel: tr(AppI10n.backupLiveFiles),
-        destinationLabel: tr(AppI10n.backupBackupFiles),
-        rePKGPath: widget.rePKGPath,
-        foreground: foreground,
-        selection: selection,
-      );
-    }
-    return FutureBuilder<FolderFileComparison?>(
-      future: _comparison,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return Center(child: Text(tr(AppI10n.backupDetailComparingFiles)));
-        }
-        final FolderFileComparison? result = snapshot.data;
-        if (snapshot.hasError || result == null) {
-          return Center(
-            child: Text(tr(AppI10n.backupDetailFileComparisonUnavailable)),
-          );
-        }
-        final FolderFileChanges changes = result.changes;
-        if (changes.modified.isEmpty &&
-            changes.onlyFirst.isEmpty &&
-            changes.onlySecond.isEmpty) {
-          return FileTreeScrollView(
-            foreground: foreground,
-            child: BackupDetailGroup(
-              title: tr(AppI10n.backupDetailMatchingFiles),
-              items: result.matching.isEmpty
-                  ? <String>[tr(AppI10n.backupDetailSame)]
-                  : result.matching,
-              foreground: foreground,
+    return UpdateFileChanges(
+      wallpaper: widget.wallpaper,
+      wallpaperName: widget.wallpaperName,
+      liveFolder: widget.liveFolder,
+      backupFolder: widget.backupFolder,
+      sourceLabel: _sourceLabel,
+      destinationLabel: _destinationLabel,
+      sourceOnlyTitle: widget.sourceOnlyTitle,
+      destinationOnlyTitle: widget.destinationOnlyTitle,
+      sourceActions: widget.comparisonOnly
+          ? _paneActions(
+              folder: widget.liveFolder,
+              openLabel:
+                  widget.sourceOpenLabel ?? tr(AppI10n.backupOpenLiveFolder),
+              openKey: 'backup-file-view-open-source',
+              deleteLabel: widget.sourceDeleteLabel,
+              deleteKey: 'backup-file-view-delete-source',
+              onDelete: widget.onDeleteSource,
+            )
+          : null,
+      destinationActions: widget.comparisonOnly
+          ? _paneActions(
+              folder: widget.backupFolder,
+              openLabel:
+                  widget.destinationOpenLabel ??
+                  tr(AppI10n.backupOpenBackupFolder),
+              openKey: 'backup-file-view-open-destination',
+              deleteLabel: widget.destinationDeleteLabel,
+              deleteKey: 'backup-file-view-delete-destination',
+              onDelete: widget.onDeleteDestination,
+            )
+          : null,
+      bidirectional: widget.comparisonOnly,
+      includeMatchingFiles: widget.updateSelection == null,
+      overview: widget.overview,
+      rePKGPath: widget.rePKGPath,
+      foreground: foreground,
+      selection: widget.updateSelection,
+    );
+  }
+
+  Widget _paneActions({
+    required String? folder,
+    required String openLabel,
+    required String openKey,
+    required String? deleteLabel,
+    required String deleteKey,
+    required Future<bool> Function()? onDelete,
+  }) {
+    final ColorScheme colours = Theme.of(context).colorScheme;
+    final ButtonStyle openStyle = OutlinedButton.styleFrom(
+      foregroundColor: colours.onSurface,
+      backgroundColor: colours.surface.withValues(alpha: .9),
+      side: BorderSide(color: colours.outline),
+      visualDensity: VisualDensity.compact,
+    );
+    final ButtonStyle deleteStyle = OutlinedButton.styleFrom(
+      foregroundColor: colours.onErrorContainer,
+      backgroundColor: colours.errorContainer,
+      side: BorderSide(color: colours.error),
+      visualDensity: VisualDensity.compact,
+    );
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 6,
+      children: <Widget>[
+        if (folder != null)
+          OutlinedButton.icon(
+            key: ValueKey<String>(openKey),
+            style: openStyle,
+            onPressed: () => browserFolder(folder),
+            icon: const Icon(Icons.folder_open_outlined, size: 17),
+            label: Text(openLabel),
+          ),
+        if (onDelete != null)
+          OutlinedButton.icon(
+            key: ValueKey<String>(deleteKey),
+            style: deleteStyle,
+            onPressed: _deleting ? null : () => _delete(onDelete),
+            icon: const Icon(Icons.delete_outline_rounded, size: 17),
+            label: Text(
+              deleteLabel ?? tr(AppI10n.backupActionDeleteLiveVersion),
             ),
-          );
-        }
-        return FolderDifferenceFileTree(
-          wallpaperName: widget.wallpaperName,
-          changes: changes,
-          firstFolder: widget.liveFolder,
-          secondFolder: widget.backupFolder,
-          firstLabel: tr(AppI10n.backupLiveFiles),
-          secondLabel: tr(AppI10n.backupBackupFiles),
-          modifiedTitle: tr(AppI10n.backupDetailModified),
-          firstOnlyTitle: tr(AppI10n.backupLiveFiles),
-          secondOnlyTitle: tr(AppI10n.backupBackupFiles),
-          semanticLabel: tr(AppI10n.backupDetailFileChanges),
-          unavailableText: tr(AppI10n.backupDetailFileComparisonUnavailable),
-          openFolderTooltip: tr(AppI10n.homeOpenFileLocation),
-          keyBase: 'backup-browser-comparison',
-          firstSideId: 'live',
-          secondSideId: 'backup',
-          firstFolderActionKey: 'backup-browser-compare-live',
-          secondFolderActionKey: 'backup-browser-compare-backup',
-          rePKGPath: widget.rePKGPath,
-          foreground: foreground,
-        );
-      },
+          ),
+      ],
     );
   }
 
@@ -255,6 +309,11 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
         context,
       ).colorScheme.surface.withValues(alpha: .9),
       side: BorderSide(color: Theme.of(context).colorScheme.outline),
+    );
+    final ButtonStyle deleteButtonStyle = OutlinedButton.styleFrom(
+      foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+      backgroundColor: Theme.of(context).colorScheme.errorContainer,
+      side: BorderSide(color: Theme.of(context).colorScheme.error),
     );
     final Widget content = Padding(
       padding: const EdgeInsets.all(16),
@@ -283,50 +342,88 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
                   ),
                 ],
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  if (widget.liveFolder case final String folder)
-                    OutlinedButton.icon(
-                      style: toolbarButtonStyle,
-                      onPressed: () => browserFolder(folder),
-                      icon: const Icon(Icons.folder_open_outlined),
-                      label: Text(tr(AppI10n.backupOpenLiveFolder)),
-                    ),
-                  if (widget.backupFolder case final String folder)
-                    OutlinedButton.icon(
-                      style: toolbarButtonStyle,
-                      onPressed: () => browserFolder(folder),
-                      icon: const Icon(Icons.folder_open_outlined),
-                      label: Text(tr(AppI10n.backupOpenBackupFolder)),
-                    ),
-                  if (widget.liveFolder != null && widget.backupFolder != null)
-                    OutlinedButton(
-                      style: toolbarButtonStyle,
-                      onPressed: _showComparison
-                          ? () => setState(() => _showComparison = false)
-                          : _compare,
-                      child: Text(
-                        tr(
-                          _showComparison
-                              ? AppI10n.backupBrowseFiles
-                              : AppI10n.backupDetailCompareFiles,
+              if (!widget.comparisonOnly)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    if (widget.liveFolder case final String folder)
+                      OutlinedButton.icon(
+                        style: toolbarButtonStyle,
+                        onPressed: () => browserFolder(folder),
+                        icon: const Icon(Icons.folder_open_outlined),
+                        label: Text(
+                          widget.sourceOpenLabel ??
+                              tr(AppI10n.backupOpenLiveFolder),
                         ),
                       ),
-                    ),
-                ],
-              ),
+                    if (widget.onDeleteSource
+                        case final Future<bool> Function() delete)
+                      OutlinedButton.icon(
+                        key: const ValueKey<String>(
+                          'backup-file-view-delete-source',
+                        ),
+                        style: deleteButtonStyle,
+                        onPressed: _deleting ? null : () => _delete(delete),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: Text(
+                          widget.sourceDeleteLabel ??
+                              tr(AppI10n.backupActionDeleteLiveVersion),
+                        ),
+                      ),
+                    if (widget.backupFolder case final String folder)
+                      OutlinedButton.icon(
+                        style: toolbarButtonStyle,
+                        onPressed: () => browserFolder(folder),
+                        icon: const Icon(Icons.folder_open_outlined),
+                        label: Text(
+                          widget.destinationOpenLabel ??
+                              tr(AppI10n.backupOpenBackupFolder),
+                        ),
+                      ),
+                    if (widget.onDeleteDestination
+                        case final Future<bool> Function() delete)
+                      OutlinedButton.icon(
+                        key: const ValueKey<String>(
+                          'backup-file-view-delete-destination',
+                        ),
+                        style: deleteButtonStyle,
+                        onPressed: _deleting ? null : () => _delete(delete),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: Text(
+                          widget.destinationDeleteLabel ??
+                              tr(AppI10n.backupActionDeleteLiveVersion),
+                        ),
+                      ),
+                    if (widget.liveFolder != null &&
+                        widget.backupFolder != null)
+                      OutlinedButton(
+                        style: toolbarButtonStyle,
+                        onPressed: _showComparison
+                            ? () => setState(() => _showComparison = false)
+                            : _compare,
+                        child: Text(
+                          tr(
+                            _showComparison
+                                ? AppI10n.backupBrowseFiles
+                                : AppI10n.backupDetailCompareFiles,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               const SizedBox(height: 16),
               Expanded(
                 // Keep package sessions and folder expansion while switching views.
-                child: IndexedStack(
-                  index: _showComparison ? 1 : 0,
-                  children: <Widget>[
-                    _folders(foreground),
-                    if (_comparisonRequested) _changes(foreground),
-                  ],
-                ),
+                child: widget.comparisonOnly
+                    ? _changes(foreground)
+                    : IndexedStack(
+                        index: _showComparison ? 1 : 0,
+                        children: <Widget>[
+                          _folders(foreground),
+                          if (_comparisonRequested) _changes(foreground),
+                        ],
+                      ),
               ),
             ],
           ),

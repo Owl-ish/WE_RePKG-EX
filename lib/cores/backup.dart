@@ -744,6 +744,15 @@ typedef FolderFileComparison = ({
   List<String> matching,
 });
 
+/// Folder paths classified from directory entries and file sizes only.
+/// Exact contents remain deferred until the user compares a specific file.
+typedef FolderFileOverview = ({
+  List<String> differentSize,
+  List<String> onlyFirst,
+  List<String> onlySecond,
+  List<String> shared,
+});
+
 /// File differences for Update callers.
 typedef BackupFileChanges = ({
   List<String> modified,
@@ -1119,6 +1128,53 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
   } on FileSystemException {
     return null;
   }
+}
+
+/// Builds the lightweight folder inventory used by interactive comparison views.
+Future<FolderFileOverview?> compareFolderFileOverview({
+  required String firstFolder,
+  required String secondFolder,
+}) async {
+  final (
+    Map<String, ({String display, int size})>? firstFiles,
+    Map<String, ({String display, int size})>? secondFiles,
+  ) = await (
+    _backupFileManifest(Directory(firstFolder)),
+    _backupFileManifest(Directory(secondFolder)),
+  ).wait;
+  if (firstFiles == null || secondFiles == null) return null;
+
+  final List<String> differentSize = <String>[];
+  final List<String> onlyFirst = <String>[];
+  final List<String> onlySecond = <String>[];
+  final List<String> shared = <String>[];
+  final Set<String> keys = <String>{...firstFiles.keys, ...secondFiles.keys};
+  for (final String key in keys) {
+    final firstFile = firstFiles[key];
+    final secondFile = secondFiles[key];
+    if (firstFile == null) {
+      onlySecond.add(secondFile!.display);
+    } else if (secondFile == null) {
+      onlyFirst.add(firstFile.display);
+    } else if (firstFile.size != secondFile.size) {
+      differentSize.add(firstFile.display);
+    } else {
+      shared.add(firstFile.display);
+    }
+  }
+  void sortPaths(List<String> paths) => paths.sort(
+    (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+  );
+  sortPaths(differentSize);
+  sortPaths(onlyFirst);
+  sortPaths(onlySecond);
+  sortPaths(shared);
+  return (
+    differentSize: differentSize,
+    onlyFirst: onlyFirst,
+    onlySecond: onlySecond,
+    shared: shared,
+  );
 }
 
 /// Compares file contents in chunks and returns differences and matching paths.

@@ -21,6 +21,10 @@ part 'file_compare/image_comparison.dart';
 part 'file_compare/text_comparison.dart';
 part 'file_compare/binary_comparison.dart';
 
+final Expando<bool> _comparisonOpenByNavigator = Expando<bool>(
+  'fileComparisonOpen',
+);
+
 /// One concrete side of an explicit file comparison.
 class FileComparisonSide {
   const FileComparisonSide({required this.label, required this.path});
@@ -324,59 +328,68 @@ Future<void> showFileComparisonDialog(
   String imageDifferenceIntensityLabel = 'Difference intensity',
   String imageDifferenceSizeMismatch =
       'Difference view requires matching image dimensions.',
-}) {
-  if (isPreviewableImagePath(first.path) &&
-      isPreviewableImagePath(second.path)) {
-    return _showImageDialog(
+}) async {
+  final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
+  if (_comparisonOpenByNavigator[navigator] ?? false) return;
+  _comparisonOpenByNavigator[navigator] = true;
+  try {
+    if (isPreviewableImagePath(first.path) &&
+        isPreviewableImagePath(second.path)) {
+      await _showImageDialog(
+        context,
+        first: first,
+        second: second,
+        title: title,
+        unavailableText: unavailableText,
+        zoomOutTooltip: imageZoomOutTooltip,
+        resetViewTooltip: imageResetViewTooltip,
+        zoomInTooltip: imageZoomInTooltip,
+        linkViewsTooltip: imageLinkViewsTooltip,
+        unlinkViewsTooltip: imageUnlinkViewsTooltip,
+        sideBySideLabel: imageSideBySideLabel,
+        overlayLabel: imageOverlayLabel,
+        blinkLabel: imageBlinkLabel,
+        differenceLabel: imageDifferenceLabel,
+        overlayOpacityLabel: imageOverlayOpacityLabel,
+        differenceSameHint: imageDifferenceSameHint,
+        differenceIntensityLabel: imageDifferenceIntensityLabel,
+        differenceSizeMismatch: imageDifferenceSizeMismatch,
+      );
+      return;
+    }
+    if (isTextComparisonPath(first.path) && isTextComparisonPath(second.path)) {
+      await _showTextDialog(
+        context,
+        first: first,
+        second: second,
+        title: title,
+        unavailableText: unavailableText,
+        jsonModeLabel: jsonModeLabel,
+        textModeLabel: textModeLabel,
+        jsonNoDifferencesText: jsonNoDifferencesText,
+        missingValueText: missingValueText,
+        truncatedText: truncatedText,
+      );
+      return;
+    }
+    await _showBinaryDialog(
       context,
       first: first,
       second: second,
       title: title,
       unavailableText: unavailableText,
-      zoomOutTooltip: imageZoomOutTooltip,
-      resetViewTooltip: imageResetViewTooltip,
-      zoomInTooltip: imageZoomInTooltip,
-      linkViewsTooltip: imageLinkViewsTooltip,
-      unlinkViewsTooltip: imageUnlinkViewsTooltip,
-      sideBySideLabel: imageSideBySideLabel,
-      overlayLabel: imageOverlayLabel,
-      blinkLabel: imageBlinkLabel,
-      differenceLabel: imageDifferenceLabel,
-      overlayOpacityLabel: imageOverlayOpacityLabel,
-      differenceSameHint: imageDifferenceSameHint,
-      differenceIntensityLabel: imageDifferenceIntensityLabel,
-      differenceSizeMismatch: imageDifferenceSizeMismatch,
+      modeLabel: binaryModeLabel,
+      fileTypeLabel: fileTypeLabel,
+      fileSizeLabel: fileSizeLabel,
+      fileModifiedLabel: fileModifiedLabel,
+      hashLabel: hashLabel,
+      sameText: sameText,
+      differentText: differentText,
+      noExtensionText: noExtensionText,
     );
+  } finally {
+    _comparisonOpenByNavigator[navigator] = false;
   }
-  if (isTextComparisonPath(first.path) && isTextComparisonPath(second.path)) {
-    return _showTextDialog(
-      context,
-      first: first,
-      second: second,
-      title: title,
-      unavailableText: unavailableText,
-      jsonModeLabel: jsonModeLabel,
-      textModeLabel: textModeLabel,
-      jsonNoDifferencesText: jsonNoDifferencesText,
-      missingValueText: missingValueText,
-      truncatedText: truncatedText,
-    );
-  }
-  return _showBinaryDialog(
-    context,
-    first: first,
-    second: second,
-    title: title,
-    unavailableText: unavailableText,
-    modeLabel: binaryModeLabel,
-    fileTypeLabel: fileTypeLabel,
-    fileSizeLabel: fileSizeLabel,
-    fileModifiedLabel: fileModifiedLabel,
-    hashLabel: hashLabel,
-    sameText: sameText,
-    differentText: differentText,
-    noExtensionText: noExtensionText,
-  );
 }
 
 /// Optional image capability that callers can attach to a shared file-tree row.

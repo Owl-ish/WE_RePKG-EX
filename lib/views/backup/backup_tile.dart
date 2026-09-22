@@ -46,6 +46,8 @@ typedef _ReconcileFolders = ({
   String? myProjectsBackup,
 });
 
+typedef _BackupDetailAction = Future<bool> Function();
+
 DetailDialogLayout _backupDetailLayout({
   bool extraCanFocus = false,
 }) => DetailDialogLayout(
@@ -298,6 +300,9 @@ class _TileFrame extends ConsumerStatefulWidget {
 class _TileFrameState extends ConsumerState<_TileFrame> {
   final DoubleClickGuard _clicks = DoubleClickGuard();
   late final FocusNode _tileFocusNode;
+  bool _openingFileView = false;
+  bool _openingDuplicateLiveFiles = false;
+  bool _completingDetailAction = false;
 
   @override
   void initState() {
@@ -342,46 +347,67 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  Map<BackupAction, VoidCallback> get _availableActions {
+  Map<BackupAction, _BackupDetailAction> get _availableActions {
     final plan = widget.updatePlan;
     final card = widget.backupCard;
     if (plan != null && card != null) {
       return {
         for (final action in actionsForUpdatePlan(plan))
-          action: action == BackupAction.update && widget.onAction != null
-              ? widget.onAction!
-              : () => applyBackupAction(context, action, [card]),
+          action: () => applyBackupAction(context, action, <BackupCard>[card]),
       };
     }
     final action = widget.action;
-    final callback = widget.onAction;
-    return action == null || callback == null ? {} : {action: callback};
+    if (action != null && card != null) {
+      return <BackupAction, _BackupDetailAction>{
+        action: () => applyBackupAction(context, action, <BackupCard>[card]),
+      };
+    }
+    final ReconcileEntry? reconcile = widget.reconcileEntry;
+    final BackupReconcileReason? reason = widget.reconcileReasonOverride;
+    if (action == BackupAction.showUpdateAgain &&
+        reconcile != null &&
+        reason != null) {
+      return <BackupAction, _BackupDetailAction>{
+        BackupAction.showUpdateAgain: () =>
+            showReconcileDetectionAgain(context, reconcile, reason),
+      };
+    }
+    return <BackupAction, _BackupDetailAction>{};
   }
 
   List<DetailAction> _actions({
     required WallpaperInfo wallpaper,
-    VoidCallback? primaryAction,
+    required NavigatorState navigator,
+    DetailAction? leadingAction,
+    _BackupDetailAction? primaryAction,
     BackupUpdateSelection? updateSelection,
     String? updateBackupFolder,
   }) {
     final bool reconcile = widget.reconcileEntry != null;
     return <DetailAction>[
+      ?leadingAction,
       for (final entry in _availableActions.entries)
         DetailAction(
           label: widget.actionLabelOverride ?? backupActionLabel(entry.key),
-          onPressed: entry.key == BackupAction.update
-              ? primaryAction ?? entry.value
-              : entry.value,
+          onPressed: () => _completeDetailAction(
+            navigator,
+            entry.key == BackupAction.update
+                ? primaryAction ?? entry.value
+                : entry.value,
+          ),
           destructive: backupActionIsDestructive(entry.key),
         ),
       if (!reconcile && widget.updatePlan?.updateContent == true)
         if (widget.backupCard case final BackupCard card)
           DetailAction(
             label: backupActionLabel(BackupAction.ignoreUpdate),
-            onPressed: () => applyBackupAction(
-              context,
-              BackupAction.ignoreUpdate,
-              <BackupCard>[card],
+            onPressed: () => _completeDetailAction(
+              navigator,
+              () => applyBackupAction(
+                context,
+                BackupAction.ignoreUpdate,
+                <BackupCard>[card],
+              ),
             ),
           ),
       if (reconcile && !widget.reconcileIgnored)
@@ -389,7 +415,10 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           if (entry.activeReasons.any(reconcileReasonCanBeIgnored))
             DetailAction(
               label: tr(AppI10n.backupActionIgnore),
-              onPressed: () => ignoreReconcileDetections(context, entry),
+              onPressed: () => _completeDetailAction(
+                navigator,
+                () => ignoreReconcileDetections(context, entry),
+              ),
             ),
       // Reconcile retains its concrete, reason-specific location controls.
       if (!reconcile &&
@@ -405,25 +434,116 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     ];
   }
 
+  Future<void> _completeDetailAction(
+    NavigatorState navigator,
+    _BackupDetailAction action,
+  ) async {
+    if (_completingDetailAction) return;
+    _completingDetailAction = true;
+    try {
+      final bool completed = await action();
+      if (completed && navigator.mounted) await navigator.maybePop();
+    } finally {
+      _completingDetailAction = false;
+    }
+  }
+
   Future<void> _openFileView(
     WallpaperInfo wallpaper, {
     BackupUpdateSelection? updateSelection,
     String? updateBackupFolder,
     bool showChanges = false,
-  }) => showWallpaperDetailSurface(
-    context: context,
-    builder: (_) => BackupFileBrowser(
-      wallpaperName: widget.name,
-      wallpaper: wallpaper,
-      liveFolder: widget.folders.live,
-      backupFolder: updateSelection == null
-          ? widget.folders.backup
-          : updateBackupFolder,
-      updateSelection: updateSelection,
-      showChanges: showChanges,
-      rePKGPath: ref.read(toolPathProvider),
-    ),
-  );
+  }) async {
+    if (_openingFileView) return;
+    _openingFileView = true;
+    try {
+      await showWallpaperDetailSurface(
+        context: context,
+        builder: (_) => BackupFileBrowser(
+          wallpaperName: widget.name,
+          wallpaper: wallpaper,
+          liveFolder: widget.folders.live,
+          backupFolder: updateSelection == null
+              ? widget.folders.backup
+              : updateBackupFolder,
+          updateSelection: updateSelection,
+          showChanges: showChanges,
+          rePKGPath: ref.read(toolPathProvider),
+        ),
+      );
+    } finally {
+      _openingFileView = false;
+    }
+  }
+
+  Future<void> _openDuplicateLiveFiles(
+    WallpaperInfo wallpaper,
+    _ReconcileFolders folders,
+    Future<FolderFileOverview?> comparison,
+  ) async {
+    if (_openingDuplicateLiveFiles) return;
+    _openingDuplicateLiveFiles = true;
+    final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
+    try {
+      final String? workshop = folders.workshopLive;
+      final String? myProjects = folders.myProjectsLive;
+      if (workshop == null || myProjects == null) return;
+      final FolderFileOverview? preparedComparison = await comparison;
+      if (!mounted) return;
+      if (preparedComparison == null) {
+        showErrorToast(tr(AppI10n.backupDetailFileComparisonUnavailable));
+        return;
+      }
+      final String workshopLabel = tr(AppI10n.backupDetailWorkshopLive);
+      final String myProjectsLabel = tr(AppI10n.backupDetailMyProjectsLive);
+      bool resolved = false;
+      await showWallpaperDetailSurface(
+        context: context,
+        builder: (_) => BackupFileBrowser(
+          wallpaperName: widget.name,
+          wallpaper: wallpaper,
+          overview: preparedComparison,
+          liveFolder: workshop,
+          backupFolder: myProjects,
+          comparisonOnly: true,
+          sourceLabel: workshopLabel,
+          destinationLabel: myProjectsLabel,
+          sourceOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
+          destinationOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
+          sourceOpenLabel: tr(AppI10n.backupOpenWorkshopLiveFolder),
+          destinationOpenLabel: tr(AppI10n.backupOpenMyProjectsLiveFolder),
+          sourceDeleteLabel: tr(
+            AppI10n.backupActionDeleteLiveVersionButton,
+            namedArgs: <String, String>{'version': workshopLabel},
+          ),
+          destinationDeleteLabel: tr(
+            AppI10n.backupActionDeleteLiveVersionButton,
+            namedArgs: <String, String>{'version': myProjectsLabel},
+          ),
+          onDeleteSource: () async =>
+              resolved = await deleteDuplicateLiveVersion(
+                context,
+                name: widget.name,
+                library: WallpaperLibrary.workshop,
+                versionLabel: workshopLabel,
+              ),
+          onDeleteDestination: () async =>
+              resolved = await deleteDuplicateLiveVersion(
+                context,
+                name: widget.name,
+                library: WallpaperLibrary.myProjects,
+                versionLabel: myProjectsLabel,
+              ),
+          rePKGPath: ref.read(toolPathProvider),
+        ),
+      );
+      if (resolved && navigator.mounted) {
+        await navigator.maybePop();
+      }
+    } finally {
+      _openingDuplicateLiveFiles = false;
+    }
+  }
 
   String? _backupFolderFor(WallpaperLibrary library, String name) {
     final String? libraryPath = switch (library) {
@@ -503,6 +623,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     final Rect? origin = _tileRect();
     final WallpaperInfo wallpaper = await readWallpaperFolder(folder);
     if (!mounted) return;
+    final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
     final ReconcileEntry? reconcileEntry = widget.reconcileEntry;
     final BackupReconcileReason? reconcilePrimary = reconcileEntry == null
         ? null
@@ -523,22 +644,15 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         reconcileFolders?.myProjectsBackup;
     final String? reconcileWorkshopLive = reconcileFolders?.workshopLive;
     final String? reconcileMyProjectsLive = reconcileFolders?.myProjectsLive;
-
-    // Duplicate-live exact comparison is explicitly user-requested. Opening the
-    // detail card itself stays cheap; the recursive comparison is created only
-    // after the user focuses the live-copy comparison pane.
-    final bool comparesDuplicateLive =
+    final Future<FolderFileOverview?>? duplicateLiveComparison =
         reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
-        reconcileWorkshopLive != null &&
-        reconcileMyProjectsLive != null;
-    final Future<FolderFileComparison?> Function()? loadDuplicateLiveChanges =
-        comparesDuplicateLive
-        ? () => compareFolderFilesDetailed(
+            reconcileWorkshopLive != null &&
+            reconcileMyProjectsLive != null
+        ? compareFolderFileOverview(
             firstFolder: reconcileWorkshopLive,
             secondFolder: reconcileMyProjectsLive,
           )
         : null;
-
     final String? updateBackupFolder = _updateBackupFolder();
     final BackupUpdatePlan? updatePlan = widget.updatePlan;
     final bool hasUpdateDetails =
@@ -556,27 +670,55 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             ),
           )
         : null;
-    VoidCallback? detailPrimaryAction;
+    _BackupDetailAction? detailPrimaryAction;
     if (updateSelection != null &&
         widget.action == BackupAction.update &&
         widget.backupCard != null) {
       detailPrimaryAction = () async {
         final BackupSelectiveUpdatePlan? selection = await updateSelection
             .buildPlan();
-        if (!mounted) return;
+        if (!mounted) return false;
         if (selection == null) {
           showErrorToast(tr(AppI10n.backupDetailFileComparisonUnavailable));
-          return;
+          return false;
         }
         if (selection.blockedPackages.isNotEmpty) {
           showErrorToast(tr(AppI10n.backupActionPackageSelectionBlocked));
-          return;
+          return false;
         }
-        await applyBackupAction(context, BackupAction.update, <BackupCard>[
+        return applyBackupAction(context, BackupAction.update, <BackupCard>[
           widget.backupCard!,
         ], selectiveUpdate: selection);
       };
     }
+    final DetailAction? leadingAction =
+        reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
+            reconcileFolders != null &&
+            duplicateLiveComparison != null
+        ? DetailAction(
+            key: const ValueKey<String>('backup-duplicate-live-open-files'),
+            icon: Icons.account_tree_outlined,
+            label: tr(AppI10n.backupDetailFileChanges),
+            onPressed: () => _openDuplicateLiveFiles(
+              wallpaper,
+              reconcileFolders,
+              duplicateLiveComparison,
+            ),
+          )
+        : updateHasContent
+        ? DetailAction(
+            key: const ValueKey<String>('backup-update-expand-file-changes'),
+            icon: Icons.account_tree_outlined,
+            label: tr(AppI10n.backupDetailFileChanges),
+            semanticHint: tr(AppI10n.backupDetailExpandFileChanges),
+            onPressed: () => _openFileView(
+              wallpaper,
+              updateSelection: updateSelection,
+              updateBackupFolder: updateBackupFolder,
+              showChanges: true,
+            ),
+          )
+        : null;
     try {
       await showWallpaperDetail(
         context,
@@ -584,6 +726,8 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         origin: origin,
         actions: _actions(
           wallpaper: wallpaper,
+          navigator: navigator,
+          leadingAction: leadingAction,
           primaryAction: detailPrimaryAction,
           updateSelection: updateSelection,
           updateBackupFolder: updateBackupFolder,
@@ -595,7 +739,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             ? const DetailDialogLayout()
             : _backupDetailLayout(
                 extraCanFocus: widget.reconcileEntry != null
-                    ? reconcileNeedsFocus || comparesDuplicateLive
+                    ? reconcileNeedsFocus
                     : false,
               ),
         extraContentBuilder: widget.junkKind != null
@@ -628,7 +772,6 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 workshopBackupFolder: reconcileWorkshopBackup,
                 myProjectsBackupFolder: reconcileMyProjectsBackup,
                 rePKGPath: rePKGPath,
-                loadDuplicateLiveChanges: loadDuplicateLiveChanges,
                 onRequestFocus: requestFocus,
               )
             : hasUpdateDetails
@@ -641,12 +784,6 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
                 plan: updatePlan,
                 card: widget.backupCard!,
                 foreground: foreground,
-                onOpenFileChanges: () => _openFileView(
-                  wallpaper,
-                  updateSelection: updateSelection,
-                  updateBackupFolder: updateBackupFolder,
-                  showChanges: true,
-                ),
               )
             : widget.detailText == null
             ? null
