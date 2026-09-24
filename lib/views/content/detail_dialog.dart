@@ -147,6 +147,7 @@ class DetailDialogLayout {
     this.maxHeight = _paneMaxHeight,
     this.extraFillsPanel = false,
     this.extraCanFocus = false,
+    this.centerActionsInExtra = false,
     this.focusedPreviewWidth = 96,
   });
 
@@ -156,6 +157,7 @@ class DetailDialogLayout {
   final double maxHeight;
   final bool extraFillsPanel;
   final bool extraCanFocus;
+  final bool centerActionsInExtra;
   final double focusedPreviewWidth;
 }
 
@@ -169,6 +171,7 @@ Future<void> showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
   List<DetailAction>? actions,
+  Widget? issueBadges,
   DetailExtraBuilder? extraContentBuilder,
   bool includePreview = true,
   DetailDialogLayout layout = const DetailDialogLayout(),
@@ -185,6 +188,7 @@ Future<void> showWallpaperDetail(
       wallpaper,
       origin: origin,
       actions: actions,
+      issueBadges: issueBadges,
       extraContentBuilder: extraContentBuilder,
       includePreview: includePreview,
       layout: layout,
@@ -199,6 +203,7 @@ Future<void> _showWallpaperDetail(
   WallpaperInfo wallpaper, {
   Rect? origin,
   List<DetailAction>? actions,
+  Widget? issueBadges,
   DetailExtraBuilder? extraContentBuilder,
   required bool includePreview,
   required DetailDialogLayout layout,
@@ -230,6 +235,7 @@ Future<void> _showWallpaperDetail(
       wallpaper: wallpaper,
       stats: stats,
       actions: actions,
+      issueBadges: issueBadges,
       extraContentBuilder: extraContentBuilder,
       includePreview: includePreview,
       layout: layout,
@@ -284,6 +290,7 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
     required this.wallpaper,
     this.stats,
     this.actions,
+    this.issueBadges,
     this.extraContentBuilder,
     this.includePreview = true,
     this.layout = const DetailDialogLayout(),
@@ -296,6 +303,9 @@ class WallpaperDetailDialog extends ConsumerStatefulWidget {
 
   /// Buttons in place of the extract ones. Null for the extract grid's own.
   final List<DetailAction>? actions;
+
+  /// Caller-owned issue labels shown on the preview or above metadata.
+  final Widget? issueBadges;
 
   /// Optional content supplied by specialized callers.
   final DetailExtraBuilder? extraContentBuilder;
@@ -401,51 +411,70 @@ class _WallpaperDetailDialogState extends ConsumerState<WallpaperDetailDialog> {
       child: SizedBox(
         width: width,
         height: height,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.includePreview)
-              AnimatedContainer(
-                key: const ValueKey<String>('wallpaper-detail-preview-pane'),
-                duration: _focusDuration,
-                curve: Curves.easeInOutCubic,
-                width: previewWidth,
-                child: MouseRegion(
-                  cursor: extraFocused
-                      ? SystemMouseCursors.click
-                      : MouseCursor.defer,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: extraFocused ? _restorePreview : null,
-                    child: _Preview(wallpaper: widget.wallpaper),
+        child: Stack(
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.includePreview)
+                  AnimatedContainer(
+                    key: const ValueKey<String>(
+                      'wallpaper-detail-preview-pane',
+                    ),
+                    duration: _focusDuration,
+                    curve: Curves.easeInOutCubic,
+                    width: previewWidth,
+                    child: MouseRegion(
+                      cursor: extraFocused
+                          ? SystemMouseCursors.click
+                          : MouseCursor.defer,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: extraFocused ? _restorePreview : null,
+                        child: _Preview(wallpaper: widget.wallpaper),
+                      ),
+                    ),
+                  ),
+                AnimatedContainer(
+                  key: const ValueKey<String>('wallpaper-detail-panel-pane'),
+                  duration: _focusDuration,
+                  curve: Curves.easeInOutCubic,
+                  width: panelWidth,
+                  child: _GlassPanel(
+                    wallpaper: widget.wallpaper,
+                    onDark: onDark,
+                    luminance: widget.stats?.luminance ?? .5,
+                    useWallpaperBackdrop: widget.includePreview,
+                    child: _DetailPanelContent(
+                      wallpaper: widget.wallpaper,
+                      foreground: foreground,
+                      actions: widget.actions,
+                      issueBadges: widget.includePreview
+                          ? null
+                          : widget.issueBadges,
+                      extraContentBuilder: widget.extraContentBuilder,
+                      contentOnly: !widget.includePreview,
+                      extraFillsPanel: widget.layout.extraFillsPanel,
+                      extraCanFocus: canFocus,
+                      centerActionsInExtra: widget.layout.centerActionsInExtra,
+                      extraFocused: extraFocused,
+                      onExtraFocus: _focusExtra,
+                      focusDuration: _focusDuration,
+                      onClose: _close,
+                    ),
                   ),
                 ),
-              ),
-            AnimatedContainer(
-              key: const ValueKey<String>('wallpaper-detail-panel-pane'),
-              duration: _focusDuration,
-              curve: Curves.easeInOutCubic,
-              width: panelWidth,
-              child: _GlassPanel(
-                wallpaper: widget.wallpaper,
-                onDark: onDark,
-                luminance: widget.stats?.luminance ?? .5,
-                useWallpaperBackdrop: widget.includePreview,
-                child: _DetailPanelContent(
-                  wallpaper: widget.wallpaper,
-                  foreground: foreground,
-                  actions: widget.actions,
-                  extraContentBuilder: widget.extraContentBuilder,
-                  contentOnly: !widget.includePreview,
-                  extraFillsPanel: widget.layout.extraFillsPanel,
-                  extraCanFocus: canFocus,
-                  extraFocused: extraFocused,
-                  onExtraFocus: _focusExtra,
-                  focusDuration: _focusDuration,
-                  onClose: _close,
-                ),
-              ),
+              ],
             ),
+            if (widget.issueBadges != null &&
+                widget.includePreview &&
+                !extraFocused)
+              Positioned(
+                left: 8,
+                top: 8,
+                width: max(0, previewWidth - 16),
+                child: widget.issueBadges!,
+              ),
           ],
         ),
       ),
@@ -458,10 +487,12 @@ class _DetailPanelContent extends StatelessWidget {
     required this.wallpaper,
     required this.foreground,
     required this.actions,
+    required this.issueBadges,
     required this.extraContentBuilder,
     required this.contentOnly,
     required this.extraFillsPanel,
     required this.extraCanFocus,
+    required this.centerActionsInExtra,
     required this.extraFocused,
     required this.onExtraFocus,
     required this.focusDuration,
@@ -471,10 +502,12 @@ class _DetailPanelContent extends StatelessWidget {
   final WallpaperInfo wallpaper;
   final Color foreground;
   final List<DetailAction>? actions;
+  final Widget? issueBadges;
   final DetailExtraBuilder? extraContentBuilder;
   final bool contentOnly;
   final bool extraFillsPanel;
   final bool extraCanFocus;
+  final bool centerActionsInExtra;
   final bool extraFocused;
   final VoidCallback onExtraFocus;
   final Duration focusDuration;
@@ -551,6 +584,11 @@ class _DetailPanelContent extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
           ),
+          if (contentOnly && issueBadges != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: issueBadges!,
+            ),
           if (contentOnly && extra != null)
             Expanded(
               child: Row(
@@ -614,12 +652,24 @@ class _DetailPanelContent extends StatelessWidget {
                             ),
                     ),
                   ),
-                  Expanded(child: _extra(context, extra)),
+                  Expanded(
+                    child: centerActionsInExtra
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: <Widget>[
+                              _extra(context, extra),
+                              Center(child: _actions()),
+                            ],
+                          )
+                        : _extra(context, extra),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _actions(),
+            if (!centerActionsInExtra) ...<Widget>[
+              const SizedBox(height: 16),
+              _actions(),
+            ],
           ] else ...<Widget>[
             Expanded(
               child: SingleChildScrollView(
@@ -936,6 +986,7 @@ class _GivenActions extends StatelessWidget {
       key: const ValueKey<String>('wallpaper-detail-actions'),
       padding: const EdgeInsets.only(bottom: _DetailActionLayout.bottomInset),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         spacing: _DetailActionLayout.spacing,
         children: <Widget>[
           for (final DetailAction action in actions) _button(action),

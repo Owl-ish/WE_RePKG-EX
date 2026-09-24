@@ -5,6 +5,7 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/actions/path_actions.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
@@ -42,6 +43,11 @@ class BackupView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<NavSection>(currentSectionProvider, (_, section) {
+      if (section != NavSection.backup) {
+        ref.read(backupDirectBatchProvider).cancel();
+      }
+    });
     final BackupTab tab = ref.watch(currentBackupTabProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,9 +116,14 @@ class _Bar extends ConsumerWidget {
                 for (int i = 0; i < BackupTab.values.length; i++)
                   i + 1: Text(BackupTab.values[i].label),
               },
-              onValueChanged: (int v) => ref
-                  .read(currentBackupTabProvider.notifier)
-                  .update(BackupTab.values[v - 1]),
+              onValueChanged: (int v) {
+                if (BackupTab.values[v - 1] != BackupTab.backup) {
+                  ref.read(backupDirectBatchProvider).cancel();
+                }
+                ref
+                    .read(currentBackupTabProvider.notifier)
+                    .update(BackupTab.values[v - 1]);
+              },
             ),
           ),
         ),
@@ -205,6 +216,18 @@ class _BackupState extends ConsumerState<_Backup> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<BackupScan>>(backupScanProvider, (_, next) {
+      final BackupDirectBatch batch = ref.read(backupDirectBatchProvider);
+      if (batch.value.scan != null &&
+          (next.isLoading ||
+              !next.hasValue ||
+              !identical(next.requireValue, batch.value.scan))) {
+        batch.cancel();
+      }
+    });
+    ref.listen<String?>(backupRootProvider, (_, _) {
+      ref.read(backupDirectBatchProvider).cancel();
+    });
     if (ref.watch(backupRootProvider) == null) return const _PickRoot();
 
     return switch (ref.watch(backupScanProvider)) {
@@ -396,11 +419,17 @@ class _Loaded extends ConsumerWidget {
     );
     final Map<BackupState, int> counts = totals.states;
     final BackupShown shown = ref.watch(backupStateFilterProvider);
+    ref.listen<BackupShown>(backupStateFilterProvider, (_, next) {
+      if (!next.reconcile) ref.read(backupDirectBatchProvider).cancel();
+    });
     final BackupStateFilter pills = ref.read(
       backupStateFilterProvider.notifier,
     );
     final int activeReconcileCount = totals.reconcile;
     final int ignoredCount = totals.ignored;
+    final int checkableCount = reconcile
+        .where(BackupDirectBatch.eligible)
+        .length;
     final BackupAction? action =
         shown.reconcile ||
             shown.ignored ||
@@ -545,6 +574,96 @@ class _Loaded extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+        if (shown.reconcile && checkableCount > 0)
+          ValueListenableBuilder<BackupDirectBatchState>(
+            valueListenable: ref.read(backupDirectBatchProvider),
+            builder: (context, current, _) {
+              final BackupDirectBatch batch = ref.read(
+                backupDirectBatchProvider,
+              );
+              final BackupDirectBatchState check = batch.forScan(
+                scan,
+                ref.read(backupRootProvider),
+              );
+              final int matches = check.results.values
+                  .where(
+                    (result) =>
+                        result.status == DirectBackupProbeStatus.candidateMatch,
+                  )
+                  .length;
+              final int different = check.results.values
+                  .where(
+                    (result) =>
+                        result.status == DirectBackupProbeStatus.different ||
+                        result.status ==
+                            DirectBackupProbeStatus.differentIncomplete,
+                  )
+                  .length;
+              final int review = check.results.length - matches - different;
+              final bool canResume =
+                  check.cancelled && check.done < checkableCount;
+              return Padding(
+                padding: const EdgeInsets.only(top: LayoutNums.contentGap),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: BackupBulkActionButton(
+                        label: tr(
+                          check.running
+                              ? check.cancelled
+                                    ? AppI10n.backupDirectCheckStopping
+                                    : AppI10n.backupDirectCheckCancel
+                              : canResume
+                              ? AppI10n.backupDirectCheckResume
+                              : AppI10n.backupDirectCheckStart,
+                          namedArgs: <String, String>{
+                            'count':
+                                '${canResume ? checkableCount - check.done : checkableCount}',
+                          },
+                        ),
+                        icon: check.running
+                            ? Icons.stop_rounded
+                            : Icons.fact_check_outlined,
+                        colour: Theme.of(context).status.note,
+                        onPressed: check.running && check.cancelled
+                            ? null
+                            : check.running
+                            ? batch.cancel
+                            : () => batch.start(
+                                scan: scan,
+                                backupRoot: ref.read(backupRootProvider)!,
+                                entries: reconcile,
+                              ),
+                      ),
+                    ),
+                    if (check.running || check.done > 0) ...<Widget>[
+                      const SizedBox(height: 6),
+                      LinearProgressIndicator(
+                        value: check.total == 0
+                            ? null
+                            : check.done / check.total,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tr(
+                          AppI10n.backupDirectCheckProgress,
+                          namedArgs: <String, String>{
+                            'done': '${check.done}',
+                            'total': '${check.total}',
+                            'matches': '$matches',
+                            'different': '$different',
+                            'review': '$review',
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
         if (shown.ignored && ignoredCount > 0)
           _BackupIssueHeader(

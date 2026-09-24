@@ -570,6 +570,73 @@ Future<BackupActionResult> recycleDuplicateLiveCopy({
   }
 }
 
+/// Recycles one explicitly chosen conflicting backup while the other survives.
+/// Both representations are rechecked around the claim so stale scan evidence
+/// cannot remove a replacement that appeared at the same path.
+Future<BackupActionResult> recycleConflictingBackupCopy({
+  required String name,
+  required WallpaperLibrary removedLibrary,
+  required BackupCopyFormat expectedRemovedFormat,
+  required BackupCopyFormat expectedSurvivingFormat,
+  required String? backupRoot,
+  required Future<bool> Function(Directory packed, Directory unpacked)
+  verifyEquivalent,
+  BackupTrash? trashFolder,
+}) async {
+  if (name.isEmpty || path.basename(name) != name) {
+    return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+  }
+  final Set<BackupCopyFormat> expected = <BackupCopyFormat>{
+    expectedRemovedFormat,
+    expectedSurvivingFormat,
+  };
+  if (!expected.contains(BackupCopyFormat.packed) ||
+      !expected.contains(BackupCopyFormat.unpacked)) {
+    return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+  }
+  final String? workshopRoot = backupWorkshopPath(backupRoot);
+  final String? myProjectsRoot = backupMyProjectsPath(backupRoot);
+  final String? targetLibrary = switch (removedLibrary) {
+    WallpaperLibrary.workshop => workshopRoot,
+    WallpaperLibrary.myProjects => myProjectsRoot,
+  };
+  final String? survivingLibrary = switch (removedLibrary) {
+    WallpaperLibrary.workshop => myProjectsRoot,
+    WallpaperLibrary.myProjects => workshopRoot,
+  };
+  if (targetLibrary == null || survivingLibrary == null) {
+    return (changed: false, error: tr(AppI10n.backupActionFolderUnavailable));
+  }
+  if (path.equals(targetLibrary, survivingLibrary)) {
+    return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+  }
+  final Directory target = Directory(path.join(targetLibrary, name));
+  final Directory survivor = Directory(path.join(survivingLibrary, name));
+  try {
+    return await _recycleCheckedFolder(
+      target: target,
+      library: targetLibrary,
+      check: (Directory candidate) async =>
+          await inspectBackupCopyFormat(candidate) == expectedRemovedFormat &&
+          await inspectBackupCopyFormat(survivor) == expectedSurvivingFormat,
+      claimedCheck: (Directory claimed) {
+        final Directory packed =
+            expectedRemovedFormat == BackupCopyFormat.packed
+            ? claimed
+            : survivor;
+        final Directory unpacked =
+            expectedRemovedFormat == BackupCopyFormat.unpacked
+            ? claimed
+            : survivor;
+        return verifyEquivalent(packed, unpacked);
+      },
+      trashFolder: trashFolder,
+    );
+  } catch (error) {
+    return (changed: false, error: '$error');
+  }
+}
+
 typedef _JunkCheck = Future<bool> Function(Directory folder);
 
 /// Rechecks junk before and after moving it aside for recycling.
@@ -577,6 +644,7 @@ Future<BackupActionResult> _recycleCheckedFolder({
   required Directory target,
   required String library,
   required _JunkCheck check,
+  _JunkCheck? claimedCheck,
   BackupTrash? trashFolder,
 }) async {
   final Directory wrapper = await Directory(
@@ -590,7 +658,8 @@ Future<BackupActionResult> _recycleCheckedFolder({
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }
     publishWithoutReplacing(target, claimed.path);
-    if (!await check(claimed)) {
+    if (!await check(claimed) ||
+        (claimedCheck != null && !await claimedCheck(claimed))) {
       await _restoreClaim(claimed, target.path);
       return (changed: false, error: tr(AppI10n.backupActionStateChanged));
     }

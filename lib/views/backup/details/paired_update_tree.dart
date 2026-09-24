@@ -393,7 +393,7 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
     final rows = _rows();
     // Equal row heights keep missing counterparts and comparison actions aligned.
     final double rowHeight =
-        44 * MediaQuery.textScalerOf(context).scale(12) / 12;
+        35 * MediaQuery.textScalerOf(context).scale(12) / 12;
     Widget pane(bool live) => FileTreeScrollView(
       key: ValueKey<String>('update-paired-${live ? 'live' : 'backup'}'),
       verticalController: live ? _scroll.first : _scroll.second,
@@ -491,8 +491,10 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Flexible(
-                  flex: 2,
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight * .4,
+                  ),
                   child: SingleChildScrollView(
                     child: Column(
                       children: <Widget>[

@@ -1,17 +1,354 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
-    show Notifier, NotifierProvider;
+    show Notifier, NotifierProvider, Provider;
+import 'package:path/path.dart' as path;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/filter.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
+import 'package:we_repkg/utils/cancel_token.dart';
 import 'package:we_repkg/utils/storage.dart';
 
 part 'backup.g.dart';
+
+typedef _VerificationJob = ({
+  String key,
+  CancelToken? token,
+  Future<BackupCopyVerification> Function() run,
+  Completer<BackupCopyVerification> result,
+});
+
+/// Deduplicates explicit checks and bounds concurrent RePKG extractions.
+class BackupVerificationCoordinator {
+  static const int _workerCount = 2;
+
+  final Queue<_VerificationJob> _jobs = Queue<_VerificationJob>();
+  final Map<String, Future<BackupCopyVerification>> _pending =
+      <String, Future<BackupCopyVerification>>{};
+  int _running = 0;
+
+  Future<BackupCopyVerification> verify({
+    required String backupRoot,
+    required String name,
+    required String tool,
+    required Directory packedFolder,
+    required Directory unpackedFolder,
+    required String signature,
+    CancelToken? cancelToken,
+  }) async {
+    if (cancelToken?.isCancelled == true) {
+      return const BackupCopyVerification(
+        status: BackupCopyVerificationStatus.unavailable,
+        signature: '',
+      );
+    }
+    final FileStat toolStat;
+    try {
+      toolStat = await File(tool).stat();
+    } on FileSystemException {
+      return const BackupCopyVerification(
+        status: BackupCopyVerificationStatus.unavailable,
+        signature: '',
+      );
+    }
+    if (toolStat.type != FileSystemEntityType.file) {
+      return const BackupCopyVerification(
+        status: BackupCopyVerificationStatus.unavailable,
+        signature: '',
+      );
+    }
+    if (cancelToken?.isCancelled == true ||
+        await backupCopyVerificationSignature(
+              packedFolder: packedFolder,
+              unpackedFolder: unpackedFolder,
+            ) !=
+            signature) {
+      return const BackupCopyVerification(
+        status: BackupCopyVerificationStatus.unavailable,
+        signature: '',
+      );
+    }
+    final String nameKey = name.toLowerCase();
+    final String jobKey =
+        '$backupRoot\n$nameKey\n$signature\n${path.normalize(tool).toLowerCase()}';
+    return _pending.putIfAbsent(jobKey, () {
+      final Completer<BackupCopyVerification> result =
+          Completer<BackupCopyVerification>();
+      _jobs.add((
+        key: jobKey,
+        token: cancelToken,
+        result: result,
+        run: () async {
+          final BackupCopyVerification verified = await verifyPackedBackupCopy(
+            tool: tool,
+            packedFolder: packedFolder,
+            unpackedFolder: unpackedFolder,
+            cancelToken: cancelToken,
+          );
+          return verified.signature == signature
+              ? BackupCopyVerification(
+                  status: verified.status,
+                  signature: verified.signature,
+                  changes: verified.changes,
+                )
+              : BackupCopyVerification(
+                  status: BackupCopyVerificationStatus.unavailable,
+                  signature: verified.signature,
+                );
+        },
+      ));
+      _pump();
+      return result.future;
+    });
+  }
+
+  void _pump() {
+    while (_running < _workerCount && _jobs.isNotEmpty) {
+      final _VerificationJob job = _jobs.removeFirst();
+      if (job.token?.isCancelled == true) {
+        job.result.complete(
+          const BackupCopyVerification(
+            status: BackupCopyVerificationStatus.unavailable,
+            signature: '',
+          ),
+        );
+        _pending.remove(job.key);
+        continue;
+      }
+      _running++;
+      unawaited(() async {
+        try {
+          final BackupCopyVerification value = await job.run();
+          job.result.complete(value);
+        } catch (error, stackTrace) {
+          job.result.completeError(error, stackTrace);
+        } finally {
+          final _ = _pending.remove(job.key);
+          _running--;
+          _pump();
+        }
+      }());
+    }
+  }
+}
+
+final Provider<BackupVerificationCoordinator>
+backupVerificationCoordinatorProvider = Provider<BackupVerificationCoordinator>(
+  (ref) => BackupVerificationCoordinator(),
+);
+
+typedef BackupDirectBatchState = ({
+  BackupScan? scan,
+  String? backupRoot,
+  bool running,
+  bool cancelled,
+  int done,
+  int total,
+  Map<String, DirectBackupProbe> results,
+});
+
+typedef DirectBackupProbeRunner =
+    Future<DirectBackupProbe> Function({
+      required Directory packedFolder,
+      required Directory unpackedFolder,
+      CancelToken? cancelToken,
+    });
+
+/// Read-only, explicitly started content checks for current Reconcile conflicts.
+/// Results are diagnostic; a future removal action must verify its target again.
+class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
+  BackupDirectBatch({DirectBackupProbeRunner? probe})
+    : _probe = probe ?? probePackedBackupCopyDirect,
+      super((
+        scan: null,
+        backupRoot: null,
+        running: false,
+        cancelled: false,
+        done: 0,
+        total: 0,
+        results: const <String, DirectBackupProbe>{},
+      ));
+
+  static const int _workers = 2;
+  final DirectBackupProbeRunner _probe;
+  CancelToken? _token;
+  bool _disposed = false;
+
+  static bool eligible(ReconcileEntry entry) {
+    final BackupCopyDifference? difference = entry.backupDifference;
+    return entry.activeReasons.contains(
+          BackupReconcileReason.conflictingBackupCopies,
+        ) &&
+        difference?.verificationSignature != null &&
+        <BackupCopyFormat>{
+          difference!.workshopFormat,
+          difference.myProjectsFormat,
+        }.containsAll(<BackupCopyFormat>{
+          BackupCopyFormat.packed,
+          BackupCopyFormat.unpacked,
+        });
+  }
+
+  BackupDirectBatchState forScan(BackupScan scan, String? root) =>
+      identical(value.scan, scan) && value.backupRoot == root
+      ? value
+      : (
+          scan: scan,
+          backupRoot: root,
+          running: false,
+          cancelled: false,
+          done: 0,
+          total: 0,
+          results: const <String, DirectBackupProbe>{},
+        );
+
+  Future<void> start({
+    required BackupScan scan,
+    required String backupRoot,
+    required Iterable<ReconcileEntry> entries,
+  }) async {
+    if (value.running || _disposed) return;
+    final List<ReconcileEntry> targets = entries.where(eligible).toList();
+    if (targets.isEmpty) return;
+    // A cancelled run keeps completed results for this same scan. A fresh run
+    // after completion checks everything again, so Check can refresh results.
+    final bool resume =
+        value.cancelled &&
+        value.done < targets.length &&
+        identical(value.scan, scan) &&
+        value.backupRoot == backupRoot;
+    final Map<String, DirectBackupProbe> completed = resume
+        ? <String, DirectBackupProbe>{
+            for (final ReconcileEntry entry in targets)
+              if (value.results.containsKey(entry.name.toLowerCase()))
+                entry.name.toLowerCase():
+                    value.results[entry.name.toLowerCase()]!,
+          }
+        : <String, DirectBackupProbe>{};
+    final List<ReconcileEntry> remaining = targets
+        .where((entry) => !completed.containsKey(entry.name.toLowerCase()))
+        .toList();
+    if (remaining.isEmpty) return;
+    final CancelToken token = CancelToken();
+    _token = token;
+    value = (
+      scan: scan,
+      backupRoot: backupRoot,
+      running: true,
+      cancelled: false,
+      done: completed.length,
+      total: targets.length,
+      results: completed,
+    );
+    int next = 0;
+    Future<void> worker() async {
+      while (!token.isCancelled && next < remaining.length) {
+        final ReconcileEntry entry = remaining[next++];
+        final BackupCopyDifference difference = entry.backupDifference!;
+        final String workshop = path.join(
+          backupWorkshopPath(backupRoot)!,
+          entry.name,
+        );
+        final String myProjects = path.join(
+          backupMyProjectsPath(backupRoot)!,
+          entry.name,
+        );
+        final bool workshopPacked =
+            difference.workshopFormat == BackupCopyFormat.packed;
+        DirectBackupProbe result;
+        try {
+          result = await _probe(
+            packedFolder: Directory(workshopPacked ? workshop : myProjects),
+            unpackedFolder: Directory(workshopPacked ? myProjects : workshop),
+            cancelToken: token,
+          );
+        } catch (_) {
+          result = (
+            status: DirectBackupProbeStatus.unavailable,
+            changes: (
+              modified: <String>[],
+              onlyPacked: <String>[],
+              onlyUnpacked: <String>[],
+            ),
+            reasons: <DirectBackupProbeReason>{
+              DirectBackupProbeReason.fileComparisonUnavailable,
+            },
+          );
+        }
+        if (token.isCancelled || _disposed) break;
+        value = (
+          scan: scan,
+          backupRoot: backupRoot,
+          running: true,
+          cancelled: false,
+          done: value.done + 1,
+          total: targets.length,
+          results: <String, DirectBackupProbe>{
+            ...value.results,
+            entry.name.toLowerCase(): result,
+          },
+        );
+      }
+    }
+
+    try {
+      await Future.wait(<Future<void>>[
+        for (int i = 0; i < _workers && i < remaining.length; i++) worker(),
+      ]);
+    } finally {
+      if (!_disposed && identical(_token, token)) {
+        value = (
+          scan: scan,
+          backupRoot: backupRoot,
+          running: false,
+          cancelled: token.isCancelled,
+          done: value.done,
+          total: targets.length,
+          results: value.results,
+        );
+        _token = null;
+      }
+    }
+  }
+
+  void cancel() {
+    _token?.cancel();
+    if (!_disposed && value.running) {
+      value = (
+        scan: value.scan,
+        backupRoot: value.backupRoot,
+        running: true,
+        cancelled: true,
+        done: value.done,
+        total: value.total,
+        results: value.results,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _token?.cancel();
+    super.dispose();
+  }
+}
+
+final Provider<BackupDirectBatch> backupDirectBatchProvider =
+    Provider<BackupDirectBatch>((ref) {
+      final BackupDirectBatch batch = BackupDirectBatch();
+      ref.onDispose(batch.dispose);
+      return batch;
+    });
 
 /// How far the running scan has got, for the tab to show while it waits.
 ///

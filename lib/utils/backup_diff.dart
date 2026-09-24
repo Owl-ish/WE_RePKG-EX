@@ -230,23 +230,64 @@ class BackupIssueEvidence {
   };
 }
 
+/// Root representation of one backup copy; this does not imply content equality.
+enum BackupCopyFormat { packed, unpacked, unknown }
+
+/// Result of comparing a packed backup with its unpacked representation.
+enum BackupCopyVerificationStatus { equivalent, different, unavailable }
+
+typedef BackupCopyVerificationChanges = ({
+  List<String> modified,
+  List<String> onlyPacked,
+  List<String> onlyUnpacked,
+});
+
+/// Semantic evidence gathered outside the lightweight library scan.
+class BackupCopyVerification {
+  const BackupCopyVerification({
+    required this.status,
+    required this.signature,
+    this.changes = (
+      modified: const <String>[],
+      onlyPacked: const <String>[],
+      onlyUnpacked: const <String>[],
+    ),
+  });
+
+  final BackupCopyVerificationStatus status;
+  final String signature;
+
+  /// Packed contents are the first side; unpacked files are the second side.
+  final BackupCopyVerificationChanges changes;
+
+  bool get equivalent => status == BackupCopyVerificationStatus.equivalent;
+}
+
 /// What differs between the two backup copies for one wallpaper.
 class BackupCopyDifference {
   const BackupCopyDifference({
     this.differentSize = const <String>[],
     this.onlyWorkshop = const <String>[],
     this.onlyMyProjects = const <String>[],
+    this.workshopFormat = BackupCopyFormat.unknown,
+    this.myProjectsFormat = BackupCopyFormat.unknown,
     this.evidenceFingerprint,
+    this.verificationSignature,
   });
 
   final List<String> differentSize;
   final List<String> onlyWorkshop;
   final List<String> onlyMyProjects;
+  final BackupCopyFormat workshopFormat;
+  final BackupCopyFormat myProjectsFormat;
 
   /// Cheap scan evidence used only to decide whether an ignored conflict is
   /// still the same detection. It contains paths and observed sizes, never file
   /// contents, so adding it does not make the broad scan more expensive.
   final String? evidenceFingerprint;
+
+  /// Path, size, and timestamp signature used by semantic verification cache.
+  final String? verificationSignature;
 
   int get total =>
       differentSize.length + onlyWorkshop.length + onlyMyProjects.length;
@@ -256,13 +297,19 @@ class BackupCopyDifference {
       other is BackupCopyDifference &&
       listEquals(other.differentSize, differentSize) &&
       listEquals(other.onlyWorkshop, onlyWorkshop) &&
-      listEquals(other.onlyMyProjects, onlyMyProjects);
+      listEquals(other.onlyMyProjects, onlyMyProjects) &&
+      other.workshopFormat == workshopFormat &&
+      other.myProjectsFormat == myProjectsFormat &&
+      other.verificationSignature == verificationSignature;
 
   @override
   int get hashCode => Object.hash(
     Object.hashAll(differentSize),
     Object.hashAll(onlyWorkshop),
     Object.hashAll(onlyMyProjects),
+    workshopFormat,
+    myProjectsFormat,
+    verificationSignature,
   );
 }
 

@@ -7,6 +7,7 @@ import 'package:we_repkg/constants/keys.dart';
 import 'package:we_repkg/constants/strings.dart';
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/backup_records.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/constants/wallpaper_files.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/storage.dart';
@@ -857,13 +858,34 @@ void main() {
 
     test('different duplicate backups remain reconcile', () async {
       filled(liveWorkshop, '793602574', 'same');
-      filled(backupWorkshop(), '793602574', 'same');
-      filled(backupMyProjects(), '793602574', 'different');
+      final Directory packed = filled(backupWorkshop(), '793602574', 'same');
+      final Directory unpacked = filled(
+        backupMyProjects(),
+        '793602574',
+        'same',
+      );
+      File(p.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
+      File(p.join(unpacked.path, 'scene.json')).writeAsStringSync('{}');
 
       final BackupScan result = await scan(root: backupRoot.path);
 
       expect(result.cards, isEmpty);
       expect(result.reconcile, hasLength(1));
+      expect(
+        result.reconcile.single.backupDifference?.workshopFormat,
+        BackupCopyFormat.packed,
+      );
+      expect(
+        result.reconcile.single.backupDifference?.myProjectsFormat,
+        BackupCopyFormat.unpacked,
+      );
+      expect(
+        result.reconcile.single.backupDifference?.verificationSignature,
+        await backupCopyVerificationSignature(
+          packedFolder: packed,
+          unpackedFolder: unpacked,
+        ),
+      );
     });
 
     // Wallpaper Engine shader caches are disposable, not wallpaper content.

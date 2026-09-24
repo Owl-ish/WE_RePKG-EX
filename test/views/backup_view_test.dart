@@ -12,6 +12,7 @@ import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/models/enums.dart';
 import 'package:we_repkg/provider/backup.dart';
 import 'package:we_repkg/provider/navigation.dart';
@@ -158,6 +159,7 @@ void main() {
                   text: 'Comparison unavailable',
                   colour: Colors.red,
                 ),
+                TileBadgeData(text: 'Needs review', colour: Colors.blue),
               ],
             ),
           ),
@@ -166,6 +168,10 @@ void main() {
     );
 
     expect(tester.getSize(find.byType(TileBadgeStrip)).height, greaterThan(18));
+    expect(
+      tester.getTopLeft(find.text('Needs review')).dy,
+      greaterThan(tester.getTopLeft(find.text('Comparison unavailable')).dy),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -1072,6 +1078,190 @@ void main() {
       );
 
       expect(countOf(AppI10n.backupReconcile, 1), findsOneWidget);
+    });
+
+    testWidgets('opening Reconcile leaves the packed content check idle', (
+      tester,
+    ) async {
+      await showScan(
+        tester,
+        scanOf(
+          reconcile: const <ReconcileEntry>[
+            ReconcileEntry(
+              name: 'packed-pair',
+              reason: BackupReconcileReason.conflictingBackupCopies,
+              states: <WallpaperLibrary, BackupState>{},
+              backupWorkshop: true,
+              backupMyProjects: true,
+              backupDifference: BackupCopyDifference(
+                workshopFormat: BackupCopyFormat.packed,
+                myProjectsFormat: BackupCopyFormat.unpacked,
+                verificationSignature: 'scan-signature',
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.tap(countOf(AppI10n.backupReconcile, 1));
+      await settle(tester);
+
+      expect(find.byIcon(Icons.fact_check_outlined), findsOneWidget);
+      final ProviderContainer container = ProviderScope.containerOf(
+        tester.element(find.byType(BackupView)),
+      );
+      expect(container.read(backupDirectBatchProvider).value.scan, isNull);
+    });
+
+    testWidgets('content results regroup Reconcile cards as each check ends', (
+      tester,
+    ) async {
+      const ReconcileEntry first = ReconcileEntry(
+        name: 'first-pair',
+        reason: BackupReconcileReason.conflictingBackupCopies,
+        states: <WallpaperLibrary, BackupState>{},
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupDifference: BackupCopyDifference(
+          workshopFormat: BackupCopyFormat.packed,
+          myProjectsFormat: BackupCopyFormat.unpacked,
+          verificationSignature: 'first-signature',
+        ),
+      );
+      const ReconcileEntry second = ReconcileEntry(
+        name: 'second-pair',
+        reason: BackupReconcileReason.conflictingBackupCopies,
+        states: <WallpaperLibrary, BackupState>{},
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupDifference: BackupCopyDifference(
+          workshopFormat: BackupCopyFormat.unpacked,
+          myProjectsFormat: BackupCopyFormat.packed,
+          verificationSignature: 'second-signature',
+        ),
+      );
+      final BackupScan scan = scanOf(
+        reconcile: <ReconcileEntry>[first, second],
+      );
+      final List<Completer<DirectBackupProbe>> probes =
+          <Completer<DirectBackupProbe>>[
+            Completer<DirectBackupProbe>(),
+            Completer<DirectBackupProbe>(),
+          ];
+      int nextProbe = 0;
+      final BackupDirectBatch batch = BackupDirectBatch(
+        probe:
+            ({required packedFolder, required unpackedFolder, cancelToken}) =>
+                probes[nextProbe++].future,
+      );
+      addTearDown(batch.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backupRootProvider.overrideWithValue(r'C:\backup'),
+            backupScanProvider.overrideWithValue(
+              AsyncValue<BackupScan>.data(scan),
+            ),
+            backupTilesProvider.overrideWithValue(
+              const AsyncValue<List<BackupTile>>.data(<BackupTile>[]),
+            ),
+            backupVisibleTilesProvider.overrideWithValue(
+              const AsyncValue<List<BackupTile>>.data(<BackupTile>[]),
+            ),
+            backupReconcileTilesProvider.overrideWithValue(
+              const AsyncValue<List<ReconcileTile>>.data(<ReconcileTile>[
+                (entry: first, face: null),
+                (entry: second, face: null),
+              ]),
+            ),
+            backupVisibleReconcileTilesProvider.overrideWithValue(
+              const AsyncValue<List<ReconcileTile>>.data(<ReconcileTile>[
+                (entry: first, face: null),
+                (entry: second, face: null),
+              ]),
+            ),
+            backupDirectBatchProvider.overrideWithValue(batch),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const Scaffold(body: BackupView()),
+          ),
+        ),
+      );
+      await tester.tap(countOf(AppI10n.backupReconcile, 2));
+      await settle(tester);
+      expect(
+        find.text('${AppI10n.backupDirectCheckScanning} (2)'),
+        findsNothing,
+      );
+
+      final Future<void> run = batch.start(
+        scan: scan,
+        backupRoot: r'C:\backup',
+        entries: <ReconcileEntry>[first, second],
+      );
+      await tester.pump();
+      expect(
+        find.text('${AppI10n.backupDirectCheckScanning} (2)'),
+        findsOneWidget,
+      );
+
+      probes[0].complete((
+        status: DirectBackupProbeStatus.candidateMatch,
+        changes: (
+          modified: <String>[],
+          onlyPacked: <String>[],
+          onlyUnpacked: <String>[],
+        ),
+        reasons: <DirectBackupProbeReason>{},
+      ));
+      await tester.pump();
+      expect(
+        find.text('${AppI10n.backupDirectCheckScanning} (1)'),
+        findsOneWidget,
+      );
+      SelectionGrid grid = tester.widget<SelectionGrid>(
+        find.byType(SelectionGrid),
+      );
+      expect(grid.sections.map((section) => section.itemCount), <int>[1, 1]);
+      expect(grid.idAt(0), reconcileTileId(second.name));
+      expect(grid.idAt(1), reconcileTileId(first.name));
+
+      probes[1].complete((
+        status: DirectBackupProbeStatus.different,
+        changes: (
+          modified: <String>['scene.json'],
+          onlyPacked: <String>[],
+          onlyUnpacked: <String>[],
+        ),
+        reasons: <DirectBackupProbeReason>{},
+      ));
+      await run;
+      await tester.pump();
+      expect(
+        find.textContaining(AppI10n.backupDirectCheckScanning),
+        findsNothing,
+      );
+      grid = tester.widget<SelectionGrid>(find.byType(SelectionGrid));
+      expect(grid.sections.map((section) => section.itemCount), <int>[1, 1]);
+      expect(grid.idAt(0), reconcileTileId(first.name));
+      expect(grid.idAt(1), reconcileTileId(second.name));
+
+      batch.value = (
+        scan: scan,
+        backupRoot: r'C:\backup',
+        running: false,
+        cancelled: true,
+        done: 1,
+        total: 2,
+        results: <String, DirectBackupProbe>{
+          first.name: batch.value.results[first.name]!,
+        },
+      );
+      await tester.pump();
+      final BackupBulkActionButton resume = tester
+          .widget<BackupBulkActionButton>(find.byType(BackupBulkActionButton));
+      expect(resume.label, contains(AppI10n.backupDirectCheckResume));
+      expect(resume.onPressed, isNotNull);
     });
 
     // A folder the scan could not read does not make the counts incomplete, it

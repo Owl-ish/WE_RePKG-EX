@@ -71,18 +71,14 @@ class TileBadgeData {
   final Color colour;
 }
 
-/// Fits multiple tile badges into one row without sacrificing short labels first.
-///
-/// Long badges are compressed toward a scrolling minimum. Overflowing text stays
-/// still during ordinary grid movement and scrolls only while that badge is hovered.
+/// Stacks badges at the leading edge so every issue keeps its own readable row.
+/// Overflowing text stays still until its badge is hovered.
 class TileBadgeStrip extends StatelessWidget {
   const TileBadgeStrip({super.key, required this.badges});
 
   final List<TileBadgeData> badges;
 
   static const double _spacing = 4;
-  static const double _staticWidthLimit = 76;
-  static const double _scrollingMinWidth = 44;
 
   @override
   Widget build(BuildContext context) {
@@ -93,61 +89,21 @@ class TileBadgeStrip extends StatelessWidget {
           for (final TileBadgeData badge in badges)
             _TileBadge.measure(context, badge.text),
         ];
-        final List<double> natural = <double>[
-          for (final measure in measures) measure.width,
-        ];
-        final List<double> widths = List<double>.from(natural);
-        if (constraints.maxWidth.isFinite) {
-          final double available = math.max(
-            0,
-            constraints.maxWidth - _spacing * (badges.length - 1),
-          );
-          double excess = widths.fold<double>(0, (a, b) => a + b) - available;
-          if (excess > 0) {
-            // Preserve short badges at natural width; compress labels with room
-            // to scroll before taking space from compact badges.
-            final List<double> minimums = <double>[
-              for (final double width in natural)
-                width <= _staticWidthLimit
-                    ? width
-                    : math.min(width, _scrollingMinWidth),
-            ];
-            final List<int> order = List<int>.generate(widths.length, (i) => i)
-              ..sort(
-                (int a, int b) => (widths[b] - minimums[b]).compareTo(
-                  widths[a] - minimums[a],
-                ),
-              );
-            for (final int i in order) {
-              if (excess <= 0) break;
-              final double capacity = widths[i] - minimums[i];
-              final double take = math.min(capacity, excess);
-              widths[i] -= take;
-              excess -= take;
-            }
-            // If the preferred minimums still do not fit, share the remaining
-            // width proportionally rather than overflowing the tile.
-            if (excess > .5 && widths.isNotEmpty) {
-              final double total = widths.fold<double>(0, (a, b) => a + b);
-              if (total > 0) {
-                final double scale = math.max(0, available / total);
-                for (int i = 0; i < widths.length; i++) {
-                  widths[i] *= scale;
-                }
-              }
-            }
-          }
-        }
-        return Row(
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           spacing: _spacing,
           children: <Widget>[
             for (int i = 0; i < badges.length; i++)
               SizedBox(
-                width: widths[i],
+                width: math.min(measures[i].width, constraints.maxWidth),
                 child: _TileBadge(
                   data: badges[i],
-                  naturalWidth: natural[i],
-                  allocatedWidth: widths[i],
+                  naturalWidth: measures[i].width,
+                  allocatedWidth: math.min(
+                    measures[i].width,
+                    constraints.maxWidth,
+                  ),
                   lineHeight: measures[i].height,
                 ),
               ),

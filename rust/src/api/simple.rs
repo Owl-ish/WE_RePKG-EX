@@ -10,6 +10,40 @@ use std::sync::{
     Arc, Mutex,
 };
 
+/// Read-only trial for the packed/unpacked verifier. None asks Dart to decode.
+#[flutter_rust_bridge::frb]
+pub async fn compare_png_pixels_rust(
+    first_path: String,
+    second_path: String,
+) -> Result<Option<bool>, String> {
+    tokio::task::spawn_blocking(move || {
+        let first = std::fs::read(first_path).map_err(|error| error.to_string())?;
+        let second = std::fs::read(second_path).map_err(|error| error.to_string())?;
+        crate::image_compare::pixels_match(&first, &second)
+    })
+    .await
+    .map_err(|error| format!("Task execution error: {error}"))?
+}
+
+#[flutter_rust_bridge::frb]
+pub async fn compare_image_segment_rust(
+    source_path: String,
+    offset: u64,
+    length: u64,
+    counterpart_path: String,
+) -> Result<Option<bool>, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::image_compare::segment_matches_file(
+            std::path::Path::new(&source_path),
+            offset,
+            length,
+            std::path::Path::new(&counterpart_path),
+        )
+    })
+    .await
+    .map_err(|error| format!("Task execution error: {error}"))?
+}
+
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     // Default utilities - feel free to customize

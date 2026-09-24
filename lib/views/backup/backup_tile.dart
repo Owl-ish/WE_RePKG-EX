@@ -14,6 +14,7 @@ import 'package:we_repkg/config/theme_extensions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/nums.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/widgets/context_menu.dart';
 import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/cores/wallpaper.dart';
@@ -49,15 +50,15 @@ typedef _ReconcileFolders = ({
 typedef _BackupDetailAction = Future<bool> Function();
 
 DetailDialogLayout _backupDetailLayout({
-  bool extraCanFocus = false,
+  required bool centerActions,
 }) => DetailDialogLayout(
-  // Keep Backup only modestly taller than the ordinary 500px detail card.
-  // Dense sections scroll/focus inside this footprint instead of inflating the
-  // whole modal.
+  // Backup gets a modestly taller panel than the ordinary detail card. Simple
+  // reconcile actions can use its otherwise empty detail area without moving
+  // dense diagnostic actions away from the bottom edge.
   maxHeightFactor: .84,
   maxHeight: 560,
   extraFillsPanel: true,
-  extraCanFocus: extraCanFocus,
+  centerActionsInExtra: centerActions,
 );
 
 /// Maps a Backup state to its semantic status color and localization key.
@@ -162,6 +163,7 @@ class BackupTileView extends StatelessWidget {
       backupRoot: backupRoot,
       backupCard: tile.card,
       detailText: _stateDetailText(tile.state),
+      issueBadges: stateBadges,
       badges: <TileBadgeData>[
         ...stateBadges,
         TileBadgeData(
@@ -193,6 +195,8 @@ class ReconcileTileView extends StatelessWidget {
     this.ignored = false,
     this.reasonOverride,
     this.selectionIdOverride,
+    this.contentStatus,
+    this.contentScanning = false,
   });
 
   final double width;
@@ -205,9 +209,79 @@ class ReconcileTileView extends StatelessWidget {
   final bool ignored;
   final BackupReconcileReason? reasonOverride;
   final String? selectionIdOverride;
+  final DirectBackupProbeStatus? contentStatus;
+  final bool contentScanning;
 
   @override
   Widget build(BuildContext context) {
+    final List<TileBadgeData> issueBadges = _reconcileBadges(
+      context,
+      tile.entry,
+      ignored: ignored,
+      reasonOverride: reasonOverride,
+    );
+    if (contentStatus case final DirectBackupProbeStatus status) {
+      final (String label, Color colour) = switch (status) {
+        DirectBackupProbeStatus.candidateMatch => (
+          tr(AppI10n.backupDirectCheckMatch),
+          Theme.of(context).status.good,
+        ),
+        DirectBackupProbeStatus.different => (
+          tr(AppI10n.backupTileVerificationChanged),
+          Theme.of(context).status.bad,
+        ),
+        DirectBackupProbeStatus.differentIncomplete => (
+          tr(AppI10n.backupDirectCheckIncomplete),
+          Theme.of(context).status.warn,
+        ),
+        DirectBackupProbeStatus.unavailable => (
+          tr(AppI10n.backupDirectCheckReview),
+          Theme.of(context).status.warn,
+        ),
+      };
+      issueBadges.add(TileBadgeData(text: label, colour: colour));
+    } else if (contentScanning) {
+      issueBadges.add(
+        TileBadgeData(
+          text: tr(AppI10n.backupDirectCheckScanning),
+          colour: Theme.of(context).status.warn,
+        ),
+      );
+    }
+    if (!ignored && BackupDirectBatch.eligible(tile.entry)) {
+      final BackupCopyDifference difference = tile.entry.backupDifference!;
+      final Color formatColour = Theme.of(context).colorScheme.primary;
+      issueBadges.addAll(<TileBadgeData>[
+        TileBadgeData(
+          text: tr(
+            AppI10n.backupDirectCheckFormatBadge,
+            namedArgs: <String, String>{
+              'library': tr(AppI10n.backupDirectCheckWorkshop),
+              'format': tr(
+                difference.workshopFormat == BackupCopyFormat.packed
+                    ? AppI10n.backupDetailPackedBackup
+                    : AppI10n.backupDetailUnpackedBackup,
+              ),
+            },
+          ),
+          colour: formatColour,
+        ),
+        TileBadgeData(
+          text: tr(
+            AppI10n.backupDirectCheckFormatBadge,
+            namedArgs: <String, String>{
+              'library': tr(AppI10n.backupDirectCheckMyProjects),
+              'format': tr(
+                difference.myProjectsFormat == BackupCopyFormat.packed
+                    ? AppI10n.backupDetailPackedBackup
+                    : AppI10n.backupDetailUnpackedBackup,
+              ),
+            },
+          ),
+          colour: formatColour,
+        ),
+      ]);
+    }
     return _TileFrame(
       width: width,
       id: selectionIdOverride ?? reconcileTileId(tile.entry.name),
@@ -230,12 +304,8 @@ class ReconcileTileView extends StatelessWidget {
               reasonOverride!,
             )
           : null,
-      badges: _reconcileBadges(
-        context,
-        tile.entry,
-        ignored: ignored,
-        reasonOverride: reasonOverride,
-      ),
+      badges: issueBadges,
+      issueBadges: issueBadges,
     );
   }
 }
@@ -252,6 +322,7 @@ class _TileFrame extends ConsumerStatefulWidget {
     required this.name,
     required this.folders,
     required this.badges,
+    required this.issueBadges,
     required this.onTap,
     this.action,
     this.actionLabelOverride,
@@ -278,6 +349,7 @@ class _TileFrame extends ConsumerStatefulWidget {
 
   final TileFolders folders;
   final List<TileBadgeData> badges;
+  final List<TileBadgeData> issueBadges;
   final VoidCallback onTap;
   final BackupAction? action;
   final String? actionLabelOverride;
@@ -301,7 +373,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
   final DoubleClickGuard _clicks = DoubleClickGuard();
   late final FocusNode _tileFocusNode;
   bool _openingFileView = false;
-  bool _openingDuplicateLiveFiles = false;
+  bool _openingReconcileFiles = false;
   bool _completingDetailAction = false;
 
   @override
@@ -476,26 +548,33 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  Future<void> _openDuplicateLiveFiles(
-    WallpaperInfo wallpaper,
-    _ReconcileFolders folders,
-    Future<FolderFileOverview?> comparison,
-  ) async {
-    if (_openingDuplicateLiveFiles) return;
-    _openingDuplicateLiveFiles = true;
+  Future<void> _openReconcileFiles(
+    WallpaperInfo wallpaper, {
+    required String? sourceFolder,
+    required String? destinationFolder,
+    required Future<FolderFileOverview?> comparison,
+    required String sourceLabel,
+    required String destinationLabel,
+    required String sourceOnlyTitle,
+    required String destinationOnlyTitle,
+    required String sourceOpenLabel,
+    required String destinationOpenLabel,
+    String? sourceDeleteLabel,
+    String? destinationDeleteLabel,
+    Future<bool> Function()? onDeleteSource,
+    Future<bool> Function()? onDeleteDestination,
+  }) async {
+    if (_openingReconcileFiles) return;
+    _openingReconcileFiles = true;
     final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
     try {
-      final String? workshop = folders.workshopLive;
-      final String? myProjects = folders.myProjectsLive;
-      if (workshop == null || myProjects == null) return;
+      if (sourceFolder == null || destinationFolder == null) return;
       final FolderFileOverview? preparedComparison = await comparison;
       if (!mounted) return;
       if (preparedComparison == null) {
         showErrorToast(tr(AppI10n.backupDetailFileComparisonUnavailable));
         return;
       }
-      final String workshopLabel = tr(AppI10n.backupDetailWorkshopLive);
-      final String myProjectsLabel = tr(AppI10n.backupDetailMyProjectsLive);
       bool resolved = false;
       await showWallpaperDetailSurface(
         context: context,
@@ -503,37 +582,31 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           wallpaperName: widget.name,
           wallpaper: wallpaper,
           overview: preparedComparison,
-          liveFolder: workshop,
-          backupFolder: myProjects,
+          liveFolder: sourceFolder,
+          backupFolder: destinationFolder,
           comparisonOnly: true,
-          sourceLabel: workshopLabel,
-          destinationLabel: myProjectsLabel,
-          sourceOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
-          destinationOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
-          sourceOpenLabel: tr(AppI10n.backupOpenWorkshopLiveFolder),
-          destinationOpenLabel: tr(AppI10n.backupOpenMyProjectsLiveFolder),
-          sourceDeleteLabel: tr(
-            AppI10n.backupActionDeleteLiveVersionButton,
-            namedArgs: <String, String>{'version': workshopLabel},
-          ),
-          destinationDeleteLabel: tr(
-            AppI10n.backupActionDeleteLiveVersionButton,
-            namedArgs: <String, String>{'version': myProjectsLabel},
-          ),
-          onDeleteSource: () async =>
-              resolved = await deleteDuplicateLiveVersion(
-                context,
-                name: widget.name,
-                library: WallpaperLibrary.workshop,
-                versionLabel: workshopLabel,
-              ),
-          onDeleteDestination: () async =>
-              resolved = await deleteDuplicateLiveVersion(
-                context,
-                name: widget.name,
-                library: WallpaperLibrary.myProjects,
-                versionLabel: myProjectsLabel,
-              ),
+          sourceLabel: sourceLabel,
+          destinationLabel: destinationLabel,
+          sourceOnlyTitle: sourceOnlyTitle,
+          destinationOnlyTitle: destinationOnlyTitle,
+          sourceOpenLabel: sourceOpenLabel,
+          destinationOpenLabel: destinationOpenLabel,
+          sourceDeleteLabel: sourceDeleteLabel,
+          destinationDeleteLabel: destinationDeleteLabel,
+          onDeleteSource: onDeleteSource == null
+              ? null
+              : () async {
+                  final bool result = await onDeleteSource();
+                  resolved = resolved || result;
+                  return result;
+                },
+          onDeleteDestination: onDeleteDestination == null
+              ? null
+              : () async {
+                  final bool result = await onDeleteDestination();
+                  resolved = resolved || result;
+                  return result;
+                },
           rePKGPath: ref.read(toolPathProvider),
         ),
       );
@@ -541,8 +614,24 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         await navigator.maybePop();
       }
     } finally {
-      _openingDuplicateLiveFiles = false;
+      _openingReconcileFiles = false;
     }
+  }
+
+  Widget _detailIssueBadges() {
+    final ReconcileEntry? entry = widget.reconcileEntry;
+    if (entry == null) return TileBadgeStrip(badges: widget.issueBadges);
+    final bool ignored = widget.reconcileIgnored;
+    final BackupReconcileReason? reasonOverride =
+        widget.reconcileReasonOverride;
+    return TileBadgeStrip(
+      badges: _reconcileBadges(
+        context,
+        entry,
+        ignored: ignored,
+        reasonOverride: reasonOverride,
+      ),
+    );
   }
 
   String? _backupFolderFor(WallpaperLibrary library, String name) {
@@ -631,11 +720,6 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
               (widget.reconcileIgnored
                   ? reconcileEntry.ignoredPrimaryReason
                   : reconcileEntry.activePrimaryReason);
-    final bool reconcileNeedsFocus = reconcileNeedsFileFocus(
-      reconcileEntry,
-      ignored: widget.reconcileIgnored,
-      reasonOverride: widget.reconcileReasonOverride,
-    );
     final _ReconcileFolders? reconcileFolders = reconcileEntry == null
         ? null
         : _reconcileFolders(reconcileEntry);
@@ -653,12 +737,46 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             secondFolder: reconcileMyProjectsLive,
           )
         : null;
+    final BackupCopyDifference? backupConflict =
+        reconcilePrimary == BackupReconcileReason.conflictingBackupCopies
+        ? reconcileEntry?.backupDifference
+        : null;
+    final FolderFileOverview? backupConflictOverview = backupConflict == null
+        ? null
+        : (
+            differentSize: backupConflict.differentSize,
+            onlyFirst: backupConflict.onlyWorkshop,
+            onlySecond: backupConflict.onlyMyProjects,
+            shared: const <String>[],
+          );
+    final bool packedBackupPair =
+        backupConflict != null &&
+        <BackupCopyFormat>{
+          backupConflict.workshopFormat,
+          backupConflict.myProjectsFormat,
+        }.containsAll(<BackupCopyFormat>{
+          BackupCopyFormat.packed,
+          BackupCopyFormat.unpacked,
+        });
     final String? updateBackupFolder = _updateBackupFolder();
     final BackupUpdatePlan? updatePlan = widget.updatePlan;
     final bool hasUpdateDetails =
         updatePlan != null && widget.backupCard != null;
     final bool updateHasContent = hasUpdateDetails && updatePlan.updateContent;
-    final String? rePKGPath = ref.read(toolPathProvider);
+    final Set<BackupReconcileReason> displayedReconcileReasons =
+        reconcileEntry == null
+        ? const <BackupReconcileReason>{}
+        : widget.reconcileReasonOverride != null
+        ? <BackupReconcileReason>{widget.reconcileReasonOverride!}
+        : widget.reconcileIgnored
+        ? reconcileEntry.ignoredReasons
+        : reconcileEntry.activeReasons;
+    final bool centerReconcileActions =
+        reconcilePrimary == BackupReconcileReason.duplicateLiveCopies ||
+            reconcilePrimary == BackupReconcileReason.conflictingBackupCopies
+        ? displayedReconcileReasons.length == 1 &&
+              reconcileEntry!.evidence.attentionStates.isEmpty
+        : false;
     final BackupUpdateSelection? updateSelection =
         updateHasContent &&
             widget.folders.live != null &&
@@ -691,34 +809,102 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
         ], selectiveUpdate: selection);
       };
     }
-    final DetailAction? leadingAction =
-        reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
-            reconcileFolders != null &&
-            duplicateLiveComparison != null
-        ? DetailAction(
-            key: const ValueKey<String>('backup-duplicate-live-open-files'),
-            icon: Icons.account_tree_outlined,
-            label: tr(AppI10n.backupDetailFileChanges),
-            onPressed: () => _openDuplicateLiveFiles(
-              wallpaper,
-              reconcileFolders,
-              duplicateLiveComparison,
-            ),
-          )
-        : updateHasContent
-        ? DetailAction(
-            key: const ValueKey<String>('backup-update-expand-file-changes'),
-            icon: Icons.account_tree_outlined,
-            label: tr(AppI10n.backupDetailFileChanges),
-            semanticHint: tr(AppI10n.backupDetailExpandFileChanges),
-            onPressed: () => _openFileView(
-              wallpaper,
-              updateSelection: updateSelection,
-              updateBackupFolder: updateBackupFolder,
-              showChanges: true,
-            ),
-          )
-        : null;
+    DetailAction? leadingAction;
+    if (reconcilePrimary == BackupReconcileReason.duplicateLiveCopies &&
+        reconcileFolders != null &&
+        duplicateLiveComparison != null) {
+      final String workshopLabel = tr(AppI10n.backupDetailWorkshopLive);
+      final String myProjectsLabel = tr(AppI10n.backupDetailMyProjectsLive);
+      leadingAction = DetailAction(
+        key: const ValueKey<String>('backup-duplicate-live-open-files'),
+        icon: Icons.account_tree_outlined,
+        label: tr(AppI10n.backupDetailFileChanges),
+        onPressed: () => _openReconcileFiles(
+          wallpaper,
+          sourceFolder: reconcileFolders.workshopLive,
+          destinationFolder: reconcileFolders.myProjectsLive,
+          comparison: duplicateLiveComparison,
+          sourceLabel: workshopLabel,
+          destinationLabel: myProjectsLabel,
+          sourceOnlyTitle: tr(AppI10n.backupDetailInWorkshopLive),
+          destinationOnlyTitle: tr(AppI10n.backupDetailInMyProjectsLive),
+          sourceOpenLabel: tr(AppI10n.backupOpenWorkshopLiveFolder),
+          destinationOpenLabel: tr(AppI10n.backupOpenMyProjectsLiveFolder),
+          sourceDeleteLabel: tr(
+            AppI10n.backupActionDeleteLiveVersionButton,
+            namedArgs: <String, String>{'version': workshopLabel},
+          ),
+          destinationDeleteLabel: tr(
+            AppI10n.backupActionDeleteLiveVersionButton,
+            namedArgs: <String, String>{'version': myProjectsLabel},
+          ),
+          onDeleteSource: () => deleteDuplicateLiveVersion(
+            context,
+            name: widget.name,
+            library: WallpaperLibrary.workshop,
+            versionLabel: workshopLabel,
+          ),
+          onDeleteDestination: () => deleteDuplicateLiveVersion(
+            context,
+            name: widget.name,
+            library: WallpaperLibrary.myProjects,
+            versionLabel: myProjectsLabel,
+          ),
+        ),
+      );
+    } else if (reconcilePrimary ==
+            BackupReconcileReason.conflictingBackupCopies &&
+        reconcileFolders != null &&
+        backupConflictOverview != null) {
+      final BackupCopyFormat workshopFormat = backupConflict!.workshopFormat;
+      final BackupCopyFormat myProjectsFormat = backupConflict.myProjectsFormat;
+      final String workshopFormatLabel = tr(
+        workshopFormat == BackupCopyFormat.packed
+            ? AppI10n.backupDetailPackedBackup
+            : AppI10n.backupDetailUnpackedBackup,
+      );
+      final String myProjectsFormatLabel = tr(
+        myProjectsFormat == BackupCopyFormat.packed
+            ? AppI10n.backupDetailPackedBackup
+            : AppI10n.backupDetailUnpackedBackup,
+      );
+      final String workshopLabel = packedBackupPair
+          ? '${tr(AppI10n.backupFolderBackupWorkshop)} · $workshopFormatLabel'
+          : tr(AppI10n.backupFolderBackupWorkshop);
+      final String myProjectsLabel = packedBackupPair
+          ? '${tr(AppI10n.backupFolderBackupMyProjects)} · $myProjectsFormatLabel'
+          : tr(AppI10n.backupFolderBackupMyProjects);
+      leadingAction = DetailAction(
+        key: const ValueKey<String>('backup-conflicting-backups-open-files'),
+        icon: Icons.account_tree_outlined,
+        label: tr(AppI10n.backupDetailFileChanges),
+        onPressed: () => _openReconcileFiles(
+          wallpaper,
+          sourceFolder: reconcileFolders.workshopBackup,
+          destinationFolder: reconcileFolders.myProjectsBackup,
+          comparison: Future<FolderFileOverview?>.value(backupConflictOverview),
+          sourceLabel: workshopLabel,
+          destinationLabel: myProjectsLabel,
+          sourceOnlyTitle: tr(AppI10n.backupDetailInWorkshopBackup),
+          destinationOnlyTitle: tr(AppI10n.backupDetailInMyProjectsBackup),
+          sourceOpenLabel: tr(AppI10n.backupOpenWorkshopBackupFolder),
+          destinationOpenLabel: tr(AppI10n.backupOpenMyProjectsBackupFolder),
+        ),
+      );
+    } else if (updateHasContent) {
+      leadingAction = DetailAction(
+        key: const ValueKey<String>('backup-update-expand-file-changes'),
+        icon: Icons.account_tree_outlined,
+        label: tr(AppI10n.backupDetailFileChanges),
+        semanticHint: tr(AppI10n.backupDetailExpandFileChanges),
+        onPressed: () => _openFileView(
+          wallpaper,
+          updateSelection: updateSelection,
+          updateBackupFolder: updateBackupFolder,
+          showChanges: true,
+        ),
+      );
+    }
     try {
       await showWallpaperDetail(
         context,
@@ -732,16 +918,13 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           updateSelection: updateSelection,
           updateBackupFolder: updateBackupFolder,
         ),
+        issueBadges: _detailIssueBadges(),
         includePreview: widget.junkKind == null,
         // Every preview-backed Backup state uses one inspector shell. Callers
         // only tune how much room their content needs inside that shared shell.
         layout: widget.junkKind != null
             ? const DetailDialogLayout()
-            : _backupDetailLayout(
-                extraCanFocus: widget.reconcileEntry != null
-                    ? reconcileNeedsFocus
-                    : false,
-              ),
+            : _backupDetailLayout(centerActions: centerReconcileActions),
         extraContentBuilder: widget.junkKind != null
             ? (
                 BuildContext context,
@@ -758,21 +941,17 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
             ? (
                 BuildContext context,
                 Color foreground,
-                bool focused,
-                VoidCallback requestFocus,
+                bool _,
+                VoidCallback _,
               ) => ReconcileDetailContent(
                 entry: widget.reconcileEntry!,
                 primaryReasonOverride: widget.reconcileReasonOverride,
                 foreground: foreground,
-                focused: focused,
                 ignoredMode: widget.reconcileIgnored,
-                needsFocus: reconcileNeedsFocus,
                 workshopLiveFolder: reconcileWorkshopLive,
                 myProjectsLiveFolder: reconcileMyProjectsLive,
                 workshopBackupFolder: reconcileWorkshopBackup,
                 myProjectsBackupFolder: reconcileMyProjectsBackup,
-                rePKGPath: rePKGPath,
-                onRequestFocus: requestFocus,
               )
             : hasUpdateDetails
             ? (

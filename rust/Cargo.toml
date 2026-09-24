@@ -8,20 +8,15 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.11.1"
-# Only PNG is ever opened. The default features add AVIF, EXR, TIFF, WebP and
-# JPEG decoders plus rayon, none of which this crate touches.
-image = { version = "0.25.6", default-features = false, features = ["png"] }
+# Keep only the image formats used by backup comparison.
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg", "gif"] }
+png = "0.17"
 tokio = { version = "1.47.1", features = [
   "rt-multi-thread",
   "sync",
   "macros",
 ] }
 trash = "5.2.3"
-
-[dev-dependencies]
-# Fixture generation only: `image` cannot encode indexed PNGs or set tRNS, and
-# both matter for the header fast path. Same version image 0.25 already uses.
-png = "0.17"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

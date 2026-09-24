@@ -35,6 +35,21 @@ class AppI10n {
   static const String backupTabBackup = 'backup.tab.backup';
   static const String backupTabIntegrity = 'backup.tab.integrity';
   static const String backupReconcile = 'backup.reconcile';
+  static const String backupDirectCheckStart = 'backup.directCheckStart';
+  static const String backupDirectCheckResume = 'backup.directCheckResume';
+  static const String backupDirectCheckCancel = 'backup.directCheckCancel';
+  static const String backupDirectCheckStopping = 'backup.directCheckStopping';
+  static const String backupDirectCheckProgress = 'backup.directCheckProgress';
+  static const String backupDirectCheckMatch = 'backup.directCheckMatch';
+  static const String backupDirectCheckScanning = 'backup.directCheckScanning';
+  static const String backupDirectCheckWorkshop = 'backup.directCheckWorkshop';
+  static const String backupDirectCheckMyProjects =
+      'backup.directCheckMyProjects';
+  static const String backupDirectCheckFormatBadge =
+      'backup.directCheckFormatBadge';
+  static const String backupDirectCheckIncomplete =
+      'backup.directCheckIncomplete';
+  static const String backupDirectCheckReview = 'backup.directCheckReview';
   static const String backupReconcileReasonDuplicateLiveTitle =
       'backup.reconcileReason.duplicateLiveTitle';
   static const String backupReconcileReasonDuplicateLiveAbout =
@@ -59,11 +74,11 @@ class AppI10n {
   static const String backupTileComparisonUnavailable =
       'backup.tile.comparisonUnavailable';
   static const String backupTileBackupsConflict = 'backup.tile.backupsConflict';
+  static const String backupTileVerificationChanged =
+      'backup.tile.verificationChanged';
   static const String backupDetailWorkshopLive = 'backup.detail.workshopLive';
   static const String backupDetailMyProjectsLive =
       'backup.detail.myProjectsLive';
-  static const String backupDetailLiveDifferences =
-      'backup.detail.liveDifferences';
   static const String backupDetailComparisonFailed =
       'backup.detail.comparisonFailed';
   static const String backupDetailRescanAdvice = 'backup.detail.rescanAdvice';
@@ -77,6 +92,9 @@ class AppI10n {
       'backup.detail.inWorkshopBackup';
   static const String backupDetailInMyProjectsBackup =
       'backup.detail.inMyProjectsBackup';
+  static const String backupDetailPackedBackup = 'backup.detail.packedBackup';
+  static const String backupDetailUnpackedBackup =
+      'backup.detail.unpackedBackup';
   static const String backupDetailInWorkshopLive =
       'backup.detail.inWorkshopLive';
   static const String backupDetailInMyProjectsLive =
@@ -202,8 +220,6 @@ class AppI10n {
       'backup.detail.imageDifferenceSizeMismatch';
   static const String backupDetailOldVersion = 'backup.detail.oldVersion';
   static const String backupDetailNewVersion = 'backup.detail.newVersion';
-  static const String backupDetailCompareFilesHint =
-      'backup.detail.compareFilesHint';
   static const String backupDetailMatchingFiles = 'backup.detail.matchingFiles';
   static const String backupEmptyJunkAbout = 'backup.emptyJunkAbout';
   static const String backupAboutSynced = 'backup.about.synced';
@@ -216,13 +232,11 @@ class AppI10n {
   static const String backupSortName = 'backup.sort.name';
   static const String backupSortDate = 'backup.sort.date';
   static const String backupBrowseFiles = 'backup.browseFiles';
-  static const String backupLiveSource = 'backup.liveSource';
   static const String backupMissingLive = 'backup.missingLive';
   static const String backupMissingBackup = 'backup.missingBackup';
   static const String backupLinkedScrolling = 'backup.linkedScrolling';
   static const String backupIndependentScrolling =
       'backup.independentScrolling';
-  static const String backupBackupDestination = 'backup.backupDestination';
   static const String backupLiveFiles = 'backup.liveFiles';
   static const String backupBackupFiles = 'backup.backupFiles';
   static const String backupOpenLiveFolder = 'backup.openLiveFolder';
@@ -265,6 +279,16 @@ class AppI10n {
       'backup.action.deleteLiveVersionTitle';
   static const String backupActionDeleteLiveVersionMessage =
       'backup.action.deleteLiveVersionMessage';
+  static const String backupActionDeleteBackupVersion =
+      'backup.action.deleteBackupVersion';
+  static const String backupActionDeleteBackupVersionTitle =
+      'backup.action.deleteBackupVersionTitle';
+  static const String backupActionDeleteBackupVersionMessage =
+      'backup.action.deleteBackupVersionMessage';
+  static const String backupActionDeleteBackupVersionsTitle =
+      'backup.action.deleteBackupVersionsTitle';
+  static const String backupActionDeleteBackupVersionsMessage =
+      'backup.action.deleteBackupVersionsMessage';
   static const String backupActionBackUpTitle = 'backup.action.backUpTitle';
   static const String backupActionUpdateTitle = 'backup.action.updateTitle';
   static const String backupActionRestoreTitle = 'backup.action.restoreTitle';

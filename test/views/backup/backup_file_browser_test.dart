@@ -209,8 +209,8 @@ void main() {
         same(selection),
       );
       expect(find.text(AppI10n.backupTileUpdate), findsNothing);
-      expect(find.text(AppI10n.backupLiveSource), findsOneWidget);
-      expect(find.text(AppI10n.backupBackupDestination), findsOneWidget);
+      expect(find.text(AppI10n.backupLiveFiles), findsOneWidget);
+      expect(find.text(AppI10n.backupBackupFiles), findsOneWidget);
 
       final Finder acceptCopy = find.byKey(
         const ValueKey<String>('backup-update-accept-added.txt'),

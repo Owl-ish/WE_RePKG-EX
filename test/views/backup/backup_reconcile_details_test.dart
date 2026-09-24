@@ -17,6 +17,7 @@ import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/views/backup/details/issue_details.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
+import 'package:we_repkg/widgets/tile_overlays.dart';
 
 void main() {
   testWidgets('reconcile context menu exposes every detected location', (
@@ -144,13 +145,10 @@ void main() {
             child: ReconcileDetailContent(
               entry: entry,
               foreground: Colors.black,
-              focused: false,
-              needsFocus: false,
               workshopLiveFolder: r'C:\workshop\attention-state',
               myProjectsLiveFolder: r'C:\myprojects\attention-state',
               workshopBackupFolder: r'C:\backup\attention-state',
               myProjectsBackupFolder: null,
-              rePKGPath: null,
             ),
           ),
         ),
@@ -260,6 +258,13 @@ void main() {
     }
 
     expect(openFiles, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(WallpaperDetailDialog),
+        matching: find.byType(TileBadgeStrip),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(BackupFileBrowser), findsNothing);
     for (int attempt = 0; attempt < 5; attempt++) {
       await tester.tap(openFiles);
@@ -300,56 +305,6 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('conflicting backup details expose only detected backup paths', (
-    tester,
-  ) async {
-    const ReconcileEntry entry = ReconcileEntry(
-      name: 'double-backup',
-      reason: BackupReconcileReason.conflictingBackupCopies,
-      states: <WallpaperLibrary, BackupState>{
-        WallpaperLibrary.workshop: BackupState.synced,
-      },
-      backupWorkshop: true,
-      backupMyProjects: true,
-      backupDifference: BackupCopyDifference(
-        differentSize: <String>['project.json'],
-      ),
-    );
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: ReconcileDetailContent(
-            entry: entry,
-            foreground: Colors.black,
-            focused: false,
-            needsFocus: true,
-            workshopLiveFolder: r'C:\workshop\431960\double-backup',
-            myProjectsLiveFolder: null,
-            workshopBackupFolder: r'C:\backup\Workshop\double-backup',
-            myProjectsBackupFolder: r'C:\backup\MyProjects\double-backup',
-            rePKGPath: null,
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-backup-workshop')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-backup-myprojects')),
-      findsOneWidget,
-    );
-    expect(find.text(r'C:\backup\Workshop\double-backup'), findsOneWidget);
-    expect(find.text(r'C:\backup\MyProjects\double-backup'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('backup-reconcile-live-workshop')),
-      findsNothing,
-    );
-  });
-
   testWidgets('comparison unavailable shows only detected locations', (
     tester,
   ) async {
@@ -369,13 +324,10 @@ void main() {
           body: ReconcileDetailContent(
             entry: entry,
             foreground: Colors.black,
-            focused: false,
-            needsFocus: false,
             workshopLiveFolder: null,
             myProjectsLiveFolder: r'C:\live\MyProjects\comparison-failed',
             workshopBackupFolder: r'C:\backup\Workshop\comparison-failed',
             myProjectsBackupFolder: null,
-            rePKGPath: null,
           ),
         ),
       ),
@@ -398,191 +350,6 @@ void main() {
       findsNothing,
     );
   });
-
-  testWidgets(
-    'reconcile details focus the file pane without resizing the dialog',
-    (tester) async {
-      final Directory folder = Directory.systemTemp.createTempSync(
-        'we_repkg_reconcile_detail',
-      );
-      addTearDown(() {
-        if (folder.existsSync()) folder.deleteSync(recursive: true);
-      });
-      File(
-        '${folder.path}${Platform.pathSeparator}placeholder.txt',
-      ).writeAsStringSync('different');
-
-      const ReconcileTile tile = (
-        entry: ReconcileEntry(
-          name: 'conflict',
-          reason: BackupReconcileReason.conflictingBackupCopies,
-          states: <WallpaperLibrary, BackupState>{
-            WallpaperLibrary.workshop: BackupState.synced,
-          },
-          backupWorkshop: true,
-          backupMyProjects: true,
-          backupDifference: BackupCopyDifference(
-            differentSize: <String>['project.json'],
-            onlyWorkshop: <String>['effects\\a.json'],
-            onlyMyProjects: <String>['materials\\b.json'],
-          ),
-        ),
-        face: null,
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: Scaffold(
-              body: Center(
-                child: ReconcileTileView(
-                  width: 180,
-                  tile: tile,
-                  folders: (live: folder.path, backup: null),
-                  onTap: () {},
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final Finder tileFinder = find.byType(ReconcileTileView);
-      await tester.tap(tileFinder);
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(tileFinder);
-
-      Future<bool> waitFor(Finder finder) async {
-        for (int attempt = 0; attempt < 40; attempt++) {
-          if (finder.evaluate().isNotEmpty) return true;
-          await tester.runAsync(() async {
-            await Future<void>.delayed(const Duration(milliseconds: 25));
-          });
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        return finder.evaluate().isNotEmpty;
-      }
-
-      final Finder focusTarget = find.byKey(
-        const ValueKey<String>('wallpaper-detail-extra-focus-target'),
-      );
-      final Finder previewPane = find.byKey(
-        const ValueKey<String>('wallpaper-detail-preview-pane'),
-      );
-      final Finder panelPane = find.byKey(
-        const ValueKey<String>('wallpaper-detail-panel-pane'),
-      );
-      expect(await waitFor(focusTarget), isTrue);
-      expect(
-        find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
-        findsOneWidget,
-      );
-      final Finder expandPrompt = find.byKey(
-        const ValueKey<String>('backup-reconcile-expand-differences'),
-      );
-      expect(expandPrompt, findsOneWidget);
-      expect(
-        find.descendant(
-          of: expandPrompt,
-          matching: find.text(AppI10n.backupDetailCompareFiles),
-        ),
-        findsOneWidget,
-      );
-      final Semantics expandSemantics = tester.widget<Semantics>(
-        find
-            .descendant(of: expandPrompt, matching: find.byType(Semantics))
-            .first,
-      );
-      expect(expandSemantics.properties.button, isTrue);
-      expect(
-        expandSemantics.properties.label,
-        contains(AppI10n.backupDetailCompareFilesHint),
-      );
-      expect(tester.getSize(expandPrompt).height, greaterThanOrEqualTo(48));
-      expect(
-        tester.getSize(expandPrompt).height,
-        lessThan(120),
-        reason: 'the shared expand prompt must not stretch into a detail pane',
-      );
-      final WallpaperDetailDialog detailDialog = tester.widget(
-        find.byType(WallpaperDetailDialog),
-      );
-      final Finder metadata = find.byKey(
-        const ValueKey<String>('wallpaper-detail-metadata'),
-      );
-      expect(metadata, findsOneWidget);
-      expect(
-        find.ancestor(
-          of: metadata,
-          matching: find.byType(SingleChildScrollView),
-        ),
-        findsNothing,
-        reason:
-            'preview-backed details should give metadata its natural height instead of overlaying a scrollbar on copy controls',
-      );
-      const DetailDialogLayout sharedLayout = DetailDialogLayout();
-      expect(detailDialog.layout.panelWidth, sharedLayout.panelWidth);
-      expect(
-        find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
-        findsNothing,
-      );
-
-      final double previewBefore = tester.getSize(previewPane).width;
-      final double panelBefore = tester.getSize(panelPane).width;
-      final double totalBefore = previewBefore + panelBefore;
-      final Size dialogBefore = tester.getSize(find.byType(Dialog));
-
-      await tester.tap(focusTarget);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 220));
-
-      final double previewFocused = tester.getSize(previewPane).width;
-      final double panelFocused = tester.getSize(panelPane).width;
-      final Size dialogFocused = tester.getSize(find.byType(Dialog));
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-reconcile-expand-differences'),
-        ),
-        findsOneWidget,
-        reason: 'expanding the pane alone must not open comparison results',
-      );
-      expect(
-        find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-hint')),
-        findsNothing,
-      );
-      expect(previewFocused, lessThan(previewBefore));
-      expect(previewFocused, lessThanOrEqualTo(100));
-      expect(panelFocused, greaterThan(panelBefore));
-      expect(previewFocused + panelFocused, closeTo(totalBefore, .5));
-      expect(dialogFocused.width, closeTo(dialogBefore.width, .5));
-      expect(dialogFocused.height, closeTo(dialogBefore.height, .5));
-
-      await tester.tap(expandPrompt);
-      await tester.pump();
-      expect(
-        find.byKey(
-          const ValueKey<String>('backup-reconcile-expand-differences'),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
-        findsOneWidget,
-      );
-
-      await tester.tap(previewPane);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 220));
-
-      expect(tester.getSize(previewPane).width, closeTo(previewBefore, .5));
-      expect(tester.getSize(panelPane).width, closeTo(panelBefore, .5));
-    },
-  );
 
   testWidgets('reconcile file tree exposes shared manual comparison', (
     tester,
@@ -674,7 +441,7 @@ void main() {
     );
   });
 
-  testWidgets('small reconcile differences stay expanded without focus mode', (
+  testWidgets('packed backup conflict shows original files in the explorer', (
     tester,
   ) async {
     final Directory root = Directory.systemTemp.createTempSync(
@@ -701,6 +468,12 @@ void main() {
     File(
       '${myProjectsBackup.path}${Platform.pathSeparator}project.json',
     ).writeAsStringSync('{"title":"Conflict","version":20}');
+    File(
+      '${workshopBackup.path}${Platform.pathSeparator}scene.pkg',
+    ).writeAsStringSync('package bytes');
+    File(
+      '${myProjectsBackup.path}${Platform.pathSeparator}scene.json',
+    ).writeAsStringSync('{}');
 
     const ReconcileTile tile = (
       entry: ReconcileEntry(
@@ -713,6 +486,10 @@ void main() {
         backupMyProjects: true,
         backupDifference: BackupCopyDifference(
           differentSize: <String>['project.json'],
+          onlyWorkshop: <String>['scene.pkg'],
+          onlyMyProjects: <String>['scene.json'],
+          workshopFormat: BackupCopyFormat.packed,
+          myProjectsFormat: BackupCopyFormat.unpacked,
         ),
       ),
       face: null,
@@ -741,53 +518,86 @@ void main() {
     await tester.tap(tileFinder);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(tileFinder);
+    final Finder openFiles = find.byKey(
+      const ValueKey<String>('backup-conflicting-backups-open-files'),
+    );
     for (int attempt = 0; attempt < 40; attempt++) {
-      if (find
-          .byKey(const ValueKey<String>('backup-reconcile-detail-scroll'))
-          .evaluate()
-          .isNotEmpty) {
-        break;
-      }
+      if (openFiles.evaluate().isNotEmpty) break;
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 25));
       });
       await tester.pump(const Duration(milliseconds: 50));
     }
 
+    expect(openFiles, findsOneWidget);
+    expect(find.text(AppI10n.backupActionIgnore), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('backup-reconcile-detail-scroll')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const ValueKey<String>('backup-reconcile-expand-differences')),
       findsNothing,
     );
-    expect(
-      find.byKey(const ValueKey<String>('wallpaper-detail-extra-focus-target')),
-      findsNothing,
-    );
-    final Finder versionJson = find.byKey(
-      const ValueKey<String>('backup-json-project.json'),
-    );
-    expect(versionJson, findsOneWidget);
-    await tester.tap(versionJson);
+    await tester.tap(openFiles);
     for (int attempt = 0; attempt < 40; attempt++) {
-      if (find.text('version').evaluate().isNotEmpty) break;
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 25));
-      });
+      if (find
+          .byKey(const ValueKey<String>('backup-update-file-tree'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
       await tester.pump(const Duration(milliseconds: 50));
     }
-    final FileTreeRouteBanner reconcileRoute = tester.widget(
-      find.byType(FileTreeRouteBanner),
+
+    expect(
+      find.byKey(const ValueKey<String>('backup-update-file-tree')),
+      findsOneWidget,
     );
-    expect(reconcileRoute.source, endsWith('/ small-conflict'));
-    expect(reconcileRoute.source.toLowerCase(), contains('backup'));
-    expect(reconcileRoute.source.toLowerCase(), contains('workshop'));
-    expect(reconcileRoute.destination, endsWith('/ small-conflict'));
-    expect(reconcileRoute.destination.toLowerCase(), contains('backup'));
-    expect(reconcileRoute.destination.toLowerCase(), contains('myprojects'));
-    expect(find.text('version'), findsOneWidget);
-    expect(find.text('1  →  20'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('update-paired-live')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-paired-backup')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-row-live-project.json')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-row-backup-project.json')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-row-live-scene.pkg')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-row-backup-scene.json')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('update-pair-compare-project.json')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(AppI10n.backupFolderBackupWorkshop),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(AppI10n.backupFolderBackupMyProjects),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('backup-file-view-delete-source')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('backup-file-view-delete-destination')),
+      findsNothing,
+    );
+    await tester.pump(const Duration(seconds: 2));
   });
 }

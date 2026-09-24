@@ -802,6 +802,155 @@ void main() {
     },
   );
 
+  test('backup conflict resolution recycles only the chosen format', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory packed = Directory(
+      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    final Directory unpacked = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
+    File(path.join(unpacked.path, 'scene.json')).writeAsStringSync('{}');
+
+    final result = await recycleConflictingBackupCopy(
+      name: 'demo',
+      removedLibrary: WallpaperLibrary.workshop,
+      expectedRemovedFormat: BackupCopyFormat.packed,
+      expectedSurvivingFormat: BackupCopyFormat.unpacked,
+      backupRoot: backupRoot.path,
+      verifyEquivalent: (Directory packed, Directory unpacked) async => true,
+      trashFolder: (String claimed) async {
+        expect(packed.existsSync(), isFalse);
+        expect(unpacked.existsSync(), isTrue);
+        expect(
+          await inspectBackupCopyFormat(Directory(claimed)),
+          BackupCopyFormat.packed,
+        );
+        await Directory(claimed).delete(recursive: true);
+        return null;
+      },
+    );
+
+    expect(result, (changed: true, error: null));
+    expect(packed.existsSync(), isFalse);
+    expect(unpacked.existsSync(), isTrue);
+  });
+
+  test('backup conflict resolution can keep the packed copy', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory packed = Directory(
+      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    final Directory unpacked = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
+    File(path.join(unpacked.path, 'scene.json')).writeAsStringSync('{}');
+
+    final result = await recycleConflictingBackupCopy(
+      name: 'demo',
+      removedLibrary: WallpaperLibrary.myProjects,
+      expectedRemovedFormat: BackupCopyFormat.unpacked,
+      expectedSurvivingFormat: BackupCopyFormat.packed,
+      backupRoot: backupRoot.path,
+      verifyEquivalent: (Directory survivingPacked, Directory claimed) async {
+        expect(unpacked.existsSync(), isFalse);
+        expect(survivingPacked.path, packed.path);
+        expect(
+          await inspectBackupCopyFormat(claimed),
+          BackupCopyFormat.unpacked,
+        );
+        return true;
+      },
+      trashFolder: (String claimed) async {
+        await Directory(claimed).delete(recursive: true);
+        return null;
+      },
+    );
+
+    expect(result, (changed: true, error: null));
+    expect(packed.existsSync(), isTrue);
+    expect(unpacked.existsSync(), isFalse);
+  });
+
+  test('backup conflict resolution stops when a format changed', () async {
+    final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
+      ..createSync();
+    final Directory packed = Directory(
+      path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    final Directory changed = Directory(
+      path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+    )..createSync(recursive: true);
+    File(path.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
+    File(path.join(changed.path, 'scene.pkg')).writeAsStringSync('replacement');
+    int trashCalls = 0;
+
+    final result = await recycleConflictingBackupCopy(
+      name: 'demo',
+      removedLibrary: WallpaperLibrary.workshop,
+      expectedRemovedFormat: BackupCopyFormat.packed,
+      expectedSurvivingFormat: BackupCopyFormat.unpacked,
+      backupRoot: backupRoot.path,
+      verifyEquivalent: (Directory packed, Directory unpacked) async => true,
+      trashFolder: (String claimed) async {
+        trashCalls++;
+        return null;
+      },
+    );
+
+    expect(result.changed, isFalse);
+    expect(result.error, isNotNull);
+    expect(trashCalls, 0);
+    expect(packed.existsSync(), isTrue);
+    expect(changed.existsSync(), isTrue);
+  });
+
+  test(
+    'backup conflict resolution restores a pair that is not equivalent',
+    () async {
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory packed = Directory(
+        path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      final Directory unpacked = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(path.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
+      File(path.join(unpacked.path, 'scene.json')).writeAsStringSync('{}');
+      int trashCalls = 0;
+
+      final result = await recycleConflictingBackupCopy(
+        name: 'demo',
+        removedLibrary: WallpaperLibrary.workshop,
+        expectedRemovedFormat: BackupCopyFormat.packed,
+        expectedSurvivingFormat: BackupCopyFormat.unpacked,
+        backupRoot: backupRoot.path,
+        verifyEquivalent: (Directory claimed, Directory survivor) async {
+          expect(packed.existsSync(), isFalse);
+          expect(claimed.existsSync(), isTrue);
+          expect(survivor.path, unpacked.path);
+          return false;
+        },
+        trashFolder: (String claimed) async {
+          trashCalls++;
+          return null;
+        },
+      );
+
+      expect(result.changed, isFalse);
+      expect(result.error, isNotNull);
+      expect(trashCalls, 0);
+      expect(packed.existsSync(), isTrue);
+      expect(unpacked.existsSync(), isTrue);
+    },
+  );
+
   test(
     'empty cleanup recycles the claimed folder, not a replacement',
     () async {

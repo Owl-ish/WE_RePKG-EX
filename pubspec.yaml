@@ -40,6 +40,8 @@ dependencies:
   path: ^1.9.1
   # SHA-256 is streamed for explicit binary/unknown file comparison.
   crypto: ^3.0.7
+  # Packed/unpacked verification compares decoded pixels across image encodings.
+  image: ^4.8.0
   window_manager: ^0.5.1
   file_selector: ^1.1.0
   shared_preferences: ^2.5.4
@@ -72,8 +74,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.11.1
   riverpod_generator: 4.0.3
-  # Only the preview codec tests build images; nothing in lib imports it.
-  image: ^4.8.0
   # Lets the folder picker be stubbed, so the tests can hold a widget open
   # across one. file_selector pulls it in anyway.
   file_selector_platform_interface: ^2.7.0

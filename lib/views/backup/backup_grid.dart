@@ -157,9 +157,18 @@ class _GridState extends ConsumerState<_Grid> {
         ),
       };
 
+  String _directCheckTitle(DirectBackupProbeStatus status) => switch (status) {
+    DirectBackupProbeStatus.candidateMatch => AppI10n.backupDirectCheckMatch,
+    DirectBackupProbeStatus.different => AppI10n.backupTileVerificationChanged,
+    DirectBackupProbeStatus.differentIncomplete =>
+      AppI10n.backupDirectCheckIncomplete,
+    DirectBackupProbeStatus.unavailable => AppI10n.backupDirectCheckReview,
+  };
+
   Widget _reconcileGrid(
     WidgetRef ref,
     AsyncValue<List<ReconcileTile>> tiles, {
+    required BackupScan scan,
     required String? backupRoot,
     required String? workshop,
     required String? myProjects,
@@ -173,94 +182,156 @@ class _GridState extends ConsumerState<_Grid> {
             return const NoResultsView(key: NoResultsView.viewKey);
           },
         ),
-      AsyncData<List<ReconcileTile>>(:final List<ReconcileTile> value) =>
-        Builder(
-          builder: (BuildContext context) {
-            widget.entrance.discard();
-            final Map<BackupReconcileReason, List<ReconcileTile>> groups =
-                <BackupReconcileReason, List<ReconcileTile>>{
-                  for (final BackupReconcileReason reason
-                      in BackupReconcileReason.values)
-                    reason: <ReconcileTile>[],
-                };
-            for (final ReconcileTile tile in value) {
-              final BackupReconcileReason? reason =
-                  tile.entry.activePrimaryReason;
-              if (reason != null) groups[reason]!.add(tile);
-            }
-            final List<ReconcileTile> grouped = <ReconcileTile>[
-              for (final BackupReconcileReason reason
-                  in BackupReconcileReason.values)
-                ...groups[reason]!,
-            ];
-            final List<String> ids = <String>[
-              for (final ReconcileTile tile in grouped)
-                reconcileTileId(tile.entry.name),
-            ];
-
-            return _selectionGrid(
-              ref,
-              context,
-              id: 'backup-reconcile-grid',
-              ids: ids,
-              padding: EdgeInsets.zero,
-              entranceToken: 0,
-              entranceOnMount: false,
-              reflowIdentity: const ValueKey<String>('reconcile-groups'),
-              sections: <SelectionGridSection>[
+      AsyncData<List<ReconcileTile>>(:final List<ReconcileTile> value) => Builder(
+        builder: (BuildContext context) {
+          widget.entrance.discard();
+          final BackupDirectBatchState check = ref
+              .read(backupDirectBatchProvider)
+              .forScan(scan, backupRoot);
+          final List<ReconcileTile> scanning = <ReconcileTile>[];
+          final Map<DirectBackupProbeStatus, List<ReconcileTile>> checked =
+              <DirectBackupProbeStatus, List<ReconcileTile>>{
+                for (final DirectBackupProbeStatus status
+                    in DirectBackupProbeStatus.values)
+                  status: <ReconcileTile>[],
+              };
+          final Map<BackupReconcileReason, List<ReconcileTile>> groups =
+              <BackupReconcileReason, List<ReconcileTile>>{
                 for (final BackupReconcileReason reason
                     in BackupReconcileReason.values)
-                  if (groups[reason]!.isNotEmpty)
-                    SelectionGridSection(
-                      itemCount: groups[reason]!.length,
-                      headerPinned: true,
-                      headerExtent: _backupIssueHeaderHeight,
-                      header: _BackupIssueHeader(
-                        noteKey: ValueKey<String>(
-                          'backup-reconcile-note-${reason.name}',
-                        ),
-                        pinned: true,
-                        child: Text.rich(
-                          TextSpan(
-                            children: <InlineSpan>[
-                              TextSpan(
-                                text: '${tr(_reconcileText(reason).title)} - ',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              TextSpan(text: tr(_reconcileText(reason).about)),
-                            ],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  reason: <ReconcileTile>[],
+              };
+          for (final ReconcileTile tile in value) {
+            final BackupReconcileReason? reason =
+                tile.entry.activePrimaryReason;
+            if (reason == null) continue;
+            if (reason == BackupReconcileReason.conflictingBackupCopies &&
+                BackupDirectBatch.eligible(tile.entry)) {
+              final DirectBackupProbeStatus? status =
+                  check.results[tile.entry.name.toLowerCase()]?.status;
+              if (status != null) {
+                checked[status]!.add(tile);
+                continue;
+              }
+              if (check.running && !check.cancelled) {
+                scanning.add(tile);
+                continue;
+              }
+            }
+            groups[reason]!.add(tile);
+          }
+          final List<ReconcileTile> grouped = <ReconcileTile>[
+            ...scanning,
+            for (final DirectBackupProbeStatus status
+                in DirectBackupProbeStatus.values)
+              ...checked[status]!,
+            for (final BackupReconcileReason reason
+                in BackupReconcileReason.values)
+              ...groups[reason]!,
+          ];
+          final List<String> ids = <String>[
+            for (final ReconcileTile tile in grouped)
+              reconcileTileId(tile.entry.name),
+          ];
+
+          return _selectionGrid(
+            ref,
+            context,
+            id: 'backup-reconcile-grid',
+            ids: ids,
+            padding: EdgeInsets.zero,
+            entranceToken: 0,
+            entranceOnMount: false,
+            reflowIdentity: const ValueKey<String>('reconcile-groups'),
+            sections: <SelectionGridSection>[
+              if (scanning.isNotEmpty)
+                SelectionGridSection(
+                  itemCount: scanning.length,
+                  headerPinned: true,
+                  headerExtent: _backupIssueHeaderHeight,
+                  header: _BackupIssueHeader(
+                    noteKey: const ValueKey<String>(
+                      'backup-reconcile-note-scanning',
+                    ),
+                    pinned: true,
+                    child: Text(
+                      '${tr(AppI10n.backupDirectCheckScanning)} (${scanning.length})',
+                    ),
+                  ),
+                ),
+              for (final DirectBackupProbeStatus status
+                  in DirectBackupProbeStatus.values)
+                if (checked[status]!.isNotEmpty)
+                  SelectionGridSection(
+                    itemCount: checked[status]!.length,
+                    headerPinned: true,
+                    headerExtent: _backupIssueHeaderHeight,
+                    header: _BackupIssueHeader(
+                      noteKey: ValueKey<String>(
+                        'backup-reconcile-note-${status.name}',
+                      ),
+                      pinned: true,
+                      child: Text(
+                        '${tr(_directCheckTitle(status))} (${checked[status]!.length})',
                       ),
                     ),
-              ],
-              itemBuilder:
-                  (BuildContext context, int index, GridGeometry geometry) {
-                    final ReconcileTile tile = grouped[index];
-                    return ReconcileTileView(
-                      key: ValueKey<String>(ids[index]),
-                      width: geometry.tile,
-                      tile: tile,
-                      folders: reconcileFolders(
-                        entry: tile.entry,
-                        backupRoot: backupRoot,
-                        liveWorkshopPath: workshop,
-                        liveMyProjectsPath: myProjects,
+                  ),
+              for (final BackupReconcileReason reason
+                  in BackupReconcileReason.values)
+                if (groups[reason]!.isNotEmpty)
+                  SelectionGridSection(
+                    itemCount: groups[reason]!.length,
+                    headerPinned: true,
+                    headerExtent: _backupIssueHeaderHeight,
+                    header: _BackupIssueHeader(
+                      noteKey: ValueKey<String>(
+                        'backup-reconcile-note-${reason.name}',
                       ),
+                      pinned: true,
+                      child: Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              text: '${tr(_reconcileText(reason).title)} - ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(text: tr(_reconcileText(reason).about)),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+            ],
+            itemBuilder:
+                (BuildContext context, int index, GridGeometry geometry) {
+                  final ReconcileTile tile = grouped[index];
+                  return ReconcileTileView(
+                    key: ValueKey<String>(ids[index]),
+                    width: geometry.tile,
+                    tile: tile,
+                    contentStatus:
+                        check.results[tile.entry.name.toLowerCase()]?.status,
+                    contentScanning: scanning.contains(tile),
+                    folders: reconcileFolders(
+                      entry: tile.entry,
                       backupRoot: backupRoot,
-                      liveWorkshopRoot: workshop,
-                      liveMyProjectsRoot: myProjects,
-                      ignored: false,
-                      onTap: () => _click(ref, ids, index),
-                    );
-                  },
-            );
-          },
-        ),
+                      liveWorkshopPath: workshop,
+                      liveMyProjectsPath: myProjects,
+                    ),
+                    backupRoot: backupRoot,
+                    liveWorkshopRoot: workshop,
+                    liveMyProjectsRoot: myProjects,
+                    ignored: false,
+                    onTap: () => _click(ref, ids, index),
+                  );
+                },
+          );
+        },
+      ),
       AsyncError<List<ReconcileTile>>(:final Object error) => Center(
         child: Text('${tr(AppI10n.backupTilesFailed)} $error'),
       ),
@@ -619,12 +690,19 @@ class _GridState extends ConsumerState<_Grid> {
         myProjects: myProjects,
       );
     } else if (shown.reconcile) {
-      grid = _reconcileGrid(
-        ref,
-        ref.watch(backupVisibleReconcileTilesProvider),
-        backupRoot: backupRoot,
-        workshop: workshop,
-        myProjects: myProjects,
+      final AsyncValue<List<ReconcileTile>> tiles = ref.watch(
+        backupVisibleReconcileTilesProvider,
+      );
+      grid = ValueListenableBuilder<BackupDirectBatchState>(
+        valueListenable: ref.read(backupDirectBatchProvider),
+        builder: (context, _, _) => _reconcileGrid(
+          ref,
+          tiles,
+          scan: scan,
+          backupRoot: backupRoot,
+          workshop: workshop,
+          myProjects: myProjects,
+        ),
       );
     } else if (shown.state == BackupState.emptyBackup) {
       grid = _junkGrid(

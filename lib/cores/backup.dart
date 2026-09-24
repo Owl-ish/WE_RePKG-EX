@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/constants/strings.dart';
@@ -723,8 +724,13 @@ typedef _FolderDifference = ({
   List<String> differentSize,
   List<String> onlyFirst,
   List<String> onlySecond,
+  BackupCopyFormat firstFormat,
+  BackupCopyFormat secondFormat,
   String evidenceFingerprint,
+  String? verificationSignature,
 });
+
+typedef _BackupManifestEntry = ({String display, int size, int modifiedMicros});
 
 typedef _FolderComparison = ({
   _BackupCopyComparison result,
@@ -842,7 +848,10 @@ Future<_BackupCopyComparisons> _compareDuplicateBackups({
             differentSize: difference.differentSize,
             onlyWorkshop: difference.onlyFirst,
             onlyMyProjects: difference.onlySecond,
+            workshopFormat: difference.firstFormat,
+            myProjectsFormat: difference.secondFormat,
             evidenceFingerprint: difference.evidenceFingerprint,
+            verificationSignature: difference.verificationSignature,
           );
           break;
       }
@@ -1024,8 +1033,8 @@ Future<CopyStanding?> _copyStanding({
   required bool recursive,
 }) async {
   final (
-    Map<String, ({String display, int size})>? liveFiles,
-    Map<String, ({String display, int size})>? backupFiles,
+    Map<String, _BackupManifestEntry>? liveFiles,
+    Map<String, _BackupManifestEntry>? backupFiles,
   ) = await (
     _backupFileManifest(liveFolder, recursive: recursive),
     _backupFileManifest(backupFolder, recursive: recursive),
@@ -1033,8 +1042,7 @@ Future<CopyStanding?> _copyStanding({
   if (liveFiles == null || backupFiles == null) return null;
   if (backupFiles.isEmpty) return CopyStanding.empty;
   if (liveFiles.length != backupFiles.length) return CopyStanding.behind;
-  for (final MapEntry<String, ({String display, int size})> file
-      in liveFiles.entries) {
+  for (final MapEntry<String, _BackupManifestEntry> file in liveFiles.entries) {
     if (backupFiles[file.key]?.size != file.value.size) {
       return CopyStanding.behind;
     }
@@ -1048,8 +1056,8 @@ Future<_FolderComparison> _compareBackupFolders(
   Directory second,
 ) async {
   final (
-    Map<String, ({String display, int size})>? firstFiles,
-    Map<String, ({String display, int size})>? secondFiles,
+    Map<String, _BackupManifestEntry>? firstFiles,
+    Map<String, _BackupManifestEntry>? secondFiles,
   ) = await (
     _backupFileManifest(first),
     _backupFileManifest(second),
@@ -1080,6 +1088,12 @@ Future<_FolderComparison> _compareBackupFolders(
   sortPaths(onlyFirst);
   sortPaths(onlySecond);
 
+  final BackupCopyFormat firstFormat = _backupCopyFormatFromPaths(
+    firstFiles.keys,
+  );
+  final BackupCopyFormat secondFormat = _backupCopyFormatFromPaths(
+    secondFiles.keys,
+  );
   final List<String> evidence = keys.toList()..sort();
   final String evidenceFingerprint = evidence
       .map((String key) {
@@ -1092,7 +1106,15 @@ Future<_FolderComparison> _compareBackupFolders(
     differentSize: differentSize,
     onlyFirst: onlyFirst,
     onlySecond: onlySecond,
+    firstFormat: firstFormat,
+    secondFormat: secondFormat,
     evidenceFingerprint: 'conflicting-backups:$evidenceFingerprint',
+    verificationSignature: _backupPairVerificationSignature(
+      firstFiles: firstFiles,
+      secondFiles: secondFiles,
+      firstFormat: firstFormat,
+      secondFormat: secondFormat,
+    ),
   );
   final bool same =
       differentSize.isEmpty && onlyFirst.isEmpty && onlySecond.isEmpty;
@@ -1104,14 +1126,52 @@ Future<_FolderComparison> _compareBackupFolders(
   );
 }
 
-Future<Map<String, ({String display, int size})>?> _backupFileManifest(
+String? _backupPairVerificationSignature({
+  required Map<String, _BackupManifestEntry> firstFiles,
+  required Map<String, _BackupManifestEntry> secondFiles,
+  required BackupCopyFormat firstFormat,
+  required BackupCopyFormat secondFormat,
+}) {
+  final Set<BackupCopyFormat> formats = <BackupCopyFormat>{
+    firstFormat,
+    secondFormat,
+  };
+  if (!formats.containsAll(<BackupCopyFormat>{
+    BackupCopyFormat.packed,
+    BackupCopyFormat.unpacked,
+  })) {
+    return null;
+  }
+  List<String> signatureLines(Map<String, _BackupManifestEntry> files) {
+    final List<String> keys = files.keys.toList()..sort();
+    return <String>[
+      for (final String key in keys)
+        '$key:${files[key]!.size}:${files[key]!.modifiedMicros}',
+    ];
+  }
+
+  final Map<String, _BackupManifestEntry> packed =
+      firstFormat == BackupCopyFormat.packed ? firstFiles : secondFiles;
+  final Map<String, _BackupManifestEntry> unpacked =
+      firstFormat == BackupCopyFormat.unpacked ? firstFiles : secondFiles;
+  return sha256
+      .convert(
+        utf8.encode(
+          'packed\n${signatureLines(packed).join('\n')}\n'
+          'unpacked\n${signatureLines(unpacked).join('\n')}',
+        ),
+      )
+      .toString();
+}
+
+Future<Map<String, _BackupManifestEntry>?> _backupFileManifest(
   Directory folder, {
   bool recursive = true,
 }) async {
   try {
     if (!await folder.exists()) return null;
-    final Map<String, ({String display, int size})> files =
-        <String, ({String display, int size})>{};
+    final Map<String, _BackupManifestEntry> files =
+        <String, _BackupManifestEntry>{};
     await for (final FileSystemEntity entity in folder.list(
       recursive: recursive,
       followLinks: false,
@@ -1122,12 +1182,35 @@ Future<Map<String, ({String display, int size})>?> _backupFileManifest(
       final FileStat stat = await entity.stat();
       if (stat.type != FileSystemEntityType.file) return null;
       final String key = relative.toLowerCase().replaceAll('/', r'\');
-      files[key] = (display: relative, size: stat.size);
+      files[key] = (
+        display: relative,
+        size: stat.size,
+        modifiedMicros: stat.modified.microsecondsSinceEpoch,
+      );
     }
     return files;
   } on FileSystemException {
     return null;
   }
+}
+
+BackupCopyFormat _backupCopyFormatFromPaths(Iterable<String> paths) {
+  final Set<String> normalized = paths
+      .map((String value) => value.toLowerCase().replaceAll('/', r'\'))
+      .toSet();
+  final bool packed = normalized.contains('scene.pkg');
+  final bool unpacked = normalized.contains('scene.json');
+  if (packed == unpacked) return BackupCopyFormat.unknown;
+  return packed ? BackupCopyFormat.packed : BackupCopyFormat.unpacked;
+}
+
+/// Reads only the root files needed to classify a backup copy's representation.
+Future<BackupCopyFormat?> inspectBackupCopyFormat(Directory folder) async {
+  final Map<String, _BackupManifestEntry>? files = await _backupFileManifest(
+    folder,
+    recursive: false,
+  );
+  return files == null ? null : _backupCopyFormatFromPaths(files.keys);
 }
 
 /// Builds the lightweight folder inventory used by interactive comparison views.
@@ -1136,8 +1219,8 @@ Future<FolderFileOverview?> compareFolderFileOverview({
   required String secondFolder,
 }) async {
   final (
-    Map<String, ({String display, int size})>? firstFiles,
-    Map<String, ({String display, int size})>? secondFiles,
+    Map<String, _BackupManifestEntry>? firstFiles,
+    Map<String, _BackupManifestEntry>? secondFiles,
   ) = await (
     _backupFileManifest(Directory(firstFolder)),
     _backupFileManifest(Directory(secondFolder)),
@@ -1186,8 +1269,8 @@ Future<FolderFileComparison?> compareFolderFilesDetailed({
   final Directory first = Directory(firstFolder);
   final Directory second = Directory(secondFolder);
   final (
-    Map<String, ({String display, int size})>? firstFiles,
-    Map<String, ({String display, int size})>? secondFiles,
+    Map<String, _BackupManifestEntry>? firstFiles,
+    Map<String, _BackupManifestEntry>? secondFiles,
   ) = await (
     _backupFileManifest(first),
     _backupFileManifest(second),
@@ -1302,7 +1385,11 @@ Future<List<BackupJsonFieldChange>?> compareBackupProjectJsonChanges({
 );
 
 /// Compares two files in fixed-size chunks without buffering whole payloads.
-Future<bool?> filesHaveSameContents(File first, File second) async {
+Future<bool?> filesHaveSameContents(
+  File first,
+  File second, {
+  bool Function()? isCancelled,
+}) async {
   RandomAccessFile? firstHandle;
   RandomAccessFile? secondHandle;
   try {
@@ -1310,6 +1397,7 @@ Future<bool?> filesHaveSameContents(File first, File second) async {
     secondHandle = await second.open();
     const int chunkSize = 64 * 1024;
     while (true) {
+      if (isCancelled?.call() == true) return null;
       final List<int> firstBytes = await firstHandle.read(chunkSize);
       final List<int> secondBytes = await secondHandle.read(chunkSize);
       if (firstBytes.length != secondBytes.length) return false;

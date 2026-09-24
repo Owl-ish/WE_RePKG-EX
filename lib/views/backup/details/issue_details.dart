@@ -127,38 +127,6 @@ class JunkDetailContent extends StatelessWidget {
   }
 }
 
-/// Decides whether a Reconcile difference tree is dense enough to defer until focus.
-bool reconcileNeedsFileFocus(
-  ReconcileEntry? entry, {
-  bool ignored = false,
-  BackupReconcileReason? reasonOverride,
-}) {
-  final BackupReconcileReason? primary =
-      reasonOverride ??
-      (ignored ? entry?.ignoredPrimaryReason : entry?.activePrimaryReason);
-  if (entry == null ||
-      primary != BackupReconcileReason.conflictingBackupCopies) {
-    return false;
-  }
-  final BackupCopyDifference? difference = entry.backupDifference;
-  if (difference == null || difference.total == 0) return false;
-  final int groups = <List<String>>[
-    difference.differentSize,
-    difference.onlyWorkshop,
-    difference.onlyMyProjects,
-  ].where((List<String> paths) => paths.isNotEmpty).length;
-  final Iterable<String> paths = <String>[
-    ...difference.differentSize,
-    ...difference.onlyWorkshop,
-    ...difference.onlyMyProjects,
-  ];
-  final int longest = paths.fold<int>(
-    0,
-    (int length, String path) => path.length > length ? path.length : length,
-  );
-  return difference.total + groups > 4 || longest > 58;
-}
-
 class _DetectedFolderCopy extends StatelessWidget {
   const _DetectedFolderCopy({
     super.key,
@@ -204,79 +172,38 @@ class _DetectedFolderCopy extends StatelessWidget {
 }
 
 /// Presents the diagnostic detail and delegates explicit resolution actions.
-class ReconcileDetailContent extends StatefulWidget {
+class ReconcileDetailContent extends StatelessWidget {
   const ReconcileDetailContent({
     super.key,
     required this.entry,
     this.primaryReasonOverride,
     required this.foreground,
-    required this.focused,
-    required this.needsFocus,
     required this.workshopLiveFolder,
     required this.myProjectsLiveFolder,
     required this.workshopBackupFolder,
     required this.myProjectsBackupFolder,
-    required this.rePKGPath,
     this.ignoredMode = false,
-    this.onRequestFocus,
   });
 
   final ReconcileEntry entry;
   final BackupReconcileReason? primaryReasonOverride;
   final Color foreground;
-  final bool focused;
-  final bool needsFocus;
   final String? workshopLiveFolder;
   final String? myProjectsLiveFolder;
   final String? workshopBackupFolder;
   final String? myProjectsBackupFolder;
-  final String? rePKGPath;
   final bool ignoredMode;
-  final VoidCallback? onRequestFocus;
-
-  @override
-  State<ReconcileDetailContent> createState() => _ReconcileDetailContentState();
-}
-
-class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
-  bool _compareRequested = false;
-
-  ReconcileEntry get entry => widget.entry;
-  Color get foreground => widget.foreground;
-  bool get needsFocus => widget.needsFocus;
-  String? get workshopLiveFolder => widget.workshopLiveFolder;
-  String? get myProjectsLiveFolder => widget.myProjectsLiveFolder;
-  String? get workshopBackupFolder => widget.workshopBackupFolder;
-  String? get myProjectsBackupFolder => widget.myProjectsBackupFolder;
-  String? get rePKGPath => widget.rePKGPath;
-
-  void _requestComparison() {
-    if (_compareRequested) return;
-    setState(() => _compareRequested = true);
-    widget.onRequestFocus?.call();
-  }
-
-  @override
-  void didUpdateWidget(covariant ReconcileDetailContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.entry.name != widget.entry.name ||
-        oldWidget.entry.reason != widget.entry.reason ||
-        oldWidget.ignoredMode != widget.ignoredMode ||
-        oldWidget.primaryReasonOverride != widget.primaryReasonOverride) {
-      _compareRequested = false;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final BackupIssueEvidence evidence = entry.evidence;
     final Set<BackupReconcileReason> displayReasons =
-        widget.primaryReasonOverride == null
-        ? (widget.ignoredMode ? entry.ignoredReasons : entry.activeReasons)
-        : <BackupReconcileReason>{widget.primaryReasonOverride!};
+        primaryReasonOverride == null
+        ? (ignoredMode ? entry.ignoredReasons : entry.activeReasons)
+        : <BackupReconcileReason>{primaryReasonOverride!};
     final BackupReconcileReason primary =
-        widget.primaryReasonOverride ??
-        (widget.ignoredMode
+        primaryReasonOverride ??
+        (ignoredMode
             ? entry.ignoredPrimaryReason
             : entry.activePrimaryReason) ??
         entry.reason;
@@ -295,11 +222,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Text(
-          _reconcileReasonExplanationText(
-            entry,
-            primary,
-            ignored: widget.ignoredMode,
-          ),
+          _reconcileReasonExplanationText(entry, primary, ignored: ignoredMode),
           style: TextStyle(color: foreground, height: 1.35),
         ),
         if (secondaryReasons.isNotEmpty ||
@@ -307,7 +230,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
           const SizedBox(height: 8),
           for (final BackupReconcileReason reason in secondaryReasons)
             Text(
-              '• ${_reconcileReasonExplanationText(entry, reason, ignored: widget.ignoredMode)}',
+              '• ${_reconcileReasonExplanationText(entry, reason, ignored: ignoredMode)}',
               style: TextStyle(color: foreground, height: 1.3, fontSize: 12),
             ),
           for (final BackupState state in attentionStates)
@@ -317,15 +240,15 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
             ),
         ],
         const SizedBox(height: 12),
-        Expanded(child: _details(context)),
+        Expanded(child: _details()),
       ],
     );
   }
 
-  Widget _details(BuildContext context) {
+  Widget _details() {
     final BackupReconcileReason primary =
-        widget.primaryReasonOverride ??
-        (widget.ignoredMode
+        primaryReasonOverride ??
+        (ignoredMode
             ? entry.ignoredPrimaryReason
             : entry.activePrimaryReason) ??
         entry.reason;
@@ -340,11 +263,7 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
       ),
       BackupReconcileReason.comparisonUnavailable =>
         _comparisonUnavailableDetails(),
-      BackupReconcileReason.conflictingBackupCopies
-          when needsFocus && !_compareRequested =>
-        _conflictingBackupDetails(showTree: false),
-      BackupReconcileReason.conflictingBackupCopies =>
-        _conflictingBackupDetails(showTree: true),
+      BackupReconcileReason.conflictingBackupCopies => const SizedBox.shrink(),
     };
   }
 
@@ -389,49 +308,6 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
     ];
   }
 
-  Widget _compareFilesPrompt(Key key) => BackupDetailExpandPrompt(
-    key: key,
-    title: tr(AppI10n.backupDetailCompareFiles),
-    subtitle: tr(AppI10n.backupDetailCompareFilesHint),
-    foreground: foreground,
-    onPressed: _requestComparison,
-  );
-
-  /// Keeps the shared Compare Files control visible while longer location lists
-  /// scroll above it. Three-copy Reconcile states should not hide the action just
-  /// because they carry more evidence than a two-copy conflict.
-  Widget _locationsWithComparePrompt(
-    List<Widget> copies, {
-    required Key promptKey,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (copies.isNotEmpty)
-          Expanded(
-            child: BackupDetailScrollView(
-              padding: const EdgeInsets.only(right: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  for (
-                    int index = 0;
-                    index < copies.length;
-                    index++
-                  ) ...<Widget>[
-                    copies[index],
-                    if (index != copies.length - 1) const SizedBox(height: 5),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        if (copies.isNotEmpty) const SizedBox(height: 8),
-        _compareFilesPrompt(promptKey),
-      ],
-    );
-  }
-
   Widget _comparisonUnavailableDetails() {
     final List<Widget> copies = _detectedLocationCards(
       includeLive: true,
@@ -454,28 +330,6 @@ class _ReconcileDetailContentState extends State<ReconcileDetailContent> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _conflictingBackupDetails({required bool showTree}) {
-    if (showTree) {
-      return BackupDifferenceFileTree(
-        wallpaperName: entry.name,
-        difference: entry.backupDifference,
-        workshopBackupFolder: workshopBackupFolder,
-        myProjectsBackupFolder: myProjectsBackupFolder,
-        rePKGPath: rePKGPath,
-        foreground: foreground,
-      );
-    }
-
-    final List<Widget> copies = _detectedLocationCards(
-      includeLive: false,
-      includeBackup: true,
-    );
-    return _locationsWithComparePrompt(
-      copies,
-      promptKey: const ValueKey<String>('backup-reconcile-expand-differences'),
     );
   }
 }
