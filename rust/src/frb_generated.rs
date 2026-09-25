@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1436075509;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -529299476;
 
 // Section: executor
 
@@ -80,6 +80,93 @@ fn wire__crate__api__simple__compare_backup_folders_rust_impl(
                             api_backup_root,
                             api_folder_names,
                             api_workers,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__compare_exact_segment_rust_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "compare_exact_segment_rust",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_source_path = <String>::sse_decode(&mut deserializer);
+            let api_offset = <u64>::sse_decode(&mut deserializer);
+            let api_length = <u64>::sse_decode(&mut deserializer);
+            let api_counterpart_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::simple::compare_exact_segment_rust(
+                            api_source_path,
+                            api_offset,
+                            api_length,
+                            api_counterpart_path,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__compare_exact_segments_rust_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "compare_exact_segments_rust",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_source_path = <String>::sse_decode(&mut deserializer);
+            let api_requests =
+                <Vec<crate::api::simple::ExactSegmentRequest>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::simple::compare_exact_segments_rust(
+                            api_source_path,
+                            api_requests,
                         )
                         .await?;
                         Ok(output_ok)
@@ -166,6 +253,65 @@ fn wire__crate__api__simple__compare_png_pixels_rust_impl(
                         let output_ok = crate::api::simple::compare_png_pixels_rust(
                             api_first_path,
                             api_second_path,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__compare_raw_texture_rust_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "compare_raw_texture_rust",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_source_path = <String>::sse_decode(&mut deserializer);
+            let api_offset = <u64>::sse_decode(&mut deserializer);
+            let api_length = <u64>::sse_decode(&mut deserializer);
+            let api_decoded_length = <u64>::sse_decode(&mut deserializer);
+            let api_format = <u32>::sse_decode(&mut deserializer);
+            let api_texture_width = <u32>::sse_decode(&mut deserializer);
+            let api_texture_height = <u32>::sse_decode(&mut deserializer);
+            let api_image_width = <u32>::sse_decode(&mut deserializer);
+            let api_image_height = <u32>::sse_decode(&mut deserializer);
+            let api_compressed = <bool>::sse_decode(&mut deserializer);
+            let api_generated_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::simple::compare_raw_texture_rust(
+                            api_source_path,
+                            api_offset,
+                            api_length,
+                            api_decoded_length,
+                            api_format,
+                            api_texture_width,
+                            api_texture_height,
+                            api_image_width,
+                            api_image_height,
+                            api_compressed,
+                            api_generated_path,
                         )
                         .await?;
                         Ok(output_ok)
@@ -588,6 +734,20 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::api::simple::ExactSegmentRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_offset = <u64>::sse_decode(deserializer);
+        let mut var_length = <u64>::sse_decode(deserializer);
+        let mut var_counterpartPath = <String>::sse_decode(deserializer);
+        return crate::api::simple::ExactSegmentRequest {
+            offset: var_offset,
+            length: var_length,
+            counterpart_path: var_counterpartPath,
+        };
+    }
+}
+
 impl SseDecode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -634,6 +794,20 @@ impl SseDecode for Vec<String> {
     }
 }
 
+impl SseDecode for Vec<crate::api::simple::ExactSegmentRequest> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::simple::ExactSegmentRequest>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::simple::IntegrityFolderEntryRead> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -643,6 +817,18 @@ impl SseDecode for Vec<crate::api::simple::IntegrityFolderEntryRead> {
             ans_.push(<crate::api::simple::IntegrityFolderEntryRead>::sse_decode(
                 deserializer,
             ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<Option<bool>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<Option<bool>>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -830,49 +1016,67 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        2 => wire__crate__api__simple__compare_image_segment_rust_impl(
+        2 => wire__crate__api__simple__compare_exact_segment_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        3 => wire__crate__api__simple__compare_png_pixels_rust_impl(
+        3 => wire__crate__api__simple__compare_exact_segments_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        4 => wire__crate__api__simple__delete_all_to_trash_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__simple__delete_to_trash_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__simple__delete_transparent_pngs_rust_impl(
+        4 => wire__crate__api__simple__compare_image_segment_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        7 => {
+        5 => wire__crate__api__simple__compare_png_pixels_rust_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        6 => wire__crate__api__simple__compare_raw_texture_rust_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        7 => wire__crate__api__simple__delete_all_to_trash_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__delete_to_trash_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__delete_transparent_pngs_rust_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        10 => {
             wire__crate__api__simple__find_junk_folders_rust_impl(port, ptr, rust_vec_len, data_len)
         }
-        8 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__simple__is_png_fully_transparent_rust_impl(
+        11 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__simple__is_png_fully_transparent_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => wire__crate__api__simple__my_projects_inventory_rust_impl(
+        13 => wire__crate__api__simple__my_projects_inventory_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__simple__read_integrity_folders_rust_impl(
+        14 => wire__crate__api__simple__read_integrity_folders_rust_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__simple__read_wallpaper_projects_rust_impl(
+        15 => wire__crate__api__simple__read_wallpaper_projects_rust_impl(
             port,
             ptr,
             rust_vec_len,
@@ -896,6 +1100,28 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::simple::ExactSegmentRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.offset.into_into_dart().into_dart(),
+            self.length.into_into_dart().into_dart(),
+            self.counterpart_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::simple::ExactSegmentRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::simple::ExactSegmentRequest>
+    for crate::api::simple::ExactSegmentRequest
+{
+    fn into_into_dart(self) -> crate::api::simple::ExactSegmentRequest {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::simple::IntegrityFolderEntryRead {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -1009,6 +1235,15 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for crate::api::simple::ExactSegmentRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.offset, serializer);
+        <u64>::sse_encode(self.length, serializer);
+        <String>::sse_encode(self.counterpart_path, serializer);
+    }
+}
+
 impl SseEncode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1043,12 +1278,32 @@ impl SseEncode for Vec<String> {
     }
 }
 
+impl SseEncode for Vec<crate::api::simple::ExactSegmentRequest> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::simple::ExactSegmentRequest>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::simple::IntegrityFolderEntryRead> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::simple::IntegrityFolderEntryRead>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<Option<bool>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Option<bool>>::sse_encode(item, serializer);
         }
     }
 }

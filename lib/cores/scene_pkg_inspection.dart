@@ -125,22 +125,34 @@ typedef DirectBackupProbe = ({
 });
 
 /// Diagnostic stage durations for one direct comparison; image time is part
-/// of the asset pass, so [otherAssets] excludes it.
+/// of the asset pass, so [otherAssets] excludes it. [imagePixelFallbacks]
+/// includes both native image checks and Dart fallbacks for older consumers.
 typedef DirectBackupProbeTiming = ({
   Duration inventory,
+  Duration initialSignature,
+  Duration formatCheck,
+  Duration packageIndex,
+  Duration unpackedList,
   Duration imageChecks,
   Duration imageByteChecks,
   Duration imagePixelFallbacks,
+  Duration nativeImageChecks,
+  Duration dartPixelFallbacks,
   Duration rawTextureChecks,
+  Duration nativeRawChecks,
+  Duration exactEntryChecks,
+  Duration wrapperChecks,
   int nativePngCalls,
   int nativeJpegCalls,
   int nativeGifCalls,
+  int nativeRawCalls,
+  int nativeExactCalls,
   int nativeDeclines,
   Duration otherAssets,
   Duration finalSignature,
 });
 
-enum _DirectImageStage { bytes, pixels, rawTexture }
+enum _DirectImageStage { bytes, nativePixels, dartPixels, rawTexture }
 
 /// A cheap invalidation key for a packed/unpacked verification result.
 ///
@@ -191,18 +203,39 @@ Future<List<String>?> _verificationManifest(Directory folder) async {
 /// texture mipmaps do not affect this result. An incomplete difference proves
 /// the pair differs, but its changed-file list may omit unsupported textures.
 /// Candidate matches have no durable content signature and must not authorize
-/// backup deletion yet.
+/// backup deletion yet. [expectedSignature] must come from the scan that
+/// classified the packed and unpacked copies; a fresh signature is checked
+/// before returning a result.
 Future<DirectBackupProbe> probePackedBackupCopyDirect({
   required Directory packedFolder,
   required Directory unpackedFolder,
+  String? expectedSignature,
   CancelToken? cancelToken,
   void Function(DirectBackupProbeTiming timing)? onTiming,
   bool useNativeImages = true,
+  bool useNativeEntryBatch = true,
 }) async {
   int nativePngCalls = 0;
   int nativeJpegCalls = 0;
   int nativeGifCalls = 0;
+  int nativeRawCalls = 0;
+  int nativeExactCalls = 0;
   int nativeDeclines = 0;
+  final Future<bool?> Function(File, int, int, File)? compareExactSegment =
+      useNativeImages && RustLib.instance.initialized
+      ? (File source, int offset, int length, File counterpart) async {
+          // Small entries are cheaper through Dart than a separate bridge call.
+          if (length < 256 * 1024) return null;
+          if (onTiming != null) nativeExactCalls++;
+          return compareExactSegmentRust(
+            sourcePath: source.path,
+            offset: BigInt.from(offset),
+            length: BigInt.from(length),
+            counterpartPath: counterpart.path,
+          );
+        }
+      : null;
+  Duration nativeRawTime = Duration.zero;
   final SceneImageSegmentComparator? compareImageSegment =
       useNativeImages && RustLib.instance.initialized
       ? (File source, int offset, int length, File counterpart) async {
@@ -235,6 +268,37 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
           }
         }
       : null;
+  final SceneRawTextureComparator? compareRawTexture =
+      useNativeImages && RustLib.instance.initialized
+      ? (File source, SceneTextureRawImage raw, File generated) async {
+          if (onTiming != null) nativeRawCalls++;
+          final Stopwatch? watch = onTiming == null
+              ? null
+              : (Stopwatch()..start());
+          try {
+            final bool? result = await compareRawTextureRust(
+              sourcePath: source.path,
+              offset: BigInt.from(raw.payloadOffset),
+              length: BigInt.from(raw.payloadLength),
+              decodedLength: BigInt.from(raw.decodedLength),
+              format: raw.summary.format,
+              textureWidth: raw.width,
+              textureHeight: raw.height,
+              imageWidth: raw.summary.imageWidth,
+              imageHeight: raw.summary.imageHeight,
+              compressed: raw.compressed,
+              generatedPath: generated.path,
+            );
+            if (result == null && onTiming != null) nativeDeclines++;
+            return result;
+          } catch (_) {
+            if (onTiming != null) nativeDeclines++;
+            rethrow;
+          } finally {
+            if (watch != null) nativeRawTime += watch.elapsed;
+          }
+        }
+      : null;
   final Future<bool?> Function(File, File)? compareImageFiles =
       compareImageSegment == null
       ? null
@@ -244,14 +308,23 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
   Duration imageTime = Duration.zero;
   Duration imageByteTime = Duration.zero;
   Duration imagePixelTime = Duration.zero;
+  Duration nativeImageTime = Duration.zero;
+  Duration dartPixelTime = Duration.zero;
   Duration rawTextureTime = Duration.zero;
+  Duration exactEntryTime = Duration.zero;
+  Duration wrapperTime = Duration.zero;
   void recordImageStage(_DirectImageStage stage, Duration elapsed) {
     switch (stage) {
       case _DirectImageStage.bytes:
         imageByteTime += elapsed;
         break;
-      case _DirectImageStage.pixels:
+      case _DirectImageStage.nativePixels:
         imagePixelTime += elapsed;
+        nativeImageTime += elapsed;
+        break;
+      case _DirectImageStage.dartPixels:
+        imagePixelTime += elapsed;
+        dartPixelTime += elapsed;
         break;
       case _DirectImageStage.rawTexture:
         rawTextureTime += elapsed;
@@ -272,6 +345,10 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
   }
 
   final CancelToken token = cancelToken ?? CancelToken();
+  Duration initialSignatureTime = Duration.zero;
+  Duration formatCheckTime = Duration.zero;
+  Duration packageIndexTime = Duration.zero;
+  Duration unpackedListTime = Duration.zero;
   DirectBackupProbe unavailable(DirectBackupProbeReason reason) => (
     status: DirectBackupProbeStatus.unavailable,
     changes: (
@@ -281,29 +358,101 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
     ),
     reasons: <DirectBackupProbeReason>{reason},
   );
-  final String? before = await backupCopyVerificationSignature(
-    packedFolder: packedFolder,
-    unpackedFolder: unpackedFolder,
-  );
-  if (before == null ||
-      token.isCancelled ||
-      await inspectBackupCopyFormat(packedFolder) != BackupCopyFormat.packed ||
-      await inspectBackupCopyFormat(unpackedFolder) !=
-          BackupCopyFormat.unpacked) {
+  // The scan's format classification avoids a separate listing; the final
+  // signature still rejects files changed before or during this check.
+  final Stopwatch initialSignatureWatch = Stopwatch()..start();
+  final String? before =
+      expectedSignature ??
+      await backupCopyVerificationSignature(
+        packedFolder: packedFolder,
+        unpackedFolder: unpackedFolder,
+      );
+  initialSignatureTime = initialSignatureWatch.elapsed;
+  if (before == null || token.isCancelled) {
     return unavailable(DirectBackupProbeReason.inputUnavailable);
+  }
+  if (expectedSignature == null) {
+    final Stopwatch formatWatch = Stopwatch()..start();
+    final BackupCopyFormat? packedFormat = await inspectBackupCopyFormat(
+      packedFolder,
+    );
+    if (packedFormat != BackupCopyFormat.packed || token.isCancelled) {
+      return unavailable(DirectBackupProbeReason.inputUnavailable);
+    }
+    final BackupCopyFormat? unpackedFormat = await inspectBackupCopyFormat(
+      unpackedFolder,
+    );
+    formatCheckTime = formatWatch.elapsed;
+    if (unpackedFormat != BackupCopyFormat.unpacked || token.isCancelled) {
+      return unavailable(DirectBackupProbeReason.inputUnavailable);
+    }
   }
   final File package = File(
     path.join(packedFolder.path, WallpaperFiles.packedScene),
   );
+  final Stopwatch indexWatch = Stopwatch()..start();
   final ScenePackageIndex? index = await readScenePackageIndex(package);
+  packageIndexTime = indexWatch.elapsed;
+  final Stopwatch listWatch = Stopwatch()..start();
   final Map<String, File>? unpackedFiles = await _semanticFiles(
     unpackedFolder,
     skipWrapperFiles: true,
   );
+  unpackedListTime = listWatch.elapsed;
   if (index == null || unpackedFiles == null) {
     return unavailable(DirectBackupProbeReason.packageUnavailable);
   }
   final Duration inventoryTime = totalTime.elapsed;
+
+  final Map<String, bool> nativeEntryMatches = <String, bool>{};
+  if (useNativeImages && useNativeEntryBatch && RustLib.instance.initialized) {
+    final List<({String key, ScenePackageEntry entry, File counterpart})>
+    candidates = <({String key, ScenePackageEntry entry, File counterpart})>[
+      for (final MapEntry<String, ScenePackageEntry> indexed
+          in index.entries.entries)
+        if (!isRebuiltShaderPath(indexed.value.path) &&
+            !_isWrapperFile(indexed.value.path))
+          if (unpackedFiles[indexed.key] case final File counterpart)
+            (key: indexed.key, entry: indexed.value, counterpart: counterpart),
+    ];
+    const int batchSize = 32;
+    for (int start = 0; start < candidates.length; start += batchSize) {
+      if (token.isCancelled) {
+        return unavailable(DirectBackupProbeReason.inputUnavailable);
+      }
+      final int end = start + batchSize < candidates.length
+          ? start + batchSize
+          : candidates.length;
+      final chunk = candidates.sublist(start, end);
+      final Stopwatch? batchWatch = onTiming == null
+          ? null
+          : (Stopwatch()..start());
+      try {
+        final List<bool?> matches = await compareExactSegmentsRust(
+          sourcePath: package.path,
+          requests: <ExactSegmentRequest>[
+            for (final candidate in chunk)
+              ExactSegmentRequest(
+                offset: BigInt.from(index.headerBytes + candidate.entry.offset),
+                length: BigInt.from(candidate.entry.length),
+                counterpartPath: candidate.counterpart.path,
+              ),
+          ],
+        );
+        if (matches.length != chunk.length) break;
+        if (onTiming != null) nativeExactCalls += chunk.length;
+        for (int i = 0; i < chunk.length; i++) {
+          if (matches[i] case final bool same) {
+            nativeEntryMatches[chunk[i].key] = same;
+          }
+        }
+      } catch (_) {
+        break;
+      } finally {
+        if (batchWatch != null) exactEntryTime += batchWatch.elapsed;
+      }
+    }
+  }
 
   final List<String> modified = <String>[];
   final List<String> onlyPacked = <String>[];
@@ -360,13 +509,19 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
       continue;
     }
     seen.add(key);
-    final bool? rawMatch = await scenePackageEntryMatchesFile(
-      package: package,
-      index: index,
-      entry: entry,
-      unpacked: counterpart,
-      isCancelled: () => token.isCancelled,
-    );
+    final Stopwatch? exactWatch = onTiming == null
+        ? null
+        : (Stopwatch()..start());
+    final bool? rawMatch =
+        nativeEntryMatches[key] ??
+        await scenePackageEntryMatchesFile(
+          package: package,
+          index: index,
+          entry: entry,
+          unpacked: counterpart,
+          isCancelled: () => token.isCancelled,
+        );
+    if (exactWatch != null) exactEntryTime += exactWatch.elapsed;
     if (rawMatch == null) {
       reasons.add(DirectBackupProbeReason.fileComparisonUnavailable);
       continue;
@@ -484,6 +639,8 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
                 token: token,
                 onStage: onImageStage,
                 compareImageSegment: compareImageSegment,
+                compareExactSegment: compareExactSegment,
+                compareRawTexture: compareRawTexture,
               ),
             );
             final bool? unpackedMatches = rawMatch
@@ -498,6 +655,8 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
                       token: token,
                       onStage: onImageStage,
                       compareImageSegment: compareImageSegment,
+                      compareExactSegment: compareExactSegment,
+                      compareRawTexture: compareRawTexture,
                     ),
                   );
             if (packedMatches == false || unpackedMatches == false) {
@@ -589,6 +748,7 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
             token,
             onStage: onImageStage,
             compareImageSegment: compareImageSegment,
+            compareExactSegment: compareExactSegment,
           ),
         );
         final bool? unpackedPixels = rawMatch
@@ -602,6 +762,7 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
                   token,
                   onStage: onImageStage,
                   compareImageSegment: compareImageSegment,
+                  compareExactSegment: compareExactSegment,
                 ),
               );
         if (packedPixels == false || unpackedPixels == false) {
@@ -646,6 +807,7 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
             token,
             onStage: onImageStage,
             compareImageSegment: compareImageSegment,
+            compareExactSegment: compareExactSegment,
           ),
         );
       } else {
@@ -666,6 +828,9 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
     }
   }
   try {
+    final Stopwatch? wrapperWatch = onTiming == null
+        ? null
+        : (Stopwatch()..start());
     await _compareWrapperMetadata(
       packedFolder: packedFolder,
       unpackedFolder: unpackedFolder,
@@ -675,6 +840,7 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
       comparePngPixels: null,
       compareImageFiles: compareImageFiles,
     );
+    if (wrapperWatch != null) wrapperTime += wrapperWatch.elapsed;
   } on FileSystemException {
     return unavailable(DirectBackupProbeReason.fileComparisonUnavailable);
   }
@@ -686,13 +852,24 @@ Future<DirectBackupProbe> probePackedBackupCopyDirect({
   final Duration finalSignatureTime = totalTime.elapsed - beforeFinalSignature;
   onTiming?.call((
     inventory: inventoryTime,
+    initialSignature: initialSignatureTime,
+    formatCheck: formatCheckTime,
+    packageIndex: packageIndexTime,
+    unpackedList: unpackedListTime,
     imageChecks: imageTime,
     imageByteChecks: imageByteTime,
     imagePixelFallbacks: imagePixelTime,
+    nativeImageChecks: nativeImageTime,
+    dartPixelFallbacks: dartPixelTime,
     rawTextureChecks: rawTextureTime,
+    nativeRawChecks: nativeRawTime,
+    exactEntryChecks: exactEntryTime,
+    wrapperChecks: wrapperTime,
     nativePngCalls: nativePngCalls,
     nativeJpegCalls: nativeJpegCalls,
     nativeGifCalls: nativeGifCalls,
+    nativeRawCalls: nativeRawCalls,
+    nativeExactCalls: nativeExactCalls,
     nativeDeclines: nativeDeclines,
     otherAssets: beforeFinalSignature - inventoryTime - imageTime,
     finalSignature: finalSignatureTime,
@@ -795,6 +972,8 @@ Future<bool?> _texturePrimaryImageMatchesFile({
   required CancelToken token,
   void Function(_DirectImageStage, Duration)? onStage,
   SceneImageSegmentComparator? compareImageSegment,
+  Future<bool?> Function(File, int, int, File)? compareExactSegment,
+  SceneRawTextureComparator? compareRawTexture,
 }) {
   if (token.isCancelled) return Future<bool?>.value(null);
   if (encoded != null) {
@@ -806,13 +985,19 @@ Future<bool?> _texturePrimaryImageMatchesFile({
       token,
       onStage: onStage,
       compareImageSegment: compareImageSegment,
+      compareExactSegment: compareExactSegment,
     );
   }
   if (raw != null) {
     return _timeDirectImageStage(
       _DirectImageStage.rawTexture,
       onStage,
-      () => sceneTextureRawImageMatchesFile(source, raw, generatedImage),
+      () => sceneTextureRawImageMatchesFile(
+        source,
+        raw,
+        generatedImage,
+        compareNative: compareRawTexture,
+      ),
     );
   }
   if (video != null) {
@@ -825,6 +1010,7 @@ Future<bool?> _texturePrimaryImageMatchesFile({
         length: video.payloadLength,
         counterpart: generatedImage,
         isCancelled: () => token.isCancelled,
+        compareNative: compareExactSegment,
       ),
     );
   }
@@ -839,6 +1025,7 @@ Future<bool?> _imageSegmentMatchesFile(
   CancelToken token, {
   void Function(_DirectImageStage, Duration)? onStage,
   SceneImageSegmentComparator? compareImageSegment,
+  Future<bool?> Function(File, int, int, File)? compareExactSegment,
 }) async {
   final bool? raw = await _timeDirectImageStage(
     _DirectImageStage.bytes,
@@ -849,6 +1036,7 @@ Future<bool?> _imageSegmentMatchesFile(
       length: length,
       counterpart: counterpart,
       isCancelled: () => token.isCancelled,
+      compareNative: compareExactSegment,
     ),
   );
   if (raw != false || token.isCancelled) return raw;
@@ -863,7 +1051,7 @@ Future<bool?> _imageSegmentMatchesFile(
         )) {
       try {
         final bool? native = await _timeDirectImageStage(
-          _DirectImageStage.pixels,
+          _DirectImageStage.nativePixels,
           onStage,
           () => compareImageSegment(source, offset, length, counterpart),
         );
@@ -873,7 +1061,7 @@ Future<bool?> _imageSegmentMatchesFile(
       }
     }
     return await _timeDirectImageStage(
-      _DirectImageStage.pixels,
+      _DirectImageStage.dartPixels,
       onStage,
       () => Isolate.run(
         () => _compareImageSegmentPixels(

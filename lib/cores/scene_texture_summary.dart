@@ -44,6 +44,13 @@ typedef SceneTextureRawImage = ({
   bool compressed,
 });
 
+typedef SceneRawTextureComparator =
+    Future<bool?> Function(
+      File source,
+      SceneTextureRawImage raw,
+      File generated,
+    );
+
 typedef SceneTextureVideo = ({
   SceneTextureSummary summary,
   int payloadOffset,
@@ -314,14 +321,23 @@ Future<SceneTextureRawImage?> readSceneTextureRawImage(
 Future<bool?> sceneTextureRawImageMatchesFile(
   File source,
   SceneTextureRawImage raw,
-  File generatedImage,
-) async {
+  File generatedImage, {
+  SceneRawTextureComparator? compareNative,
+}) async {
   if (raw.width < raw.summary.imageWidth ||
       raw.height < raw.summary.imageHeight) {
     return null;
   }
   try {
     if (await generatedImage.length() > _maxRawImageBytes) return null;
+    if (compareNative != null) {
+      try {
+        final bool? result = await compareNative(source, raw, generatedImage);
+        if (result != null) return result;
+      } catch (_) {
+        // A native decline keeps the established Dart comparison authoritative.
+      }
+    }
     return await Isolate.run(
       () => _rawImageMatchesFile(source.path, raw, generatedImage.path),
     );

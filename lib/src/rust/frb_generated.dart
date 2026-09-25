@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1436075509;
+  int get rustContentHash => -529299476;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,6 +84,18 @@ abstract class RustLibApi extends BaseApi {
     required int workers,
   });
 
+  Future<bool?> crateApiSimpleCompareExactSegmentRust({
+    required String sourcePath,
+    required BigInt offset,
+    required BigInt length,
+    required String counterpartPath,
+  });
+
+  Future<List<bool?>> crateApiSimpleCompareExactSegmentsRust({
+    required String sourcePath,
+    required List<ExactSegmentRequest> requests,
+  });
+
   Future<bool?> crateApiSimpleCompareImageSegmentRust({
     required String sourcePath,
     required BigInt offset,
@@ -94,6 +106,20 @@ abstract class RustLibApi extends BaseApi {
   Future<bool?> crateApiSimpleComparePngPixelsRust({
     required String firstPath,
     required String secondPath,
+  });
+
+  Future<bool?> crateApiSimpleCompareRawTextureRust({
+    required String sourcePath,
+    required BigInt offset,
+    required BigInt length,
+    required BigInt decodedLength,
+    required int format,
+    required int textureWidth,
+    required int textureHeight,
+    required int imageWidth,
+    required int imageHeight,
+    required bool compressed,
+    required String generatedPath,
   });
 
   Future<String?> crateApiSimpleDeleteAllToTrash({
@@ -188,7 +214,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<bool?> crateApiSimpleCompareImageSegmentRust({
+  Future<bool?> crateApiSimpleCompareExactSegmentRust({
     required String sourcePath,
     required BigInt offset,
     required BigInt length,
@@ -206,6 +232,80 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleCompareExactSegmentRustConstMeta,
+        argValues: [sourcePath, offset, length, counterpartPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleCompareExactSegmentRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "compare_exact_segment_rust",
+        argNames: ["sourcePath", "offset", "length", "counterpartPath"],
+      );
+
+  @override
+  Future<List<bool?>> crateApiSimpleCompareExactSegmentsRust({
+    required String sourcePath,
+    required List<ExactSegmentRequest> requests,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sourcePath, serializer);
+          sse_encode_list_exact_segment_request(requests, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_opt_box_autoadd_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleCompareExactSegmentsRustConstMeta,
+        argValues: [sourcePath, requests],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleCompareExactSegmentsRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "compare_exact_segments_rust",
+        argNames: ["sourcePath", "requests"],
+      );
+
+  @override
+  Future<bool?> crateApiSimpleCompareImageSegmentRust({
+    required String sourcePath,
+    required BigInt offset,
+    required BigInt length,
+    required String counterpartPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sourcePath, serializer);
+          sse_encode_u_64(offset, serializer);
+          sse_encode_u_64(length, serializer);
+          sse_encode_String(counterpartPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
             port: port_,
           );
         },
@@ -240,7 +340,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 5,
             port: port_,
           );
         },
@@ -262,6 +362,83 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool?> crateApiSimpleCompareRawTextureRust({
+    required String sourcePath,
+    required BigInt offset,
+    required BigInt length,
+    required BigInt decodedLength,
+    required int format,
+    required int textureWidth,
+    required int textureHeight,
+    required int imageWidth,
+    required int imageHeight,
+    required bool compressed,
+    required String generatedPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sourcePath, serializer);
+          sse_encode_u_64(offset, serializer);
+          sse_encode_u_64(length, serializer);
+          sse_encode_u_64(decodedLength, serializer);
+          sse_encode_u_32(format, serializer);
+          sse_encode_u_32(textureWidth, serializer);
+          sse_encode_u_32(textureHeight, serializer);
+          sse_encode_u_32(imageWidth, serializer);
+          sse_encode_u_32(imageHeight, serializer);
+          sse_encode_bool(compressed, serializer);
+          sse_encode_String(generatedPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_bool,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSimpleCompareRawTextureRustConstMeta,
+        argValues: [
+          sourcePath,
+          offset,
+          length,
+          decodedLength,
+          format,
+          textureWidth,
+          textureHeight,
+          imageWidth,
+          imageHeight,
+          compressed,
+          generatedPath,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleCompareRawTextureRustConstMeta =>
+      const TaskConstMeta(
+        debugName: "compare_raw_texture_rust",
+        argNames: [
+          "sourcePath",
+          "offset",
+          "length",
+          "decodedLength",
+          "format",
+          "textureWidth",
+          "textureHeight",
+          "imageWidth",
+          "imageHeight",
+          "compressed",
+          "generatedPath",
+        ],
+      );
+
+  @override
   Future<String?> crateApiSimpleDeleteAllToTrash({
     required List<String> filePaths,
   }) {
@@ -273,7 +450,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 7,
             port: port_,
           );
         },
@@ -304,7 +481,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 8,
             port: port_,
           );
         },
@@ -334,7 +511,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 9,
             port: port_,
           );
         },
@@ -373,7 +550,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 10,
             port: port_,
           );
         },
@@ -403,7 +580,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 11,
             port: port_,
           );
         },
@@ -433,7 +610,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -470,7 +647,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 13,
             port: port_,
           );
         },
@@ -508,7 +685,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 14,
             port: port_,
           );
         },
@@ -546,7 +723,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 15,
             port: port_,
           );
         },
@@ -626,6 +803,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExactSegmentRequest dco_decode_exact_segment_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ExactSegmentRequest(
+      offset: dco_decode_u_64(arr[0]),
+      length: dco_decode_u_64(arr[1]),
+      counterpartPath: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
   double dco_decode_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
@@ -663,6 +853,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ExactSegmentRequest> dco_decode_list_exact_segment_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_exact_segment_request)
+        .toList();
+  }
+
+  @protected
   List<IntegrityFolderEntryRead> dco_decode_list_integrity_folder_entry_read(
     dynamic raw,
   ) {
@@ -670,6 +868,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return (raw as List<dynamic>)
         .map(dco_decode_integrity_folder_entry_read)
         .toList();
+  }
+
+  @protected
+  List<bool?> dco_decode_list_opt_box_autoadd_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_opt_box_autoadd_bool).toList();
   }
 
   @protected
@@ -871,6 +1075,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExactSegmentRequest sse_decode_exact_segment_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_offset = sse_decode_u_64(deserializer);
+    var var_length = sse_decode_u_64(deserializer);
+    var var_counterpartPath = sse_decode_String(deserializer);
+    return ExactSegmentRequest(
+      offset: var_offset,
+      length: var_length,
+      counterpartPath: var_counterpartPath,
+    );
+  }
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat64();
@@ -917,6 +1136,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ExactSegmentRequest> sse_decode_list_exact_segment_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExactSegmentRequest>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_exact_segment_request(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<IntegrityFolderEntryRead> sse_decode_list_integrity_folder_entry_read(
     SseDeserializer deserializer,
   ) {
@@ -926,6 +1159,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <IntegrityFolderEntryRead>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_integrity_folder_entry_read(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<bool?> sse_decode_list_opt_box_autoadd_bool(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <bool?>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_opt_box_autoadd_bool(deserializer));
     }
     return ans_;
   }
@@ -1165,6 +1412,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_exact_segment_request(
+    ExactSegmentRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.offset, serializer);
+    sse_encode_u_64(self.length, serializer);
+    sse_encode_String(self.counterpartPath, serializer);
+  }
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat64(self);
@@ -1201,6 +1459,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_exact_segment_request(
+    List<ExactSegmentRequest> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_exact_segment_request(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_integrity_folder_entry_read(
     List<IntegrityFolderEntryRead> self,
     SseSerializer serializer,
@@ -1209,6 +1479,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_integrity_folder_entry_read(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_opt_box_autoadd_bool(
+    List<bool?> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_opt_box_autoadd_bool(item, serializer);
     }
   }
 

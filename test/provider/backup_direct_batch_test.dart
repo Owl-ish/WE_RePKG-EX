@@ -44,8 +44,10 @@ void main() {
             ({
               required Directory packedFolder,
               required Directory unpackedFolder,
+              String? expectedSignature,
               CancelToken? cancelToken,
             }) {
+              expect(expectedSignature, 'scan-signature');
               final String name = path.basename(packedFolder.path);
               final Completer<DirectBackupProbe> completer =
                   Completer<DirectBackupProbe>();
@@ -58,6 +60,8 @@ void main() {
         entry('first'),
         entry('second'),
         entry('third'),
+        entry('fourth'),
+        entry('fifth'),
       ];
       final BackupScan scan = scanOf(reconcile: entries);
 
@@ -66,14 +70,17 @@ void main() {
         backupRoot: r'C:\fixture',
         entries: entries,
       );
-      expect(pending.keys, containsAll(<String>['first', 'second']));
-      expect(pending, hasLength(2));
+      expect(
+        pending.keys,
+        containsAll(<String>['first', 'second', 'third', 'fourth']),
+      );
+      expect(pending, hasLength(4));
       await batch.start(
         scan: scan,
         backupRoot: r'C:\fixture',
         entries: entries,
       );
-      expect(pending, hasLength(2));
+      expect(pending, hasLength(4));
 
       pending['first']!.complete(
         result(DirectBackupProbeStatus.candidateMatch),
@@ -84,11 +91,13 @@ void main() {
         batch.value.results['first']?.status,
         DirectBackupProbeStatus.candidateMatch,
       );
-      expect(pending, hasLength(3));
+      expect(pending, hasLength(5));
 
       batch.cancel();
       pending['second']!.complete(result(DirectBackupProbeStatus.different));
       pending['third']!.complete(result(DirectBackupProbeStatus.different));
+      pending['fourth']!.complete(result(DirectBackupProbeStatus.different));
+      pending['fifth']!.complete(result(DirectBackupProbeStatus.different));
       await running;
       expect(batch.value.cancelled, isTrue);
       expect(batch.value.running, isFalse);
@@ -101,8 +110,11 @@ void main() {
         backupRoot: r'C:\fixture',
         entries: entries,
       );
-      expect(pending.keys, containsAll(<String>['second', 'third']));
-      expect(pending, hasLength(2));
+      expect(
+        pending.keys,
+        containsAll(<String>['second', 'third', 'fourth', 'fifth']),
+      );
+      expect(pending, hasLength(4));
       expect(batch.value.done, 1);
       expect(
         batch.value.results['first']?.status,
@@ -112,8 +124,10 @@ void main() {
       pending['third']!.complete(
         result(DirectBackupProbeStatus.candidateMatch),
       );
+      pending['fourth']!.complete(result(DirectBackupProbeStatus.different));
+      pending['fifth']!.complete(result(DirectBackupProbeStatus.different));
       await resumed;
-      expect(batch.value.done, 3);
+      expect(batch.value.done, 5);
       expect(batch.value.cancelled, isFalse);
 
       pending.clear();
@@ -122,14 +136,19 @@ void main() {
         backupRoot: r'C:\fixture',
         entries: entries,
       );
-      expect(pending.keys, containsAll(<String>['first', 'second']));
+      expect(
+        pending.keys,
+        containsAll(<String>['first', 'second', 'third', 'fourth']),
+      );
       expect(batch.value.done, 0);
       pending['first']!.complete(result(DirectBackupProbeStatus.different));
       await Future<void>.delayed(Duration.zero);
       pending['second']!.complete(result(DirectBackupProbeStatus.different));
       pending['third']!.complete(result(DirectBackupProbeStatus.different));
+      pending['fourth']!.complete(result(DirectBackupProbeStatus.different));
+      pending['fifth']!.complete(result(DirectBackupProbeStatus.different));
       await fresh;
-      expect(batch.value.done, 3);
+      expect(batch.value.done, 5);
     },
   );
 }

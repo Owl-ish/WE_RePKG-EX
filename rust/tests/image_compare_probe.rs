@@ -2,7 +2,54 @@ use png::{BitDepth, ColorType, Encoder};
 #[path = "../src/image_compare.rs"]
 mod image_compare;
 use image::{codecs::gif::GifEncoder, Delay, Frame, ImageFormat, Rgba, RgbaImage};
-use image_compare::pixels_match;
+use image_compare::{
+    exact_segment_matches_file, pixels_match, raw_texture_matches_png, RawTextureSpec,
+};
+
+#[test]
+fn exact_segment_comparison_streams_and_validates_bounds() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let folder = std::env::temp_dir().join(format!(
+        "werepkg-exact-segment-{}-{suffix}",
+        std::process::id()
+    ));
+    fs::create_dir(&folder).unwrap();
+    let source = folder.join("scene.pkg");
+    let counterpart = folder.join("asset.bin");
+    let payload = vec![42_u8; 70 * 1024];
+    fs::write(&source, [&b"prefix"[..], &payload, &b"suffix"[..]].concat()).unwrap();
+    fs::write(&counterpart, &payload).unwrap();
+    assert_eq!(
+        exact_segment_matches_file(&source, 6, payload.len() as u64, &counterpart),
+        Ok(Some(true))
+    );
+    let mut changed = payload.clone();
+    changed[69 * 1024] = 7;
+    fs::write(&counterpart, &changed).unwrap();
+    assert_eq!(
+        exact_segment_matches_file(&source, 6, payload.len() as u64, &counterpart),
+        Ok(Some(false))
+    );
+    assert_eq!(
+        exact_segment_matches_file(&source, u64::MAX, payload.len() as u64, &counterpart),
+        Ok(None)
+    );
+    fs::write(&counterpart, []).unwrap();
+    assert_eq!(
+        exact_segment_matches_file(&source, 6, payload.len() as u64, &counterpart),
+        Ok(Some(false))
+    );
+    assert_eq!(
+        exact_segment_matches_file(&source, 0, 0, &counterpart),
+        Ok(Some(true))
+    );
+    fs::remove_file(source).unwrap();
+    fs::remove_file(counterpart).unwrap();
+    fs::remove_dir(folder).unwrap();
+}
 use std::fs;
 use std::time::Instant;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -225,6 +272,144 @@ fn package_segment_compares_jpeg_and_gif_payloads() {
     }
     fs::remove_file(source).unwrap();
     fs::remove_dir(folder).unwrap();
+}
+
+#[test]
+fn raw_texture_checks_cropped_pixels_and_lz4_without_extraction() {
+    let folder = std::env::temp_dir().join(format!(
+        "werepkg-raw-image-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&folder).unwrap();
+    let source = folder.join("texture.tex");
+    let generated = folder.join("image.png");
+    let mut png = std::io::Cursor::new(Vec::new());
+    RgbaImage::from_pixel(2, 2, Rgba([10, 20, 30, 255]))
+        .write_to(&mut png, ImageFormat::Png)
+        .unwrap();
+    fs::write(&generated, png.into_inner()).unwrap();
+    let mut raw = Vec::new();
+    for y in 0..4 {
+        for x in 0..4 {
+            raw.extend_from_slice(if x < 2 && y < 2 {
+                &[10, 20, 30, 255]
+            } else {
+                &[50, 60, 70, 255]
+            });
+        }
+    }
+    let mut source_bytes = b"prefix".to_vec();
+    source_bytes.extend_from_slice(&raw);
+    fs::write(&source, source_bytes).unwrap();
+    let mut spec = RawTextureSpec {
+        offset: 6,
+        length: raw.len() as u64,
+        decoded_length: raw.len() as u64,
+        format: 0,
+        texture_width: 4,
+        texture_height: 4,
+        image_width: 2,
+        image_height: 2,
+        compressed: false,
+    };
+    assert_eq!(
+        raw_texture_matches_png(&source, &spec, &generated),
+        Ok(Some(true))
+    );
+    raw[0] = 11;
+    fs::write(&source, [&b"prefix"[..], &raw].concat()).unwrap();
+    assert_eq!(
+        raw_texture_matches_png(&source, &spec, &generated),
+        Ok(Some(false))
+    );
+    spec.offset = u64::MAX;
+    assert_eq!(
+        raw_texture_matches_png(&source, &spec, &generated),
+        Ok(None)
+    );
+
+    let mut grey_png = std::io::Cursor::new(Vec::new());
+    RgbaImage::from_pixel(2, 2, Rgba([128, 128, 128, 64]))
+        .write_to(&mut grey_png, ImageFormat::Png)
+        .unwrap();
+    fs::write(&generated, grey_png.into_inner()).unwrap();
+    let compressed = [0x80, 64, 128, 64, 128, 64, 128, 64, 128];
+    fs::write(&source, compressed).unwrap();
+    spec = RawTextureSpec {
+        offset: 0,
+        length: compressed.len() as u64,
+        decoded_length: 8,
+        format: 8,
+        texture_width: 2,
+        texture_height: 2,
+        image_width: 2,
+        image_height: 2,
+        compressed: true,
+    };
+    assert_eq!(
+        raw_texture_matches_png(&source, &spec, &generated),
+        Ok(Some(true))
+    );
+    fs::write(&source, [0x90, 64, 128]).unwrap();
+    spec.length = 3;
+    assert_eq!(
+        raw_texture_matches_png(&source, &spec, &generated),
+        Ok(None)
+    );
+    fs::remove_dir_all(folder).unwrap();
+}
+
+#[test]
+fn raw_dxt_formats_match_generated_primary_pixels() {
+    let folder = std::env::temp_dir().join(format!(
+        "werepkg-dxt-image-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&folder).unwrap();
+    let source = folder.join("texture.tex");
+    let generated = folder.join("image.png");
+    let color = [0x00, 0xf8, 0x1f, 0x00, 0xaa, 0xaa, 0xaa, 0xaa];
+    for (format, block, alpha) in [
+        (7, color.to_vec(), 255),
+        (6, [&[0xff; 8][..], &color].concat(), 255),
+        (
+            4,
+            [&[255, 0, 0x92, 0x24, 0x49, 0x92, 0x24, 0x49][..], &color].concat(),
+            218,
+        ),
+    ] {
+        fs::write(&source, &block).unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        RgbaImage::from_pixel(4, 4, Rgba([170, 0, 85, alpha]))
+            .write_to(&mut png, ImageFormat::Png)
+            .unwrap();
+        fs::write(&generated, png.into_inner()).unwrap();
+        let spec = RawTextureSpec {
+            offset: 0,
+            length: block.len() as u64,
+            decoded_length: block.len() as u64,
+            format,
+            texture_width: 4,
+            texture_height: 4,
+            image_width: 4,
+            image_height: 4,
+            compressed: false,
+        };
+        assert_eq!(
+            raw_texture_matches_png(&source, &spec, &generated),
+            Ok(Some(true)),
+            "DXT {format}"
+        );
+    }
+    fs::remove_dir_all(folder).unwrap();
 }
 
 #[test]

@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-#[cfg(not(windows))]
-use std::time::UNIX_EPOCH;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
+#[cfg(not(windows))]
+use std::time::UNIX_EPOCH;
 
 /// Read-only trial for the packed/unpacked verifier. None asks Dart to decode.
 #[flutter_rust_bridge::frb]
@@ -38,6 +38,94 @@ pub async fn compare_image_segment_rust(
             offset,
             length,
             std::path::Path::new(&counterpart_path),
+        )
+    })
+    .await
+    .map_err(|error| format!("Task execution error: {error}"))?
+}
+
+#[flutter_rust_bridge::frb]
+pub async fn compare_exact_segment_rust(
+    source_path: String,
+    offset: u64,
+    length: u64,
+    counterpart_path: String,
+) -> Result<Option<bool>, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::image_compare::exact_segment_matches_file(
+            Path::new(&source_path),
+            offset,
+            length,
+            Path::new(&counterpart_path),
+        )
+    })
+    .await
+    .map_err(|error| format!("Task execution error: {error}"))?
+}
+
+#[flutter_rust_bridge::frb]
+pub struct ExactSegmentRequest {
+    pub offset: u64,
+    pub length: u64,
+    pub counterpart_path: String,
+}
+
+/// One bridge call for a bounded group of entry checks. An unreadable entry
+/// declines individually so Dart can retry it with its cancellable path.
+#[flutter_rust_bridge::frb]
+pub async fn compare_exact_segments_rust(
+    source_path: String,
+    requests: Vec<ExactSegmentRequest>,
+) -> Result<Vec<Option<bool>>, String> {
+    tokio::task::spawn_blocking(move || {
+        requests
+            .into_iter()
+            .map(|request| {
+                crate::image_compare::exact_segment_matches_file(
+                    Path::new(&source_path),
+                    request.offset,
+                    request.length,
+                    Path::new(&request.counterpart_path),
+                )
+                .ok()
+                .flatten()
+            })
+            .collect()
+    })
+    .await
+    .map_err(|error| format!("Task execution error: {error}"))
+}
+
+#[flutter_rust_bridge::frb]
+pub async fn compare_raw_texture_rust(
+    source_path: String,
+    offset: u64,
+    length: u64,
+    decoded_length: u64,
+    format: u32,
+    texture_width: u32,
+    texture_height: u32,
+    image_width: u32,
+    image_height: u32,
+    compressed: bool,
+    generated_path: String,
+) -> Result<Option<bool>, String> {
+    tokio::task::spawn_blocking(move || {
+        let spec = crate::image_compare::RawTextureSpec {
+            offset,
+            length,
+            decoded_length,
+            format,
+            texture_width,
+            texture_height,
+            image_width,
+            image_height,
+            compressed,
+        };
+        crate::image_compare::raw_texture_matches_png(
+            std::path::Path::new(&source_path),
+            &spec,
+            std::path::Path::new(&generated_path),
         )
     })
     .await
@@ -363,8 +451,6 @@ pub async fn compare_backup_folders_rust(
     .map_err(|e| format!("Task execution error: {}", e))
 }
 
-
-
 /// True when a wallpaper folder is empty or contains only disposable files.
 ///
 /// Live folders allow only .dxs shader-cache files. Backup folders additionally
@@ -601,13 +687,16 @@ pub struct WallpaperProjectRead {
 fn file_changed_micros(metadata: &std::fs::Metadata) -> f64 {
     // Dart FileStat.changed uses Windows creation time at whole-second precision.
     const WINDOWS_TO_UNIX_EPOCH_100NS: i128 = 116_444_736_000_000_000;
-    (metadata.creation_time() as i128 - WINDOWS_TO_UNIX_EPOCH_100NS)
-        .div_euclid(10_000_000) as f64 * 1_000_000.0
+    (metadata.creation_time() as i128 - WINDOWS_TO_UNIX_EPOCH_100NS).div_euclid(10_000_000) as f64
+        * 1_000_000.0
 }
 
 #[cfg(not(windows))]
 fn file_changed_micros(metadata: &std::fs::Metadata) -> f64 {
-    let time = metadata.created().or_else(|_| metadata.modified()).unwrap_or(UNIX_EPOCH);
+    let time = metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .unwrap_or(UNIX_EPOCH);
     match time.duration_since(UNIX_EPOCH) {
         Ok(value) => value.as_micros() as f64,
         Err(value) => -(value.duration().as_micros() as f64),
@@ -687,7 +776,6 @@ pub async fn read_wallpaper_projects_rust(
     .map_err(|e| format!("Task execution error: {}", e))
 }
 
-
 fn folder_version_token(folder: &Path) -> std::io::Result<Option<String>> {
     let mut stamps = Vec::<(String, u64, i128)>::new();
     for entry in std::fs::read_dir(folder)? {
@@ -754,7 +842,10 @@ fn my_projects_inventory_blocking(
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();
-        if ignored_prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+        if ignored_prefixes
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
             continue;
         }
         names.push(name);
@@ -1258,11 +1349,7 @@ mod tests {
         let backup = dir.join("backup");
         write_backup_fixture(&live, "project.json", b"same");
         write_backup_fixture(&backup, "project.json", b"same");
-        write_backup_fixture(
-            &live,
-            "shaders/blobssm40/cache.bin",
-            b"live cache",
-        );
+        write_backup_fixture(&live, "shaders/blobssm40/cache.bin", b"live cache");
 
         assert!(backup_matches_live(&live, &backup).unwrap());
     }
@@ -1322,7 +1409,12 @@ mod tests {
 
         let result = find_junk_folders_blocking(
             root.to_string_lossy().into_owned(),
-            vec!["empty".into(), "cache".into(), "normal".into(), "missing".into()],
+            vec![
+                "empty".into(),
+                "cache".into(),
+                "normal".into(),
+                "missing".into(),
+            ],
             false,
             4,
         );
@@ -1337,7 +1429,11 @@ mod tests {
     fn integrity_reader_batches_entries_and_project_state() {
         let dir = tmp_dir();
         let root = dir.join("library");
-        write_backup_fixture(&root.join("good"), "project.json", br#"{"file":"scene.pkg"}"#);
+        write_backup_fixture(
+            &root.join("good"),
+            "project.json",
+            br#"{"file":"scene.pkg"}"#,
+        );
         write_backup_fixture(&root.join("good"), "scene.pkg", b"payload");
         std::fs::create_dir_all(root.join("good").join("materials")).unwrap();
         write_backup_fixture(&root.join("broken"), "project.json", b"{ not valid json");
@@ -1356,13 +1452,18 @@ mod tests {
 
         let good = result.get("good").unwrap();
         assert!(good.project_present);
-        assert_eq!(good.project_json.as_deref(), Some(r#"{"file":"scene.pkg"}"#));
-        assert!(good.entries.iter().any(|entry| {
-            entry.name == "materials" && entry.is_directory
-        }));
-        assert!(good.entries.iter().any(|entry| {
-            entry.name == "scene.pkg" && !entry.is_directory
-        }));
+        assert_eq!(
+            good.project_json.as_deref(),
+            Some(r#"{"file":"scene.pkg"}"#)
+        );
+        assert!(good
+            .entries
+            .iter()
+            .any(|entry| { entry.name == "materials" && entry.is_directory }));
+        assert!(good
+            .entries
+            .iter()
+            .any(|entry| { entry.name == "scene.pkg" && !entry.is_directory }));
 
         let broken = result.get("broken").unwrap();
         assert!(broken.project_present);
@@ -1400,7 +1501,6 @@ mod tests {
         assert!(!result.contains_key("missing"));
     }
 
-
     #[test]
     fn myprojects_inventory_keeps_names_and_matches_top_level_version_tokens() {
         let dir = tmp_dir();
@@ -1433,5 +1533,4 @@ mod tests {
         assert!(parts[0].starts_with("a.txt|1|"));
         assert!(parts[1].starts_with("z.txt|2|"));
     }
-
 }

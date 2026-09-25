@@ -195,6 +195,24 @@ void main() {
       await sceneTextureRawImageMatchesFile(texture, layout!, generated),
       isTrue,
     );
+    expect(
+      await sceneTextureRawImageMatchesFile(
+        texture,
+        layout,
+        generated,
+        compareNative: (_, __, ___) async => null,
+      ),
+      isTrue,
+    );
+    expect(
+      await sceneTextureRawImageMatchesFile(
+        texture,
+        layout,
+        generated,
+        compareNative: (_, __, ___) async => false,
+      ),
+      isFalse,
+    );
 
     image.fill(pixels, color: image.ColorRgba8(129, 129, 129, 64));
     generated.writeAsBytesSync(image.encodePng(pixels));

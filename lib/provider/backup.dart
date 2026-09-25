@@ -160,6 +160,7 @@ typedef DirectBackupProbeRunner =
     Future<DirectBackupProbe> Function({
       required Directory packedFolder,
       required Directory unpackedFolder,
+      String? expectedSignature,
       CancelToken? cancelToken,
     });
 
@@ -167,7 +168,7 @@ typedef DirectBackupProbeRunner =
 /// Results are diagnostic; a future removal action must verify its target again.
 class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
   BackupDirectBatch({DirectBackupProbeRunner? probe})
-    : _probe = probe ?? probePackedBackupCopyDirect,
+    : _diagnosticsEnabled = kDebugMode && probe == null,
       super((
         scan: null,
         backupRoot: null,
@@ -176,12 +177,98 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
         done: 0,
         total: 0,
         results: const <String, DirectBackupProbe>{},
-      ));
+      )) {
+    _probe =
+        probe ??
+        ({
+          required packedFolder,
+          required unpackedFolder,
+          expectedSignature,
+          cancelToken,
+        }) => probePackedBackupCopyDirect(
+          packedFolder: packedFolder,
+          unpackedFolder: unpackedFolder,
+          expectedSignature: expectedSignature,
+          cancelToken: cancelToken,
+          onTiming: _diagnosticsEnabled ? _recordTiming : null,
+        );
+  }
 
-  static const int _workers = 2;
-  final DirectBackupProbeRunner _probe;
+  static const int _workers = 4;
+  late final DirectBackupProbeRunner _probe;
+  final bool _diagnosticsEnabled;
   CancelToken? _token;
   bool _disposed = false;
+  Duration _inventoryTime = Duration.zero;
+  Duration _initialSignatureTime = Duration.zero;
+  Duration _formatCheckTime = Duration.zero;
+  Duration _packageIndexTime = Duration.zero;
+  Duration _unpackedListTime = Duration.zero;
+  Duration _byteTime = Duration.zero;
+  Duration _nativeImageTime = Duration.zero;
+  Duration _dartPixelTime = Duration.zero;
+  Duration _rawTime = Duration.zero;
+  Duration _nativeRawTime = Duration.zero;
+  Duration _otherAssetTime = Duration.zero;
+  Duration _exactEntryTime = Duration.zero;
+  Duration _wrapperTime = Duration.zero;
+  Duration _signatureTime = Duration.zero;
+  Duration _notificationTime = Duration.zero;
+  int _maxTimerDelayMs = 0;
+  int _delayedTicks = 0;
+  int _nativeImageCalls = 0;
+  int _nativeRawCalls = 0;
+  int _nativeExactCalls = 0;
+  int _nativeDeclines = 0;
+  int _timedPairs = 0;
+  int _slowestPairMs = 0;
+  String _slowestPairId = '';
+
+  void _recordTiming(DirectBackupProbeTiming timing) {
+    _timedPairs++;
+    _inventoryTime += timing.inventory;
+    _initialSignatureTime += timing.initialSignature;
+    _formatCheckTime += timing.formatCheck;
+    _packageIndexTime += timing.packageIndex;
+    _unpackedListTime += timing.unpackedList;
+    _byteTime += timing.imageByteChecks;
+    _nativeImageTime += timing.nativeImageChecks;
+    _dartPixelTime += timing.dartPixelFallbacks;
+    _rawTime += timing.rawTextureChecks;
+    _nativeRawTime += timing.nativeRawChecks;
+    _otherAssetTime += timing.otherAssets;
+    _exactEntryTime += timing.exactEntryChecks;
+    _wrapperTime += timing.wrapperChecks;
+    _signatureTime += timing.finalSignature;
+    _nativeImageCalls +=
+        timing.nativePngCalls + timing.nativeJpegCalls + timing.nativeGifCalls;
+    _nativeRawCalls += timing.nativeRawCalls;
+    _nativeExactCalls += timing.nativeExactCalls;
+    _nativeDeclines += timing.nativeDeclines;
+  }
+
+  void _logTiming(Stopwatch clock, int checked, int total) {
+    debugPrint(
+      '[reconcile-timing] checked=$checked/$total timed=$_timedPairs '
+      'wall=${clock.elapsedMilliseconds}ms '
+      'summed_ms(inventory=${_inventoryTime.inMilliseconds}, '
+      'initialSig=${_initialSignatureTime.inMilliseconds}, '
+      'format=${_formatCheckTime.inMilliseconds}, '
+      'index=${_packageIndexTime.inMilliseconds}, '
+      'unpackedList=${_unpackedListTime.inMilliseconds}, '
+      'bytes=${_byteTime.inMilliseconds}, nativeImage=${_nativeImageTime.inMilliseconds}, '
+      'dartPixels=${_dartPixelTime.inMilliseconds}, '
+      'rawTotal=${_rawTime.inMilliseconds}, rawNative=${_nativeRawTime.inMilliseconds}, '
+      'other=${_otherAssetTime.inMilliseconds}, '
+      'exact=${_exactEntryTime.inMilliseconds}, wrapper=${_wrapperTime.inMilliseconds}, '
+      'signature=${_signatureTime.inMilliseconds}) '
+      'ui(notify=${_notificationTime.inMilliseconds}, '
+      'maxDelay=$_maxTimerDelayMs, delayedTicks=$_delayedTicks) '
+      'native(image=$_nativeImageCalls, raw=$_nativeRawCalls, exact=$_nativeExactCalls, '
+      'declined=$_nativeDeclines) '
+      'slowest=$_slowestPairId:${_slowestPairMs}ms',
+    );
+  }
 
   static bool eligible(ReconcileEntry entry) {
     final BackupCopyDifference? difference = entry.backupDifference;
@@ -238,7 +325,47 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
         .where((entry) => !completed.containsKey(entry.name.toLowerCase()))
         .toList();
     if (remaining.isEmpty) return;
+    final Stopwatch clock = Stopwatch()..start();
+    if (_diagnosticsEnabled) {
+      _inventoryTime = Duration.zero;
+      _initialSignatureTime = Duration.zero;
+      _formatCheckTime = Duration.zero;
+      _packageIndexTime = Duration.zero;
+      _unpackedListTime = Duration.zero;
+      _byteTime = Duration.zero;
+      _nativeImageTime = Duration.zero;
+      _dartPixelTime = Duration.zero;
+      _rawTime = Duration.zero;
+      _nativeRawTime = Duration.zero;
+      _otherAssetTime = Duration.zero;
+      _exactEntryTime = Duration.zero;
+      _wrapperTime = Duration.zero;
+      _signatureTime = Duration.zero;
+      _notificationTime = Duration.zero;
+      _maxTimerDelayMs = 0;
+      _delayedTicks = 0;
+      _nativeImageCalls = 0;
+      _nativeRawCalls = 0;
+      _nativeExactCalls = 0;
+      _nativeDeclines = 0;
+      _timedPairs = 0;
+      _slowestPairMs = 0;
+      _slowestPairId = '';
+    }
     final CancelToken token = CancelToken();
+    const Duration heartbeat = Duration(milliseconds: 50);
+    final Stopwatch heartbeatClock = Stopwatch()..start();
+    int lastHeartbeatMs = 0;
+    final Timer? monitor = _diagnosticsEnabled
+        ? Timer.periodic(heartbeat, (_) {
+            final int nowMs = heartbeatClock.elapsedMilliseconds;
+            final int delay =
+                nowMs - lastHeartbeatMs - heartbeat.inMilliseconds;
+            if (delay > _maxTimerDelayMs) _maxTimerDelayMs = delay;
+            if (delay > 20) _delayedTicks++;
+            lastHeartbeatMs = nowMs;
+          })
+        : null;
     _token = token;
     value = (
       scan: scan,
@@ -264,11 +391,13 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
         );
         final bool workshopPacked =
             difference.workshopFormat == BackupCopyFormat.packed;
+        final Stopwatch pairClock = Stopwatch()..start();
         DirectBackupProbe result;
         try {
           result = await _probe(
             packedFolder: Directory(workshopPacked ? workshop : myProjects),
             unpackedFolder: Directory(workshopPacked ? myProjects : workshop),
+            expectedSignature: difference.verificationSignature,
             cancelToken: token,
           );
         } catch (_) {
@@ -285,6 +414,14 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
           );
         }
         if (token.isCancelled || _disposed) break;
+        if (_diagnosticsEnabled &&
+            pairClock.elapsedMilliseconds > _slowestPairMs) {
+          _slowestPairMs = pairClock.elapsedMilliseconds;
+          _slowestPairId = entry.name;
+        }
+        final Stopwatch? notificationWatch = _diagnosticsEnabled
+            ? (Stopwatch()..start())
+            : null;
         value = (
           scan: scan,
           backupRoot: backupRoot,
@@ -297,6 +434,13 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
             entry.name.toLowerCase(): result,
           },
         );
+        if (notificationWatch != null) {
+          _notificationTime += notificationWatch.elapsed;
+        }
+        final int checked = value.done - completed.length;
+        if (_diagnosticsEnabled && checked % 20 == 0) {
+          _logTiming(clock, checked, remaining.length);
+        }
       }
     }
 
@@ -305,7 +449,12 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
         for (int i = 0; i < _workers && i < remaining.length; i++) worker(),
       ]);
     } finally {
+      monitor?.cancel();
       if (!_disposed && identical(_token, token)) {
+        final int checked = value.done - completed.length;
+        if (_diagnosticsEnabled && (checked == 0 || checked % 20 != 0)) {
+          _logTiming(clock, checked, remaining.length);
+        }
         value = (
           scan: scan,
           backupRoot: backupRoot,

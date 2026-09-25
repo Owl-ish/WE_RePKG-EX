@@ -299,6 +299,22 @@ void main() {
     );
   });
 
+  test('package index reads entry tables across buffer boundaries', () async {
+    final File package = File(path.join(temporary.path, 'large-scene.pkg'));
+    final Map<String, List<int>> entries = <String, List<int>>{
+      for (int index = 0; index < 500; index++)
+        'materials/entry_${index.toString().padLeft(4, '0')}.json': <int>[
+          index % 256,
+        ],
+    };
+    _writePackage(package, entries);
+
+    final ScenePackageIndex index = (await readScenePackageIndex(package))!;
+    expect(index.headerBytes, greaterThan(16 * 1024));
+    expect(index.entries.length, entries.length);
+    expect(index.entries[r'materials\entry_0499.json']?.length, 1);
+  });
+
   test(
     'package index rejects path traversal and overlapping payloads',
     () async {
@@ -488,6 +504,57 @@ void main() {
     expect(missing.status, DirectBackupProbeStatus.different);
     expect(missing.changes.onlyPacked, hasLength(3));
   });
+
+  test(
+    'direct probe rechecks the scan signature before reporting a match',
+    () async {
+      final fixtures = _pair(temporary);
+      _writePackage(
+        File(path.join(fixtures.packed.path, 'scene.pkg')),
+        <String, List<int>>{'scene.json': utf8.encode('{"scene":1}')},
+      );
+      final File unpackedScene = File(
+        path.join(fixtures.unpacked.path, 'scene.json'),
+      )..writeAsStringSync('{"scene":1}');
+      final String signature = (await backupCopyVerificationSignature(
+        packedFolder: fixtures.packed,
+        unpackedFolder: fixtures.unpacked,
+      ))!;
+      DirectBackupProbeTiming? timing;
+      final DirectBackupProbe matching = await probePackedBackupCopyDirect(
+        packedFolder: fixtures.packed,
+        unpackedFolder: fixtures.unpacked,
+        expectedSignature: signature,
+        onTiming: (value) => timing = value,
+      );
+      expect(matching.status, DirectBackupProbeStatus.candidateMatch);
+      expect(timing?.formatCheck, Duration.zero);
+
+      unpackedScene.writeAsStringSync('{"scene":200}');
+      final DirectBackupProbe stale = await probePackedBackupCopyDirect(
+        packedFolder: fixtures.packed,
+        unpackedFolder: fixtures.unpacked,
+        expectedSignature: signature,
+      );
+      expect(stale.status, DirectBackupProbeStatus.unavailable);
+      expect(stale.reasons, contains(DirectBackupProbeReason.inputUnavailable));
+
+      unpackedScene.writeAsStringSync('{"scene":1}');
+      File(
+        path.join(fixtures.unpacked.path, 'scene.pkg'),
+      ).writeAsStringSync('unexpected packed copy');
+      final DirectBackupProbe changedFormat = await probePackedBackupCopyDirect(
+        packedFolder: fixtures.packed,
+        unpackedFolder: fixtures.unpacked,
+        expectedSignature: signature,
+      );
+      expect(changedFormat.status, DirectBackupProbeStatus.unavailable);
+      expect(
+        changedFormat.reasons,
+        contains(DirectBackupProbeReason.inputUnavailable),
+      );
+    },
+  );
 
   test('direct probe checks an unchanged LZ4 raw texture', () async {
     final fixtures = _pair(temporary);

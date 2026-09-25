@@ -44,6 +44,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
+  ExactSegmentRequest dco_decode_exact_segment_request(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -56,9 +59,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<ExactSegmentRequest> dco_decode_list_exact_segment_request(dynamic raw);
+
+  @protected
   List<IntegrityFolderEntryRead> dco_decode_list_integrity_folder_entry_read(
     dynamic raw,
   );
+
+  @protected
+  List<bool?> dco_decode_list_opt_box_autoadd_bool(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -145,6 +154,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
+  ExactSegmentRequest sse_decode_exact_segment_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
@@ -161,7 +175,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<ExactSegmentRequest> sse_decode_list_exact_segment_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<IntegrityFolderEntryRead> sse_decode_list_integrity_folder_entry_read(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<bool?> sse_decode_list_opt_box_autoadd_bool(
     SseDeserializer deserializer,
   );
 
@@ -267,6 +291,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_exact_segment_request(
+    ExactSegmentRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -285,8 +315,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_exact_segment_request(
+    List<ExactSegmentRequest> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_integrity_folder_entry_read(
     List<IntegrityFolderEntryRead> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_opt_box_autoadd_bool(
+    List<bool?> self,
     SseSerializer serializer,
   );
 

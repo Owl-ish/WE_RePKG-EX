@@ -1150,8 +1150,12 @@ void main() {
       int nextProbe = 0;
       final BackupDirectBatch batch = BackupDirectBatch(
         probe:
-            ({required packedFolder, required unpackedFolder, cancelToken}) =>
-                probes[nextProbe++].future,
+            ({
+              required packedFolder,
+              required unpackedFolder,
+              expectedSignature,
+              cancelToken,
+            }) => probes[nextProbe++].future,
       );
       addTearDown(batch.dispose);
       await tester.pumpWidget(

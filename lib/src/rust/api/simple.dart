@@ -31,6 +31,54 @@ Future<bool?> compareImageSegmentRust({
   counterpartPath: counterpartPath,
 );
 
+Future<bool?> compareExactSegmentRust({
+  required String sourcePath,
+  required BigInt offset,
+  required BigInt length,
+  required String counterpartPath,
+}) => RustLib.instance.api.crateApiSimpleCompareExactSegmentRust(
+  sourcePath: sourcePath,
+  offset: offset,
+  length: length,
+  counterpartPath: counterpartPath,
+);
+
+/// One bridge call for a bounded group of entry checks. An unreadable entry
+/// declines individually so Dart can retry it with its cancellable path.
+Future<List<bool?>> compareExactSegmentsRust({
+  required String sourcePath,
+  required List<ExactSegmentRequest> requests,
+}) => RustLib.instance.api.crateApiSimpleCompareExactSegmentsRust(
+  sourcePath: sourcePath,
+  requests: requests,
+);
+
+Future<bool?> compareRawTextureRust({
+  required String sourcePath,
+  required BigInt offset,
+  required BigInt length,
+  required BigInt decodedLength,
+  required int format,
+  required int textureWidth,
+  required int textureHeight,
+  required int imageWidth,
+  required int imageHeight,
+  required bool compressed,
+  required String generatedPath,
+}) => RustLib.instance.api.crateApiSimpleCompareRawTextureRust(
+  sourcePath: sourcePath,
+  offset: offset,
+  length: length,
+  decodedLength: decodedLength,
+  format: format,
+  textureWidth: textureWidth,
+  textureHeight: textureHeight,
+  imageWidth: imageWidth,
+  imageHeight: imageHeight,
+  compressed: compressed,
+  generatedPath: generatedPath,
+);
+
 Future<String?> deleteToTrash({required String filePath}) =>
     RustLib.instance.api.crateApiSimpleDeleteToTrash(filePath: filePath);
 
@@ -119,6 +167,31 @@ Future<Map<String, String?>> myProjectsInventoryRust({
   ignoredPrefixes: ignoredPrefixes,
   workers: workers,
 );
+
+class ExactSegmentRequest {
+  final BigInt offset;
+  final BigInt length;
+  final String counterpartPath;
+
+  const ExactSegmentRequest({
+    required this.offset,
+    required this.length,
+    required this.counterpartPath,
+  });
+
+  @override
+  int get hashCode =>
+      offset.hashCode ^ length.hashCode ^ counterpartPath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExactSegmentRequest &&
+          runtimeType == other.runtimeType &&
+          offset == other.offset &&
+          length == other.length &&
+          counterpartPath == other.counterpartPath;
+}
 
 class IntegrityFolderEntryRead {
   final String name;

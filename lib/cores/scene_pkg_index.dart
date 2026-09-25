@@ -19,24 +19,24 @@ Future<ScenePackageIndex?> readScenePackageIndex(File package) async {
   try {
     input = await package.open();
     final int fileLength = await input.length();
-    final int magicLength = await _readPackageInt(input);
-    if (magicLength != 8) return null;
-    final String magic = utf8.decode(
-      await _readPackageBytes(input, magicLength),
+    final _PackageHeaderReader header = _PackageHeaderReader(
+      input,
+      fileLength < _maxPackageHeaderBytes ? fileLength : _maxPackageHeaderBytes,
     );
+    final int magicLength = await header.readInt();
+    if (magicLength != 8) return null;
+    final String magic = await header.readString(magicLength);
     if (!RegExp(r'^PKGV\d{4}$').hasMatch(magic)) return null;
-    final int count = await _readPackageInt(input);
+    final int count = await header.readInt();
     if (count < 0 || count > _maxPackageEntries) return null;
 
     final Map<String, ScenePackageEntry> entries =
         <String, ScenePackageEntry>{};
     for (int index = 0; index < count; index++) {
-      if (await input.position() > _maxPackageHeaderBytes - 12) return null;
-      final int pathLength = await _readPackageInt(input);
+      if (header.position > _maxPackageHeaderBytes - 12) return null;
+      final int pathLength = await header.readInt();
       if (pathLength < 1 || pathLength > 255) return null;
-      final String entryPath = utf8.decode(
-        await _readPackageBytes(input, pathLength),
-      );
+      final String entryPath = await header.readString(pathLength);
       final List<String> segments = entryPath.split(RegExp(r'[/\\]'));
       if (segments.any(
             (String segment) =>
@@ -46,15 +46,15 @@ Future<ScenePackageIndex?> readScenePackageIndex(File package) async {
           entryPath.contains('\u0000')) {
         return null;
       }
-      final int offset = await _readPackageInt(input);
-      final int length = await _readPackageInt(input);
+      final int offset = await header.readInt();
+      final int length = await header.readInt();
       if (offset < 0 || length < 0) return null;
       final String key = segments.join(r'\').toLowerCase();
       if (entries.containsKey(key)) return null;
       entries[key] = (path: entryPath, offset: offset, length: length);
     }
 
-    final int headerBytes = await input.position();
+    final int headerBytes = header.position;
     if (headerBytes > _maxPackageHeaderBytes) return null;
     final List<({int start, int end})> ranges = <({int start, int end})>[
       for (final ScenePackageEntry entry in entries.values)
@@ -77,17 +77,52 @@ Future<ScenePackageIndex?> readScenePackageIndex(File package) async {
   }
 }
 
-Future<int> _readPackageInt(RandomAccessFile input) async {
-  final List<int> bytes = await _readPackageBytes(input, 4);
-  return ByteData.sublistView(
-    Uint8List.fromList(bytes),
-  ).getInt32(0, Endian.little);
-}
+class _PackageHeaderReader {
+  _PackageHeaderReader(this.input, this.limit)
+    : _buffer = Uint8List(limit < 16 * 1024 ? limit : 16 * 1024);
 
-Future<List<int>> _readPackageBytes(RandomAccessFile input, int count) async {
-  final List<int> bytes = await input.read(count);
-  if (bytes.length != count) throw const FormatException('Truncated package');
-  return bytes;
+  final RandomAccessFile input;
+  final int limit;
+  Uint8List _buffer;
+  int _loaded = 0;
+  int position = 0;
+
+  Future<int> readInt() async {
+    await _ensure(4);
+    final int value =
+        _buffer[position] |
+        (_buffer[position + 1] << 8) |
+        (_buffer[position + 2] << 16) |
+        (_buffer[position + 3] << 24);
+    position += 4;
+    return value.toSigned(32);
+  }
+
+  Future<String> readString(int length) async {
+    await _ensure(length);
+    final String value = utf8.decode(
+      Uint8List.sublistView(_buffer, position, position + length),
+    );
+    position += length;
+    return value;
+  }
+
+  Future<void> _ensure(int length) async {
+    final int end = position + length;
+    if (end > limit) throw const FormatException('Truncated package');
+    if (end > _buffer.length) {
+      final int doubled = _buffer.length * 2;
+      final int capacity = doubled > end ? doubled : end;
+      final Uint8List next = Uint8List(capacity < limit ? capacity : limit);
+      next.setRange(0, _loaded, _buffer);
+      _buffer = next;
+    }
+    while (_loaded < end) {
+      final int count = await input.readInto(_buffer, _loaded, _buffer.length);
+      if (count == 0) throw const FormatException('Truncated package');
+      _loaded += count;
+    }
+  }
 }
 
 /// Compares a raw package entry with an unpacked file without extraction.
@@ -116,11 +151,27 @@ Future<bool?> fileSegmentMatchesFile({
   required int length,
   required File counterpart,
   bool Function()? isCancelled,
+  Future<bool?> Function(File, int, int, File)? compareNative,
 }) async {
   RandomAccessFile? sourceInput;
   RandomAccessFile? counterpartInput;
   try {
     if (offset < 0 || length < 0) return null;
+    if (isCancelled?.call() == true) return null;
+    if (compareNative != null) {
+      try {
+        final bool? native = await compareNative(
+          source,
+          offset,
+          length,
+          counterpart,
+        );
+        if (isCancelled?.call() == true) return null;
+        if (native != null) return native;
+      } catch (_) {
+        if (isCancelled?.call() == true) return null;
+      }
+    }
     sourceInput = await source.open();
     counterpartInput = await counterpart.open();
     final int sourceLength = await sourceInput.length();
