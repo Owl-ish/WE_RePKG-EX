@@ -1249,6 +1249,30 @@ void main() {
       expect(grid.sections.map((section) => section.itemCount), <int>[1, 1]);
       expect(grid.idAt(0), reconcileTileId(first.name));
       expect(grid.idAt(1), reconcileTileId(second.name));
+      final List<BackupBulkActionButton> completedActions = tester
+          .widgetList<BackupBulkActionButton>(
+            find.byType(BackupBulkActionButton),
+          )
+          .toList();
+      expect(completedActions, hasLength(3));
+      expect(
+        completedActions.any(
+          (button) =>
+              button.label.contains(AppI10n.backupDirectCheckDeletePacked),
+        ),
+        isTrue,
+      );
+      expect(
+        completedActions.any(
+          (button) =>
+              button.label.contains(AppI10n.backupDirectCheckDeleteUnpacked),
+        ),
+        isTrue,
+      );
+      expect(
+        completedActions.skip(1).every((button) => button.destructive),
+        isTrue,
+      );
 
       batch.value = (
         scan: scan,

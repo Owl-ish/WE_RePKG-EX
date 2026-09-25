@@ -298,6 +298,27 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
           results: const <String, DirectBackupProbe>{},
         );
 
+  List<ReconcileEntry> matchedEntries({
+    required BackupScan scan,
+    required String? backupRoot,
+    required Iterable<ReconcileEntry> entries,
+  }) {
+    final BackupDirectBatchState check = forScan(scan, backupRoot);
+    if (check.running ||
+        check.cancelled ||
+        check.total == 0 ||
+        check.done != check.total) {
+      return const <ReconcileEntry>[];
+    }
+    return <ReconcileEntry>[
+      for (final ReconcileEntry entry in entries)
+        if (eligible(entry) &&
+            check.results[entry.name.toLowerCase()]?.status ==
+                DirectBackupProbeStatus.candidateMatch)
+          entry,
+    ];
+  }
+
   Future<void> start({
     required BackupScan scan,
     required String backupRoot,

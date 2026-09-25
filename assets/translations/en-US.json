@@ -40,6 +40,8 @@
     "directCheckStopping": "Stopping content check",
     "directCheckProgress": "Checked {done}/{total} · Matches {matches} · Different {different} · Review {review}",
     "directCheckMatch": "Match",
+    "directCheckDeletePacked": "Delete packed copies ({count})",
+    "directCheckDeleteUnpacked": "Delete unpacked copies ({count})",
     "directCheckScanning": "Scanning",
     "directCheckWorkshop": "Workshop",
     "directCheckMyProjects": "MyProjects",

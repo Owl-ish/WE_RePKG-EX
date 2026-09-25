@@ -75,6 +75,14 @@ void main() {
         containsAll(<String>['first', 'second', 'third', 'fourth']),
       );
       expect(pending, hasLength(4));
+      expect(
+        batch.matchedEntries(
+          scan: scan,
+          backupRoot: r'C:\fixture',
+          entries: entries,
+        ),
+        isEmpty,
+      );
       await batch.start(
         scan: scan,
         backupRoot: r'C:\fixture',
@@ -129,6 +137,24 @@ void main() {
       await resumed;
       expect(batch.value.done, 5);
       expect(batch.value.cancelled, isFalse);
+      expect(
+        batch
+            .matchedEntries(
+              scan: scan,
+              backupRoot: r'C:\fixture',
+              entries: entries,
+            )
+            .map((entry) => entry.name),
+        containsAll(<String>['first', 'third']),
+      );
+      expect(
+        batch.matchedEntries(
+          scan: scanOf(),
+          backupRoot: r'C:\fixture',
+          entries: entries,
+        ),
+        isEmpty,
+      );
 
       pending.clear();
       final Future<void> fresh = batch.start(

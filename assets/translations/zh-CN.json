@@ -40,6 +40,8 @@
     "directCheckStopping": "正在停止内容检查",
     "directCheckProgress": "已检查 {done}/{total} · 一致 {matches} · 内容不同 {different} · 需检查 {review}",
     "directCheckMatch": "匹配",
+    "directCheckDeletePacked": "删除已打包副本（{count}）",
+    "directCheckDeleteUnpacked": "删除已解包副本（{count}）",
     "directCheckScanning": "正在检查",
     "directCheckWorkshop": "创意工坊",
     "directCheckMyProjects": "MyProjects",

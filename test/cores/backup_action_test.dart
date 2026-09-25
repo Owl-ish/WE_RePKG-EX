@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/cores/backup_records.dart';
 import 'package:we_repkg/cores/backup_action.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/wallpaper_junk.dart';
 
@@ -875,6 +878,79 @@ void main() {
     expect(packed.existsSync(), isTrue);
     expect(unpacked.existsSync(), isFalse);
   });
+
+  test(
+    'backup conflict deletion rechecks direct content after the claim',
+    () async {
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory packed = Directory(
+        path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      final Directory unpacked = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      final List<int> scene = utf8.encode('{"scene":1}');
+      final BytesBuilder package = BytesBuilder();
+      void addInt(int value) => package.add(
+        (ByteData(4)..setInt32(0, value, Endian.little)).buffer.asUint8List(),
+      );
+      addInt(8);
+      package.add(utf8.encode('PKGV0014'));
+      addInt(1);
+      addInt(10);
+      package.add(utf8.encode('scene.json'));
+      addInt(0);
+      addInt(scene.length);
+      package.add(scene);
+      File(
+        path.join(packed.path, 'scene.pkg'),
+      ).writeAsBytesSync(package.toBytes());
+      File(path.join(packed.path, 'project.json')).writeAsStringSync('{}');
+      File(path.join(unpacked.path, 'project.json')).writeAsStringSync('{}');
+      final File unpackedScene = File(path.join(unpacked.path, 'scene.json'))
+        ..writeAsStringSync('{"scene":2}');
+      int trashCalls = 0;
+      Future<BackupActionResult> removePacked() => recycleConflictingBackupCopy(
+        name: 'demo',
+        removedLibrary: WallpaperLibrary.workshop,
+        expectedRemovedFormat: BackupCopyFormat.packed,
+        expectedSurvivingFormat: BackupCopyFormat.unpacked,
+        backupRoot: backupRoot.path,
+        verifyEquivalent:
+            (Directory packedCopy, Directory unpackedCopy) async =>
+                (await probePackedBackupCopyDirect(
+                  packedFolder: packedCopy,
+                  unpackedFolder: unpackedCopy,
+                )).status ==
+                DirectBackupProbeStatus.candidateMatch,
+        trashFolder: (String claimed) async {
+          trashCalls++;
+          await Directory(claimed).delete(recursive: true);
+          return null;
+        },
+      );
+
+      final BackupActionResult different = await removePacked();
+      expect(different.changed, isFalse);
+      expect(trashCalls, 0);
+      expect(packed.existsSync(), isTrue);
+      unpackedScene.writeAsBytesSync(scene);
+      final File added = File(path.join(unpacked.path, 'added.json'))
+        ..writeAsStringSync('{}');
+      final BackupActionResult extraAsset = await removePacked();
+      expect(extraAsset.changed, isFalse);
+      expect(trashCalls, 0);
+      await added.delete();
+
+      final BackupActionResult matching = await removePacked();
+      expect(matching.changed, isTrue);
+      expect(trashCalls, 1);
+      expect(packed.existsSync(), isFalse);
+      expect(unpacked.existsSync(), isTrue);
+    },
+  );
 
   test('backup conflict resolution stops when a format changed', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))

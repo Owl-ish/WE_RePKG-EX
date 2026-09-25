@@ -25,6 +25,8 @@ typedef BackupActionRunner =
       List<BackupCard> cards,
     );
 
+bool _deletingMatchedBackups = false;
+
 Future<bool> applyBackupAction(
   BuildContext context,
   BackupAction action,
@@ -319,17 +321,23 @@ Future<bool> deleteConflictingBackupVersion(
   required BackupCopyFormat survivingFormat,
   required String versionLabel,
 }) async {
+  if (_deletingMatchedBackups) return false;
   final ProviderContainer container = ProviderScope.containerOf(
     context,
     listen: false,
   );
   final String? backupRoot = container.read(backupRootProvider);
-  final String? tool = container.read(toolPathProvider);
+  final List<ReconcileEntry> matches = _currentMatchedBackupConflicts(
+    container,
+  );
+  if (!matches.any((entry) => entry.name.toLowerCase() == name.toLowerCase())) {
+    return false;
+  }
   final String? libraryRoot = switch (library) {
     WallpaperLibrary.workshop => backupWorkshopPath(backupRoot),
     WallpaperLibrary.myProjects => backupMyProjectsPath(backupRoot),
   };
-  if (libraryRoot == null || tool == null) {
+  if (libraryRoot == null) {
     showErrorToast(tr(AppI10n.backupActionFolderUnavailable));
     return false;
   }
@@ -347,7 +355,14 @@ Future<bool> deleteConflictingBackupVersion(
     details: <ConfirmDetail>[(label: versionLabel, value: folder)],
   );
   if (!confirmed || !context.mounted) return false;
+  if (!_currentMatchedBackupConflicts(
+    container,
+  ).any((entry) => entry.name.toLowerCase() == name.toLowerCase())) {
+    showErrorToast(tr(AppI10n.backupActionStateChanged));
+    return false;
+  }
 
+  _deletingMatchedBackups = true;
   final CancelFunc close = BotToast.showLoading();
   late final BackupActionResult result;
   try {
@@ -357,17 +372,13 @@ Future<bool> deleteConflictingBackupVersion(
       expectedRemovedFormat: format,
       expectedSurvivingFormat: survivingFormat,
       backupRoot: backupRoot,
-      verifyEquivalent: (Directory packed, Directory unpacked) async =>
-          (await verifyPackedBackupCopy(
-            tool: tool,
-            packedFolder: packed,
-            unpackedFolder: unpacked,
-          )).equivalent,
+      verifyEquivalent: _directPairEquivalent,
     );
   } catch (error) {
     result = (changed: false, error: '$error');
   } finally {
     close();
+    _deletingMatchedBackups = false;
   }
   if (result.changed) {
     _completeCachedIssues(
@@ -391,10 +402,9 @@ Future<bool> deleteConflictingBackupVersion(
 /// Removes one representation from every verified-identical packed/unpacked pair.
 Future<bool> deleteEquivalentBackupCopies(
   BuildContext context, {
-  required List<ReconcileEntry> entries,
   required BackupCopyFormat removedFormat,
 }) async {
-  if (entries.isEmpty || removedFormat == BackupCopyFormat.unknown) {
+  if (_deletingMatchedBackups || removedFormat == BackupCopyFormat.unknown) {
     return false;
   }
   final ProviderContainer container = ProviderScope.containerOf(
@@ -402,92 +412,164 @@ Future<bool> deleteEquivalentBackupCopies(
     listen: false,
   );
   final String? backupRoot = container.read(backupRootProvider);
-  final String? tool = container.read(toolPathProvider);
-  if (backupRoot == null || tool == null) {
+  if (backupRoot == null) {
     showErrorToast(tr(AppI10n.backupActionFolderUnavailable));
     return false;
   }
-  final String versionLabel = tr(
-    removedFormat == BackupCopyFormat.packed
-        ? AppI10n.backupDetailPackedBackup
-        : AppI10n.backupDetailUnpackedBackup,
+  final AsyncValue<BackupScan> scanValue = container.read(backupScanProvider);
+  if (scanValue is! AsyncData<BackupScan>) return false;
+  final BackupScan scan = scanValue.value;
+  final List<ReconcileEntry> entries = _currentMatchedBackupConflicts(
+    container,
   );
-  final bool confirmed = await showConfirmDialog(
-    title: tr(
-      AppI10n.backupActionDeleteBackupVersionsTitle,
-      namedArgs: <String, String>{'version': versionLabel},
-    ),
-    message: tr(
-      AppI10n.backupActionDeleteBackupVersionsMessage,
-      namedArgs: <String, String>{
-        'version': versionLabel,
-        'count': '${entries.length}',
-      },
-    ),
-    confirmLabel: tr(AppI10n.backupActionDeleteBackupVersion),
-    destructive: true,
-  );
-  if (!confirmed || !context.mounted) return false;
-
-  final CancelFunc close = BotToast.showLoading();
-  final List<String> errors = <String>[];
-  final Set<String> completed = <String>{};
+  if (entries.isEmpty) return false;
+  _deletingMatchedBackups = true;
   try {
-    for (final ReconcileEntry entry in entries) {
-      final BackupCopyDifference? difference = entry.backupDifference;
-      if (difference == null) continue;
-      final WallpaperLibrary? removedLibrary =
-          difference.workshopFormat == removedFormat
-          ? WallpaperLibrary.workshop
-          : difference.myProjectsFormat == removedFormat
-          ? WallpaperLibrary.myProjects
-          : null;
-      if (removedLibrary == null) continue;
-      final BackupCopyFormat survivingFormat =
-          removedLibrary == WallpaperLibrary.workshop
-          ? difference.myProjectsFormat
-          : difference.workshopFormat;
-      final BackupActionResult result = await recycleConflictingBackupCopy(
-        name: entry.name,
-        removedLibrary: removedLibrary,
-        expectedRemovedFormat: removedFormat,
-        expectedSurvivingFormat: survivingFormat,
-        backupRoot: backupRoot,
-        verifyEquivalent: (Directory packed, Directory unpacked) async =>
-            (await verifyPackedBackupCopy(
-              tool: tool,
-              packedFolder: packed,
-              unpackedFolder: unpacked,
-            )).equivalent,
-      );
-      if (result.changed) completed.add(entry.name);
-      if (result.error case final String error) {
-        errors.add('${entry.name}: $error');
-      }
-    }
-  } finally {
-    close();
-  }
-  if (completed.isNotEmpty) {
-    _completeCachedIssues(
-      container,
-      resolvedReconcileReasons: <String, Set<BackupReconcileReason>>{
-        for (final String name in completed)
-          name: <BackupReconcileReason>{
-            BackupReconcileReason.conflictingBackupCopies,
-          },
-      },
-      refreshIntegrity: true,
+    final String versionLabel = tr(
+      removedFormat == BackupCopyFormat.packed
+          ? AppI10n.backupDetailPackedBackup
+          : AppI10n.backupDetailUnpackedBackup,
     );
-    showNoticeToast(
-      tr(
-        AppI10n.backupActionDone,
-        namedArgs: <String, String>{'count': '${completed.length}'},
+    final bool confirmed = await showConfirmDialog(
+      title: tr(
+        AppI10n.backupActionDeleteBackupVersionsTitle,
+        namedArgs: <String, String>{'version': versionLabel},
       ),
+      message: tr(
+        AppI10n.backupActionDeleteBackupVersionsMessage,
+        namedArgs: <String, String>{
+          'version': versionLabel,
+          'count': '${entries.length}',
+        },
+      ),
+      confirmLabel: tr(AppI10n.backupActionDeleteBackupVersion),
+      destructive: true,
     );
+    if (!confirmed || !context.mounted) return false;
+    final List<ReconcileEntry> stillMatched = _currentMatchedBackupConflicts(
+      container,
+    );
+    if (!_sameBackupScan(container, scan, backupRoot) ||
+        stillMatched.length != entries.length ||
+        !stillMatched.every(
+          (entry) => entries.any(
+            (original) =>
+                original.name.toLowerCase() == entry.name.toLowerCase(),
+          ),
+        )) {
+      showErrorToast(tr(AppI10n.backupActionStateChanged));
+      return false;
+    }
+
+    final CancelFunc close = BotToast.showLoading();
+    final List<String> errors = <String>[];
+    final Set<String> completed = <String>{};
+    try {
+      for (final ReconcileEntry entry in entries) {
+        if (!_sameBackupScan(container, scan, backupRoot) ||
+            !_currentMatchedBackupConflicts(container).any(
+              (current) =>
+                  current.name.toLowerCase() == entry.name.toLowerCase(),
+            )) {
+          errors.add('${entry.name}: ${tr(AppI10n.backupActionStateChanged)}');
+          break;
+        }
+        final BackupCopyDifference? difference = entry.backupDifference;
+        if (difference == null) continue;
+        final WallpaperLibrary? removedLibrary =
+            difference.workshopFormat == removedFormat
+            ? WallpaperLibrary.workshop
+            : difference.myProjectsFormat == removedFormat
+            ? WallpaperLibrary.myProjects
+            : null;
+        if (removedLibrary == null) continue;
+        final BackupCopyFormat survivingFormat =
+            removedLibrary == WallpaperLibrary.workshop
+            ? difference.myProjectsFormat
+            : difference.workshopFormat;
+        final BackupActionResult result = await recycleConflictingBackupCopy(
+          name: entry.name,
+          removedLibrary: removedLibrary,
+          expectedRemovedFormat: removedFormat,
+          expectedSurvivingFormat: survivingFormat,
+          backupRoot: backupRoot,
+          verifyEquivalent: _directPairEquivalent,
+        );
+        if (result.changed) completed.add(entry.name);
+        if (result.error case final String error) {
+          errors.add('${entry.name}: $error');
+        }
+      }
+    } finally {
+      close();
+    }
+    if (completed.isNotEmpty) {
+      if (_sameBackupScan(container, scan, backupRoot)) {
+        _completeCachedIssues(
+          container,
+          resolvedReconcileReasons: <String, Set<BackupReconcileReason>>{
+            for (final String name in completed)
+              name: <BackupReconcileReason>{
+                BackupReconcileReason.conflictingBackupCopies,
+              },
+          },
+          refreshIntegrity: true,
+        );
+      }
+      showNoticeToast(
+        tr(
+          AppI10n.backupActionDone,
+          namedArgs: <String, String>{'count': '${completed.length}'},
+        ),
+      );
+    }
+    if (errors.isNotEmpty) showErrorToast(errors.join('\n'));
+    return completed.isNotEmpty;
+  } finally {
+    _deletingMatchedBackups = false;
   }
-  if (errors.isNotEmpty) showErrorToast(errors.join('\n'));
-  return completed.isNotEmpty;
+}
+
+List<ReconcileEntry> _currentMatchedBackupConflicts(
+  ProviderContainer container,
+) {
+  final String? backupRoot = container.read(backupRootProvider);
+  if (container.read(backupScanProvider) case AsyncData<BackupScan>(
+    :final BackupScan value,
+  )) {
+    return container
+        .read(backupDirectBatchProvider)
+        .matchedEntries(
+          scan: value,
+          backupRoot: backupRoot,
+          entries: visibleBackupReconcileEntries(
+            value,
+            container.read(backupResolvedIssuesProvider),
+          ),
+        );
+  }
+  return const <ReconcileEntry>[];
+}
+
+Future<bool> _directPairEquivalent(
+  Directory packed,
+  Directory unpacked,
+) async =>
+    (await probePackedBackupCopyDirect(
+      packedFolder: packed,
+      unpackedFolder: unpacked,
+    )).status ==
+    DirectBackupProbeStatus.candidateMatch;
+
+bool _sameBackupScan(
+  ProviderContainer container,
+  BackupScan scan,
+  String backupRoot,
+) {
+  final AsyncValue<BackupScan> current = container.read(backupScanProvider);
+  return container.read(backupRootProvider) == backupRoot &&
+      current is AsyncData<BackupScan> &&
+      identical(current.value, scan);
 }
 
 Future<bool> showAllIgnoredDetections(

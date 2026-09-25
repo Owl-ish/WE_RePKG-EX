@@ -41,6 +41,10 @@ class AppI10n {
   static const String backupDirectCheckStopping = 'backup.directCheckStopping';
   static const String backupDirectCheckProgress = 'backup.directCheckProgress';
   static const String backupDirectCheckMatch = 'backup.directCheckMatch';
+  static const String backupDirectCheckDeletePacked =
+      'backup.directCheckDeletePacked';
+  static const String backupDirectCheckDeleteUnpacked =
+      'backup.directCheckDeleteUnpacked';
   static const String backupDirectCheckScanning = 'backup.directCheckScanning';
   static const String backupDirectCheckWorkshop = 'backup.directCheckWorkshop';
   static const String backupDirectCheckMyProjects =

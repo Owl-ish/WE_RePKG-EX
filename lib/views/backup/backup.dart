@@ -603,6 +603,13 @@ class _Loaded extends ConsumerWidget {
               final int review = check.results.length - matches - different;
               final bool canResume =
                   check.cancelled && check.done < checkableCount;
+              final int actionableMatches = batch
+                  .matchedEntries(
+                    scan: scan,
+                    backupRoot: ref.read(backupRootProvider),
+                    entries: reconcile,
+                  )
+                  .length;
               return Padding(
                 padding: const EdgeInsets.only(top: LayoutNums.contentGap),
                 child: Column(
@@ -657,6 +664,49 @@ class _Loaded extends ConsumerWidget {
                             'different': '$different',
                             'review': '$review',
                           },
+                        ),
+                      ),
+                    ],
+                    if (actionableMatches > 0) ...<Widget>[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: <Widget>[
+                            BackupBulkActionButton(
+                              label: tr(
+                                AppI10n.backupDirectCheckDeletePacked,
+                                namedArgs: <String, String>{
+                                  'count': '$actionableMatches',
+                                },
+                              ),
+                              icon: Icons.delete_outline,
+                              colour: Theme.of(context).status.bad,
+                              destructive: true,
+                              onPressed: () => deleteEquivalentBackupCopies(
+                                context,
+                                removedFormat: BackupCopyFormat.packed,
+                              ),
+                            ),
+                            BackupBulkActionButton(
+                              label: tr(
+                                AppI10n.backupDirectCheckDeleteUnpacked,
+                                namedArgs: <String, String>{
+                                  'count': '$actionableMatches',
+                                },
+                              ),
+                              icon: Icons.delete_outline,
+                              colour: Theme.of(context).status.bad,
+                              destructive: true,
+                              onPressed: () => deleteEquivalentBackupCopies(
+                                context,
+                                removedFormat: BackupCopyFormat.unpacked,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
