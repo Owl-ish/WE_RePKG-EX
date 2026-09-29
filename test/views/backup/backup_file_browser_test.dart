@@ -8,6 +8,7 @@ import 'package:we_repkg/cores/backup.dart';
 import 'package:we_repkg/views/backup/details/backup_file_browser.dart';
 import 'package:we_repkg/views/backup/details/content_details.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
+import 'package:we_repkg/widgets/input_controls.dart';
 
 Future<void> _waitFor(WidgetTester tester, Finder finder) async {
   for (int attempt = 0; attempt < 80 && finder.evaluate().isEmpty; attempt++) {
@@ -507,5 +508,220 @@ void main() {
       expect(guidance.maxLines, isNull);
       expect(guidance.overflow, isNull);
     }
+  });
+
+  testWidgets(
+    'conflicting backups switch between folder and underlying files',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 750));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: BackupFileBrowser(
+            wallpaperName: 'pair',
+            liveFolder: r'C:\packed',
+            backupFolder: r'C:\unpacked',
+            comparisonOnly: true,
+            overview: (
+              differentSize: <String>[],
+              onlyFirst: <String>['scene.pkg'],
+              onlySecond: <String>['scene.json'],
+              shared: <String>[],
+            ),
+            underlyingDifferences: (
+              differentSize: <String>['materials/changed.tex'],
+              onlyFirst: <String>[],
+              onlySecond: <String>['materials/new.json'],
+              shared: <String>[],
+            ),
+            packedSource: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('scene.pkg'), findsOneWidget);
+      expect(find.text('changed.tex'), findsNothing);
+      expect(
+        tester
+            .getSize(
+              find.byKey(
+                const ValueKey<String>('backup-difference-view-toggle'),
+              ),
+            )
+            .width,
+        lessThanOrEqualTo(320),
+      );
+      final Finder compareBar = find.byType(FileTreeCompareBar);
+      final Finder linkedScroll = find.byKey(
+        const ValueKey<String>('update-link-scrolling'),
+      );
+      expect(tester.getCenter(compareBar).dx, closeTo(550, 2));
+      expect(
+        tester.getCenter(compareBar).dy,
+        lessThan(tester.getCenter(linkedScroll).dy),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('backup-difference-view-toggle')),
+      );
+      await tester.pump();
+      expect(find.text('scene.pkg'), findsNothing);
+      expect(find.text('changed.tex'), findsNWidgets(2));
+      expect(find.text('new.json'), findsOneWidget);
+      expect(
+        find.byKey(
+          const ValueKey<String>('update-pair-compare-materials/changed.tex'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('backup-difference-view-toggle')),
+      );
+      await tester.pump();
+      expect(find.text('scene.pkg'), findsOneWidget);
+      await tester.binding.setSurfaceSize(const Size(340, 700));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(
+              find.byKey(
+                const ValueKey<String>('backup-difference-view-toggle'),
+              ),
+            )
+            .width,
+        lessThanOrEqualTo(340),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('view switch is a compact slider', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SlidingSegmentedToggle(
+              firstLabel: 'Dark',
+              secondLabel: 'Light',
+              secondSelected: false,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(SlidingSegmentedToggle), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(SlidingSegmentedToggle)).width,
+      lessThan(200),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('matched packed pair opens on true differences', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 750));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: BackupFileBrowser(
+          wallpaperName: 'pair',
+          liveFolder: r'C:\packed',
+          backupFolder: r'C:\unpacked',
+          comparisonOnly: true,
+          packedSource: true,
+          semanticMatch: true,
+          defaultTrueDifferences: true,
+          overview: (
+            differentSize: <String>[],
+            onlyFirst: <String>['scene.pkg'],
+            onlySecond: <String>['scene.json'],
+            shared: <String>[],
+          ),
+          underlyingDifferences: (
+            differentSize: <String>[],
+            onlyFirst: <String>[],
+            onlySecond: <String>[],
+            shared: <String>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('scene.pkg'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('backup-comparison-banner')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(AppI10n.backupDetailPackedUnpackedMatchBanner),
+      findsOneWidget,
+    );
+    expect(find.text(AppI10n.backupDetailIdenticalContents), findsNWidgets(2));
+    expect(
+      find.byKey(const ValueKey<String>('backup-unpack-for-inspection')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('backup-difference-view-toggle')),
+    );
+    await tester.pump();
+    expect(find.text('scene.pkg'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('true differences compare opens the shared file viewer', (
+    tester,
+  ) async {
+    final Directory root = Directory.systemTemp.createTempSync(
+      'true_diff_view_',
+    );
+    addTearDown(() => root.deleteSync(recursive: true));
+    final Directory packed = Directory('${root.path}/packed')..createSync();
+    final Directory unpacked = Directory('${root.path}/unpacked')..createSync();
+    for (final (Directory folder, String value) in <(Directory, String)>[
+      (packed, 'packed'),
+      (unpacked, 'unpacked'),
+    ]) {
+      final File file = File('${folder.path}/materials/changed.json');
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync('{"version":"$value"}');
+    }
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BackupFileBrowser(
+          wallpaperName: 'pair',
+          liveFolder: packed.path,
+          backupFolder: unpacked.path,
+          comparisonOnly: true,
+          overview: (
+            differentSize: <String>[],
+            onlyFirst: <String>[],
+            onlySecond: <String>[],
+            shared: <String>[],
+          ),
+          underlyingDifferences: (
+            differentSize: <String>['materials/changed.json'],
+            onlyFirst: <String>[],
+            onlySecond: <String>[],
+            shared: <String>[],
+          ),
+          packedSource: true,
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('backup-difference-view-toggle')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('update-pair-compare-materials/changed.json'),
+      ),
+    );
+    await _waitFor(
+      tester,
+      find.byKey(const ValueKey<String>('file-text-compare-dialog')),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

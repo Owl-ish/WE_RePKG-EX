@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -26,6 +27,16 @@ typedef BackupActionRunner =
     );
 
 bool _deletingMatchedBackups = false;
+bool _deletingDuplicateLiveCopies = false;
+
+enum DuplicateLiveOperationStage { checking, deleting }
+
+typedef DuplicateLiveOperationProgress = ({
+  DuplicateLiveOperationStage stage,
+  int done,
+  int total,
+  WallpaperLibrary location,
+});
 
 Future<bool> applyBackupAction(
   BuildContext context,
@@ -312,6 +323,178 @@ Future<bool> deleteDuplicateLiveVersion(
   return result.changed;
 }
 
+Future<bool> deleteIdenticalLiveCopies(
+  BuildContext context, {
+  required WallpaperLibrary removedLibrary,
+  required void Function(DuplicateLiveOperationProgress?) onProgress,
+}) async {
+  if (_deletingDuplicateLiveCopies) return false;
+  final ProviderContainer container = ProviderScope.containerOf(
+    context,
+    listen: false,
+  );
+  final AsyncValue<BackupScan> scanValue = container.read(backupScanProvider);
+  if (scanValue is! AsyncData<BackupScan>) return false;
+  final BackupScan scan = scanValue.value;
+  final String? backupRoot = container.read(backupRootProvider);
+  final String? workshopRoot = container.read(wallpaperPathProvider);
+  final String? myProjectsRoot = container.read(myProjectsLibraryProvider);
+  if (backupRoot == null || workshopRoot == null || myProjectsRoot == null) {
+    showErrorToast(tr(AppI10n.backupActionFolderUnavailable));
+    return false;
+  }
+  final List<ReconcileEntry> candidates =
+      visibleBackupReconcileEntries(
+            scan,
+            container.read(backupResolvedIssuesProvider),
+          )
+          .where(
+            (entry) =>
+                entry.activeReasons.contains(
+                  BackupReconcileReason.duplicateLiveCopies,
+                ) &&
+                (removedLibrary == WallpaperLibrary.workshop
+                    ? entry.liveWorkshop
+                    : entry.liveMyProjects),
+          )
+          .toList();
+  if (candidates.isEmpty) return false;
+  bool rootsUnchanged() =>
+      _sameBackupScan(container, scan, backupRoot) &&
+      container.read(wallpaperPathProvider) == workshopRoot &&
+      container.read(myProjectsLibraryProvider) == myProjectsRoot;
+
+  _deletingDuplicateLiveCopies = true;
+  try {
+    final List<ReconcileEntry> identical = [];
+    onProgress((
+      stage: DuplicateLiveOperationStage.checking,
+      done: 0,
+      total: candidates.length,
+      location: removedLibrary,
+    ));
+    for (final (index, entry) in candidates.indexed) {
+      if (!rootsUnchanged()) return false;
+      if (await _liveFoldersEquivalent(
+        Directory(path.join(workshopRoot, entry.name)),
+        Directory(path.join(myProjectsRoot, entry.name)),
+      )) {
+        identical.add(entry);
+      }
+      onProgress((
+        stage: DuplicateLiveOperationStage.checking,
+        done: index + 1,
+        total: candidates.length,
+        location: removedLibrary,
+      ));
+    }
+    if (!context.mounted) return false;
+    if (identical.isEmpty) {
+      showNoticeToast(tr(AppI10n.backupActionNoIdenticalLiveCopies));
+      return false;
+    }
+    final String libraryLabel = tr(
+      removedLibrary == WallpaperLibrary.workshop
+          ? AppI10n.backupDetailWorkshopLive
+          : AppI10n.backupDetailMyProjectsLive,
+    );
+    final bool confirmed = await showConfirmDialog(
+      title: tr(
+        AppI10n.backupActionDeleteIdenticalLiveTitle,
+        namedArgs: <String, String>{'version': libraryLabel},
+      ),
+      message: tr(
+        AppI10n.backupActionDeleteIdenticalLiveMessage,
+        namedArgs: <String, String>{
+          'count': '${identical.length}',
+          'skipped': '${candidates.length - identical.length}',
+          'version': libraryLabel,
+        },
+      ),
+      confirmLabel: tr(AppI10n.backupActionDeleteLiveVersion),
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return false;
+    if (!rootsUnchanged()) {
+      showErrorToast(tr(AppI10n.backupActionStateChanged));
+      return false;
+    }
+
+    final Set<String> completed = {};
+    final List<String> errors = [];
+    onProgress((
+      stage: DuplicateLiveOperationStage.deleting,
+      done: 0,
+      total: identical.length,
+      location: removedLibrary,
+    ));
+    for (final (index, entry) in identical.indexed) {
+      if (!rootsUnchanged()) {
+        errors.add(tr(AppI10n.backupActionStateChanged));
+        break;
+      }
+      final BackupActionResult result = await recycleDuplicateLiveCopy(
+        name: entry.name,
+        removedLibrary: removedLibrary,
+        liveWorkshopPath: workshopRoot,
+        liveMyProjectsPath: myProjectsRoot,
+        verifyEquivalent: _liveFoldersEquivalent,
+      );
+      if (result.changed) completed.add(entry.name);
+      if (result.error case final String error) {
+        errors.add('${entry.name}: $error');
+      }
+      onProgress((
+        stage: DuplicateLiveOperationStage.deleting,
+        done: index + 1,
+        total: identical.length,
+        location: removedLibrary,
+      ));
+    }
+    if (completed.isNotEmpty && rootsUnchanged()) {
+      _completeCachedIssues(
+        container,
+        resolvedReconcileReasons: {
+          for (final name in completed)
+            name: <BackupReconcileReason>{
+              BackupReconcileReason.duplicateLiveCopies,
+            },
+        },
+        refreshIntegrity: true,
+      );
+    }
+    if (completed.isNotEmpty) {
+      showNoticeToast(
+        tr(
+          AppI10n.backupActionDone,
+          namedArgs: <String, String>{'count': '${completed.length}'},
+        ),
+      );
+    }
+    if (errors.isNotEmpty) showErrorToast(errors.join('\n'));
+    return completed.isNotEmpty;
+  } finally {
+    _deletingDuplicateLiveCopies = false;
+    onProgress(null);
+  }
+}
+
+Future<bool> _liveFoldersEquivalent(Directory first, Directory second) async {
+  try {
+    final FolderFileComparison? comparison = await compareFolderFilesDetailed(
+      firstFolder: first.path,
+      secondFolder: second.path,
+    );
+    return comparison != null &&
+        comparison.matching.isNotEmpty &&
+        comparison.changes.modified.isEmpty &&
+        comparison.changes.onlyFirst.isEmpty &&
+        comparison.changes.onlySecond.isEmpty;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Resolves a packed/unpacked backup conflict after the user chooses a copy.
 Future<bool> deleteConflictingBackupVersion(
   BuildContext context, {
@@ -320,6 +503,8 @@ Future<bool> deleteConflictingBackupVersion(
   required BackupCopyFormat format,
   required BackupCopyFormat survivingFormat,
   required String versionLabel,
+  DirectBackupProbe? reviewedDifference,
+  BackupCopyDifference? reviewedOtherConflict,
 }) async {
   if (_deletingMatchedBackups) return false;
   final ProviderContainer container = ProviderScope.containerOf(
@@ -327,10 +512,14 @@ Future<bool> deleteConflictingBackupVersion(
     listen: false,
   );
   final String? backupRoot = container.read(backupRootProvider);
-  final List<ReconcileEntry> matches = _currentMatchedBackupConflicts(
-    container,
-  );
-  if (!matches.any((entry) => entry.name.toLowerCase() == name.toLowerCase())) {
+  bool stillReviewed() =>
+      container.read(backupRootProvider) == backupRoot &&
+      (reviewedOtherConflict != null
+          ? _currentOtherBackupConflict(container, name, reviewedOtherConflict)
+          : reviewedDifference == null
+          ? _currentMatchedBackupConflict(container, name)
+          : _currentReviewedDifference(container, name, reviewedDifference));
+  if (!stillReviewed()) {
     return false;
   }
   final String? libraryRoot = switch (library) {
@@ -348,16 +537,17 @@ Future<bool> deleteConflictingBackupVersion(
       namedArgs: <String, String>{'version': versionLabel},
     ),
     message: tr(
-      AppI10n.backupActionDeleteBackupVersionMessage,
+      reviewedDifference == null && reviewedOtherConflict == null
+          ? AppI10n.backupActionDeleteBackupVersionMessage
+          : AppI10n.backupActionDeleteDifferentBackupVersionMessage,
       namedArgs: <String, String>{'version': versionLabel},
     ),
     confirmLabel: tr(AppI10n.backupActionDeleteBackupVersion),
+    destructive: true,
     details: <ConfirmDetail>[(label: versionLabel, value: folder)],
   );
   if (!confirmed || !context.mounted) return false;
-  if (!_currentMatchedBackupConflicts(
-    container,
-  ).any((entry) => entry.name.toLowerCase() == name.toLowerCase())) {
+  if (!stillReviewed()) {
     showErrorToast(tr(AppI10n.backupActionStateChanged));
     return false;
   }
@@ -366,14 +556,30 @@ Future<bool> deleteConflictingBackupVersion(
   final CancelFunc close = BotToast.showLoading();
   late final BackupActionResult result;
   try {
-    result = await recycleConflictingBackupCopy(
-      name: name,
-      removedLibrary: library,
-      expectedRemovedFormat: format,
-      expectedSurvivingFormat: survivingFormat,
-      backupRoot: backupRoot,
-      verifyEquivalent: _directPairEquivalent,
-    );
+    result = reviewedOtherConflict != null
+        ? await recycleReviewedBackupCopy(
+            name: name,
+            removedLibrary: library,
+            expectedRemovedFormat: format,
+            expectedSurvivingFormat: survivingFormat,
+            backupRoot: backupRoot,
+            verifyExpectedPair: (removed, surviving) async =>
+                await removed.exists() && await surviving.exists(),
+          )
+        : await recycleConflictingBackupCopy(
+            name: name,
+            removedLibrary: library,
+            expectedRemovedFormat: format,
+            expectedSurvivingFormat: survivingFormat,
+            backupRoot: backupRoot,
+            verifyExpectedPair: reviewedDifference == null
+                ? _directPairEquivalent
+                : (packed, unpacked) => _directPairStillDifferent(
+                    packed,
+                    unpacked,
+                    reviewedDifference,
+                  ),
+          );
   } catch (error) {
     result = (changed: false, error: '$error');
   } finally {
@@ -493,7 +699,7 @@ Future<bool> deleteEquivalentBackupCopies(
           expectedRemovedFormat: removedFormat,
           expectedSurvivingFormat: survivingFormat,
           backupRoot: backupRoot,
-          verifyEquivalent: _directPairEquivalent,
+          verifyExpectedPair: _directPairEquivalent,
         );
         if (result.changed) completed.add(entry.name);
         if (result.error case final String error) {
@@ -549,6 +755,91 @@ List<ReconcileEntry> _currentMatchedBackupConflicts(
         );
   }
   return const <ReconcileEntry>[];
+}
+
+bool _currentMatchedBackupConflict(ProviderContainer container, String name) {
+  final AsyncValue<BackupScan> scanValue = container.read(backupScanProvider);
+  if (scanValue is! AsyncData<BackupScan>) return false;
+  final BackupScan scan = scanValue.value;
+  final BackupDirectBatchState check = container
+      .read(backupDirectBatchProvider)
+      .forScan(scan, container.read(backupRootProvider));
+  if (check.results[name.toLowerCase()]?.status !=
+      DirectBackupProbeStatus.candidateMatch) {
+    return false;
+  }
+  return visibleBackupReconcileEntries(
+    scan,
+    container.read(backupResolvedIssuesProvider),
+  ).any(
+    (entry) =>
+        entry.name.toLowerCase() == name.toLowerCase() &&
+        BackupDirectBatch.eligible(entry),
+  );
+}
+
+bool _currentReviewedDifference(
+  ProviderContainer container,
+  String name,
+  DirectBackupProbe reviewed,
+) {
+  final AsyncValue<BackupScan> scanValue = container.read(backupScanProvider);
+  if (scanValue is! AsyncData<BackupScan>) return false;
+  final BackupScan scan = scanValue.value;
+  final BackupDirectBatchState check = container
+      .read(backupDirectBatchProvider)
+      .forScan(scan, container.read(backupRootProvider));
+  if (!identical(check.results[name.toLowerCase()], reviewed) ||
+      (reviewed.status != DirectBackupProbeStatus.different &&
+          reviewed.status != DirectBackupProbeStatus.differentIncomplete)) {
+    return false;
+  }
+  return visibleBackupReconcileEntries(
+    scan,
+    container.read(backupResolvedIssuesProvider),
+  ).any(
+    (entry) =>
+        entry.name.toLowerCase() == name.toLowerCase() &&
+        BackupDirectBatch.eligible(entry),
+  );
+}
+
+bool _currentOtherBackupConflict(
+  ProviderContainer container,
+  String name,
+  BackupCopyDifference reviewed,
+) {
+  final AsyncValue<BackupScan> scanValue = container.read(backupScanProvider);
+  if (scanValue is! AsyncData<BackupScan>) return false;
+  final BackupScan scan = scanValue.value;
+  return visibleBackupReconcileEntries(
+    scan,
+    container.read(backupResolvedIssuesProvider),
+  ).any(
+    (entry) =>
+        entry.name.toLowerCase() == name.toLowerCase() &&
+        entry.activeReasons.contains(
+          BackupReconcileReason.conflictingBackupCopies,
+        ) &&
+        identical(entry.backupDifference, reviewed) &&
+        !BackupDirectBatch.isPackedUnpackedConflict(entry),
+  );
+}
+
+Future<bool> _directPairStillDifferent(
+  Directory packed,
+  Directory unpacked,
+  DirectBackupProbe reviewed,
+) async {
+  final DirectBackupProbe fresh = await probePackedBackupCopyDirect(
+    packedFolder: packed,
+    unpackedFolder: unpacked,
+  );
+  return fresh.status == reviewed.status &&
+      listEquals(fresh.changes.modified, reviewed.changes.modified) &&
+      listEquals(fresh.changes.onlyPacked, reviewed.changes.onlyPacked) &&
+      listEquals(fresh.changes.onlyUnpacked, reviewed.changes.onlyUnpacked) &&
+      setEquals(fresh.reasons, reviewed.reasons);
 }
 
 Future<bool> _directPairEquivalent(

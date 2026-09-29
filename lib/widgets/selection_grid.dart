@@ -28,12 +28,16 @@ class SelectionGridSection {
     this.header,
     this.headerExtent,
     this.headerPinned = false,
+    this.afterHeader,
+    this.afterHeaderExtent,
+    this.identity,
     this.gridPadding = const EdgeInsets.only(
       top: LayoutNums.contentGap,
       bottom: LayoutNums.sectionGap,
     ),
   }) : assert(beforeHeader == null || beforeHeaderExtent != null),
-       assert(header == null || headerExtent != null);
+       assert(header == null || headerExtent != null),
+       assert(afterHeader == null || afterHeaderExtent != null);
 
   final int itemCount;
   final Widget? beforeHeader;
@@ -41,6 +45,11 @@ class SelectionGridSection {
   final Widget? header;
   final double? headerExtent;
   final bool headerPinned;
+  final Widget? afterHeader;
+  final double? afterHeaderExtent;
+
+  /// Stable category identity for animating a tile into another section.
+  final Object? identity;
   final EdgeInsets gridPadding;
 }
 
@@ -208,6 +217,7 @@ class SelectionGrid extends StatefulWidget {
     this.entranceToken = 0,
     this.entranceOnMount = true,
     this.reflowIdentity,
+    this.animateGroupedChanges = false,
     this.sections = const <SelectionGridSection>[],
   });
 
@@ -249,6 +259,9 @@ class SelectionGrid extends StatefulWidget {
   /// Changing this accepts the new ids immediately instead of animating them from
   /// the previous list. Search and sort can keep the same identity and still reflow.
   final Object? reflowIdentity;
+
+  /// Animate cards that change sections while keeping grouped headers in place.
+  final bool animateGroupedChanges;
 
   /// Optional grouped presentation. [itemCount], [idAt], and [itemBuilder]
   /// still describe one flat list; sections only partition that list visually.
@@ -323,6 +336,8 @@ class _SelectionGridState extends State<SelectionGrid>
   /// carries it to where it sits now. Empty except while one is running.
   late final AnimationController _reflow;
   Map<String, int> _reflowFrom = const <String, int>{};
+  Map<String, ({Object section, int localIndex})> _groupFrom = const {};
+  Map<String, ({Object section, int localIndex})> _groupTo = const {};
   List<String> _shown = const <String>[];
 
   /// The furthest any tile has to travel this reflow, in places rather than
@@ -355,7 +370,11 @@ class _SelectionGridState extends State<SelectionGrid>
     _reflow = AnimationController(vsync: this, duration: _reflowDuration)
       ..addStatusListener((AnimationStatus status) {
         if (status == AnimationStatus.completed && mounted) {
-          setState(() => _reflowFrom = const <String, int>{});
+          setState(() {
+            _reflowFrom = const <String, int>{};
+            _groupFrom = const {};
+            _groupTo = const {};
+          });
         }
       });
     _shown = _ids();
@@ -381,10 +400,16 @@ class _SelectionGridState extends State<SelectionGrid>
       _acceptListWithoutReflow();
       return;
     }
-    // Section headers change the main-axis geometry, so grouped lists do not
-    // pretend their flat indexes describe a reflow path through those headers.
+    // Section headers change the main-axis geometry. Animate within each
+    // section or fade across sections instead of using flat list indexes.
     if (widget.sections.isNotEmpty || old.sections.isNotEmpty) {
-      _acceptListWithoutReflow();
+      if (widget.animateGroupedChanges &&
+          widget.sections.isNotEmpty &&
+          old.sections.isNotEmpty) {
+        _reflowGroupedTiles(old);
+      } else {
+        _acceptListWithoutReflow();
+      }
       return;
     }
     _reflowIfListMoved();
@@ -393,7 +418,39 @@ class _SelectionGridState extends State<SelectionGrid>
   void _acceptListWithoutReflow() {
     _reflow.stop();
     _reflowFrom = const <String, int>{};
+    _groupFrom = const {};
+    _groupTo = const {};
     _shown = _ids();
+  }
+
+  Map<String, ({Object section, int localIndex})> _groupPositions(
+    List<String> ids,
+    List<SelectionGridSection> sections,
+  ) {
+    final positions = <String, ({Object section, int localIndex})>{};
+    int start = 0;
+    for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+      final SelectionGridSection section = sections[sectionIndex];
+      final Object identity = section.identity ?? sectionIndex;
+      for (int local = 0; local < section.itemCount; local++) {
+        positions[ids[start + local]] = (section: identity, localIndex: local);
+      }
+      start += section.itemCount;
+    }
+    return positions;
+  }
+
+  void _reflowGroupedTiles(SelectionGrid old) {
+    final List<String> now = _ids();
+    final before = _groupPositions(_shown, old.sections);
+    final after = _groupPositions(now, widget.sections);
+    _shown = now;
+    if (mapEquals(before, after)) return;
+    if (!_entranceDone) _finishEntrance();
+    _reflowFrom = const <String, int>{};
+    _groupFrom = before;
+    _groupTo = after;
+    _reflow.forward(from: 0);
   }
 
   List<String> _ids() => <String>[
@@ -470,7 +527,13 @@ class _SelectionGridState extends State<SelectionGrid>
   /// unwrapping re-parents the image inside, and an image rebuilt into a new
   /// position paints its white background for a frame before the picture
   /// returns, which reads as the whole grid flashing.
-  Widget _reflowed(Widget tile, String id, int index, GridGeometry geometry) {
+  Widget _reflowed(
+    Widget tile,
+    String id,
+    int index,
+    GridGeometry geometry, {
+    bool grouped = false,
+  }) {
     return AnimatedBuilder(
       animation: _reflow,
       builder: (BuildContext context, Widget? child) {
@@ -478,7 +541,22 @@ class _SelectionGridState extends State<SelectionGrid>
         double scale = 1;
         Offset shift = Offset.zero;
 
-        if (_reflowFrom.isNotEmpty) {
+        if (grouped && _groupTo.isNotEmpty) {
+          final previous = _groupFrom[id];
+          final current = _groupTo[id];
+          if (current != null && previous != current) {
+            final double t = Curves.easeOutCubic.transform(_reflow.value);
+            if (previous != null && previous.section == current.section) {
+              shift =
+                  (_cellAt(previous.localIndex, geometry) -
+                      _cellAt(current.localIndex, geometry)) *
+                  (1 - t);
+            } else {
+              opacity = t;
+              scale = .9 + .1 * t;
+            }
+          }
+        } else if (_reflowFrom.isNotEmpty) {
           final double t = Curves.easeOutCubic.transform(_reflow.value);
           final int? from = _reflowFrom[id];
           final bool slides =
@@ -679,6 +757,7 @@ class _SelectionGridState extends State<SelectionGrid>
     for (final SelectionGridSection section in _sections()) {
       if (section.beforeHeader != null) top += section.beforeHeaderExtent!;
       if (section.header != null) top += section.headerExtent!;
+      if (section.afterHeader != null) top += section.afterHeaderExtent!;
       final Offset origin = Offset(
         section.gridPadding.left,
         top + section.gridPadding.top,
@@ -723,6 +802,13 @@ class _SelectionGridState extends State<SelectionGrid>
                 SliverToBoxAdapter(
                   child: SizedBox(height: section.headerExtent, child: header),
                 ),
+            if (section.afterHeader case final Widget afterHeader)
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: section.afterHeaderExtent,
+                  child: afterHeader,
+                ),
+              ),
             SliverPadding(
               padding: section.gridPadding,
               sliver: SliverGrid(
@@ -735,12 +821,13 @@ class _SelectionGridState extends State<SelectionGrid>
                   (BuildContext context, int localIndex) {
                     final int index = sectionStart + localIndex;
                     Widget child = widget.itemBuilder(context, index, geometry);
-                    if (!grouped) {
+                    if (!grouped || widget.animateGroupedChanges) {
                       child = _reflowed(
                         child,
                         widget.idAt(index),
-                        index,
+                        grouped ? localIndex : index,
                         geometry,
+                        grouped: grouped,
                       );
                     }
                     return _arriving(

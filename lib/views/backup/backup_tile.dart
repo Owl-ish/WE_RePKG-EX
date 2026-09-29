@@ -195,8 +195,10 @@ class ReconcileTileView extends StatelessWidget {
     this.ignored = false,
     this.reasonOverride,
     this.selectionIdOverride,
-    this.contentStatus,
+    this.contentProbe,
     this.contentScanning = false,
+    this.primaryBadge,
+    this.canDeleteMatchedCopy = false,
   });
 
   final double width;
@@ -209,18 +211,25 @@ class ReconcileTileView extends StatelessWidget {
   final bool ignored;
   final BackupReconcileReason? reasonOverride;
   final String? selectionIdOverride;
-  final DirectBackupProbeStatus? contentStatus;
+  final DirectBackupProbe? contentProbe;
   final bool contentScanning;
+  final TileBadgeData? primaryBadge;
+  final bool canDeleteMatchedCopy;
 
   @override
   Widget build(BuildContext context) {
+    final BackupReconcileReason? primaryReason =
+        reasonOverride ??
+        (ignored
+            ? tile.entry.ignoredPrimaryReason
+            : tile.entry.activePrimaryReason);
     final List<TileBadgeData> issueBadges = _reconcileBadges(
       context,
       tile.entry,
       ignored: ignored,
       reasonOverride: reasonOverride,
     );
-    if (contentStatus case final DirectBackupProbeStatus status) {
+    if (contentProbe?.status case final DirectBackupProbeStatus status) {
       final (String label, Color colour) = switch (status) {
         DirectBackupProbeStatus.candidateMatch => (
           tr(AppI10n.backupDirectCheckMatch),
@@ -293,6 +302,8 @@ class ReconcileTileView extends StatelessWidget {
       liveWorkshopRoot: liveWorkshopRoot,
       liveMyProjectsRoot: liveMyProjectsRoot,
       reconcileEntry: tile.entry,
+      contentProbe: contentProbe,
+      canDeleteMatchedCopy: canDeleteMatchedCopy,
       reconcileIgnored: ignored,
       reconcileReasonOverride: reasonOverride,
       action: ignored ? BackupAction.showUpdateAgain : null,
@@ -304,7 +315,17 @@ class ReconcileTileView extends StatelessWidget {
               reasonOverride!,
             )
           : null,
-      badges: issueBadges,
+      badges: <TileBadgeData>[
+        if (contentScanning)
+          TileBadgeData(
+            text: tr(AppI10n.backupDirectCheckScanning),
+            colour: Theme.of(context).status.warn,
+          )
+        else if (primaryBadge case final TileBadgeData badge)
+          badge
+        else if (primaryReason != null)
+          _reconcileReasonBadge(context, primaryReason),
+      ],
       issueBadges: issueBadges,
     );
   }
@@ -335,6 +356,8 @@ class _TileFrame extends ConsumerStatefulWidget {
     this.backupCard,
     this.detailText,
     this.reconcileEntry,
+    this.contentProbe,
+    this.canDeleteMatchedCopy = false,
     this.reconcileIgnored = false,
     this.reconcileReasonOverride,
   });
@@ -362,6 +385,8 @@ class _TileFrame extends ConsumerStatefulWidget {
   final BackupCard? backupCard;
   final String? detailText;
   final ReconcileEntry? reconcileEntry;
+  final DirectBackupProbe? contentProbe;
+  final bool canDeleteMatchedCopy;
   final bool reconcileIgnored;
   final BackupReconcileReason? reconcileReasonOverride;
 
@@ -553,6 +578,11 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     required String? sourceFolder,
     required String? destinationFolder,
     required Future<FolderFileOverview?> comparison,
+    FolderFileOverview? underlyingDifferences,
+    bool? packedSource,
+    bool underlyingIncomplete = false,
+    bool semanticMatch = false,
+    bool defaultTrueDifferences = false,
     required String sourceLabel,
     required String destinationLabel,
     required String sourceOnlyTitle,
@@ -582,6 +612,11 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           wallpaperName: widget.name,
           wallpaper: wallpaper,
           overview: preparedComparison,
+          underlyingDifferences: underlyingDifferences,
+          packedSource: packedSource,
+          underlyingIncomplete: underlyingIncomplete,
+          semanticMatch: semanticMatch,
+          defaultTrueDifferences: defaultTrueDifferences,
           liveFolder: sourceFolder,
           backupFolder: destinationFolder,
           comparisonOnly: true,
@@ -618,21 +653,7 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     }
   }
 
-  Widget _detailIssueBadges() {
-    final ReconcileEntry? entry = widget.reconcileEntry;
-    if (entry == null) return TileBadgeStrip(badges: widget.issueBadges);
-    final bool ignored = widget.reconcileIgnored;
-    final BackupReconcileReason? reasonOverride =
-        widget.reconcileReasonOverride;
-    return TileBadgeStrip(
-      badges: _reconcileBadges(
-        context,
-        entry,
-        ignored: ignored,
-        reasonOverride: reasonOverride,
-      ),
-    );
-  }
+  Widget _detailIssueBadges() => TileBadgeStrip(badges: widget.issueBadges);
 
   String? _backupFolderFor(WallpaperLibrary library, String name) {
     final String? libraryPath = switch (library) {
@@ -874,6 +895,16 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
       final String myProjectsLabel = packedBackupPair
           ? '${tr(AppI10n.backupFolderBackupMyProjects)} · $myProjectsFormatLabel'
           : tr(AppI10n.backupFolderBackupMyProjects);
+      final bool canDeleteBackupCopy =
+          !widget.reconcileIgnored &&
+          workshopFormat != BackupCopyFormat.unknown &&
+          myProjectsFormat != BackupCopyFormat.unknown &&
+          (!packedBackupPair ||
+              widget.canDeleteMatchedCopy ||
+              widget.contentProbe?.status ==
+                  DirectBackupProbeStatus.different ||
+              widget.contentProbe?.status ==
+                  DirectBackupProbeStatus.differentIncomplete);
       leadingAction = DetailAction(
         key: const ValueKey<String>('backup-conflicting-backups-open-files'),
         icon: Icons.account_tree_outlined,
@@ -883,12 +914,100 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
           sourceFolder: reconcileFolders.workshopBackup,
           destinationFolder: reconcileFolders.myProjectsBackup,
           comparison: Future<FolderFileOverview?>.value(backupConflictOverview),
+          underlyingDifferences:
+              packedBackupPair &&
+                  widget.contentProbe?.status ==
+                      DirectBackupProbeStatus.candidateMatch
+              ? (
+                  differentSize: const <String>[],
+                  onlyFirst: const <String>[],
+                  onlySecond: const <String>[],
+                  shared: const <String>[],
+                )
+              : packedBackupPair &&
+                    (widget.contentProbe?.status ==
+                            DirectBackupProbeStatus.different ||
+                        widget.contentProbe?.status ==
+                            DirectBackupProbeStatus.differentIncomplete)
+              ? (
+                  differentSize: widget.contentProbe!.changes.modified,
+                  onlyFirst: workshopFormat == BackupCopyFormat.packed
+                      ? widget.contentProbe!.changes.onlyPacked
+                      : widget.contentProbe!.changes.onlyUnpacked,
+                  onlySecond: workshopFormat == BackupCopyFormat.packed
+                      ? widget.contentProbe!.changes.onlyUnpacked
+                      : widget.contentProbe!.changes.onlyPacked,
+                  shared: const <String>[],
+                )
+              : null,
+          semanticMatch:
+              packedBackupPair &&
+              widget.contentProbe?.status ==
+                  DirectBackupProbeStatus.candidateMatch,
+          defaultTrueDifferences:
+              packedBackupPair &&
+              (widget.contentProbe?.status ==
+                      DirectBackupProbeStatus.candidateMatch ||
+                  widget.contentProbe?.status ==
+                      DirectBackupProbeStatus.different ||
+                  widget.contentProbe?.status ==
+                      DirectBackupProbeStatus.differentIncomplete),
+          packedSource: packedBackupPair
+              ? workshopFormat == BackupCopyFormat.packed
+              : null,
+          underlyingIncomplete:
+              widget.contentProbe?.status ==
+              DirectBackupProbeStatus.differentIncomplete,
           sourceLabel: workshopLabel,
           destinationLabel: myProjectsLabel,
           sourceOnlyTitle: tr(AppI10n.backupDetailInWorkshopBackup),
           destinationOnlyTitle: tr(AppI10n.backupDetailInMyProjectsBackup),
           sourceOpenLabel: tr(AppI10n.backupOpenWorkshopBackupFolder),
           destinationOpenLabel: tr(AppI10n.backupOpenMyProjectsBackupFolder),
+          sourceDeleteLabel: canDeleteBackupCopy
+              ? tr(
+                  AppI10n.backupActionDeleteBackupVersionButton,
+                  namedArgs: <String, String>{'version': workshopLabel},
+                )
+              : null,
+          destinationDeleteLabel: canDeleteBackupCopy
+              ? tr(
+                  AppI10n.backupActionDeleteBackupVersionButton,
+                  namedArgs: <String, String>{'version': myProjectsLabel},
+                )
+              : null,
+          onDeleteSource: canDeleteBackupCopy
+              ? () => deleteConflictingBackupVersion(
+                  context,
+                  name: widget.name,
+                  library: WallpaperLibrary.workshop,
+                  format: workshopFormat,
+                  survivingFormat: myProjectsFormat,
+                  versionLabel: workshopLabel,
+                  reviewedDifference: widget.canDeleteMatchedCopy
+                      ? null
+                      : widget.contentProbe,
+                  reviewedOtherConflict: packedBackupPair
+                      ? null
+                      : backupConflict,
+                )
+              : null,
+          onDeleteDestination: canDeleteBackupCopy
+              ? () => deleteConflictingBackupVersion(
+                  context,
+                  name: widget.name,
+                  library: WallpaperLibrary.myProjects,
+                  format: myProjectsFormat,
+                  survivingFormat: workshopFormat,
+                  versionLabel: myProjectsLabel,
+                  reviewedDifference: widget.canDeleteMatchedCopy
+                      ? null
+                      : widget.contentProbe,
+                  reviewedOtherConflict: packedBackupPair
+                      ? null
+                      : backupConflict,
+                )
+              : null,
         ),
       );
     } else if (updateHasContent) {
@@ -1006,6 +1125,9 @@ class _TileFrameState extends ConsumerState<_TileFrame> {
     );
     return Semantics(
       button: true,
+      label: widget.reconcileEntry == null
+          ? null
+          : widget.issueBadges.map((badge) => badge.text).join(', '),
       onTap: widget.onTap,
       child: Focus(
         focusNode: _tileFocusNode,
@@ -1200,10 +1322,7 @@ List<TileBadgeData> _reconcileBadges(
     );
   return <TileBadgeData>[
     for (final BackupReconcileReason reason in reasons)
-      TileBadgeData(
-        colour: Theme.of(context).status.bad,
-        text: _reconcileReasonBadgeText(reason),
-      ),
+      _reconcileReasonBadge(context, reason),
     for (final BackupState state in states)
       TileBadgeData(
         colour: backupStateLook(context, state).colour,
@@ -1211,6 +1330,14 @@ List<TileBadgeData> _reconcileBadges(
       ),
   ];
 }
+
+TileBadgeData _reconcileReasonBadge(
+  BuildContext context,
+  BackupReconcileReason reason,
+) => TileBadgeData(
+  colour: Theme.of(context).status.bad,
+  text: _reconcileReasonBadgeText(reason),
+);
 
 String _reconcileReasonBadgeText(BackupReconcileReason reason) =>
     switch (reason) {

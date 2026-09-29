@@ -1,4 +1,4 @@
-// Shared editable and read-only input-shaped controls.
+// Shared compact controls for two-state choices, text inputs, and paths.
 //
 // Provides the app's common input surface plus compact path displays. Path
 // actions are opt-in so ordinary read-only fields do not gain filesystem
@@ -9,6 +9,123 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:we_repkg/constants/nums.dart';
+
+/// Compact labelled switch for choosing between two views.
+class SlidingSegmentedToggle extends StatelessWidget {
+  const SlidingSegmentedToggle({
+    super.key,
+    required this.firstLabel,
+    required this.secondLabel,
+    required this.secondSelected,
+    required this.onChanged,
+    this.width = 320,
+  });
+
+  final String firstLabel;
+  final String secondLabel;
+  final bool secondSelected;
+  final ValueChanged<bool> onChanged;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextStyle? labelStyle = Theme.of(context).textTheme.bodySmall;
+    double labelWidth(String label) {
+      final TextPainter painter = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final double measured = painter.computeLineMetrics().first.width;
+      painter.dispose();
+      return measured;
+    }
+
+    final double naturalWidth =
+        labelWidth(firstLabel) + labelWidth(secondLabel) + 64;
+    return SizedBox(
+      width: naturalWidth < width ? naturalWidth : width,
+      child: Semantics(
+        button: true,
+        toggled: secondSelected,
+        label: '$firstLabel / $secondLabel',
+        value: secondSelected ? secondLabel : firstLabel,
+        onTap: () => onChanged(!secondSelected),
+        child: ExcludeSemantics(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  firstLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: labelStyle?.copyWith(
+                    color: secondSelected
+                        ? colors.onSurfaceVariant
+                        : colors.onSurface,
+                    fontWeight: secondSelected
+                        ? FontWeight.normal
+                        : FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => onChanged(!secondSelected),
+                    child: Container(
+                      width: 48,
+                      height: 26,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: colors.primary,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: AnimatedAlign(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOutCubic,
+                        alignment: secondSelected
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  secondLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: labelStyle?.copyWith(
+                    color: secondSelected
+                        ? colors.onSurface
+                        : colors.onSurfaceVariant,
+                    fontWeight: secondSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Standard editable/read-only text input built on the shared pill surface.
 class CustomInput extends StatelessWidget {

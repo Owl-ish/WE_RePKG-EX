@@ -32,7 +32,9 @@ import 'package:we_repkg/widgets/search_field.dart';
 import 'package:we_repkg/widgets/selection_grid.dart';
 import 'package:we_repkg/widgets/sliding_switch.dart';
 import 'package:we_repkg/widgets/top_bar.dart';
+import 'package:we_repkg/widgets/tile_overlays.dart';
 import 'package:we_repkg/widgets/scan_progress.dart';
+import 'package:we_repkg/widgets/progress_bar.dart';
 
 // Grid variants share private presentation and one selection/entrance contract.
 part 'backup_grid.dart';
@@ -427,9 +429,6 @@ class _Loaded extends ConsumerWidget {
     );
     final int activeReconcileCount = totals.reconcile;
     final int ignoredCount = totals.ignored;
-    final int checkableCount = reconcile
-        .where(BackupDirectBatch.eligible)
-        .length;
     final BackupAction? action =
         shown.reconcile ||
             shown.ignored ||
@@ -575,146 +574,6 @@ class _Loaded extends ConsumerWidget {
               ),
             ),
           ),
-        if (shown.reconcile && checkableCount > 0)
-          ValueListenableBuilder<BackupDirectBatchState>(
-            valueListenable: ref.read(backupDirectBatchProvider),
-            builder: (context, current, _) {
-              final BackupDirectBatch batch = ref.read(
-                backupDirectBatchProvider,
-              );
-              final BackupDirectBatchState check = batch.forScan(
-                scan,
-                ref.read(backupRootProvider),
-              );
-              final int matches = check.results.values
-                  .where(
-                    (result) =>
-                        result.status == DirectBackupProbeStatus.candidateMatch,
-                  )
-                  .length;
-              final int different = check.results.values
-                  .where(
-                    (result) =>
-                        result.status == DirectBackupProbeStatus.different ||
-                        result.status ==
-                            DirectBackupProbeStatus.differentIncomplete,
-                  )
-                  .length;
-              final int review = check.results.length - matches - different;
-              final bool canResume =
-                  check.cancelled && check.done < checkableCount;
-              final int actionableMatches = batch
-                  .matchedEntries(
-                    scan: scan,
-                    backupRoot: ref.read(backupRootProvider),
-                    entries: reconcile,
-                  )
-                  .length;
-              return Padding(
-                padding: const EdgeInsets.only(top: LayoutNums.contentGap),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: BackupBulkActionButton(
-                        label: tr(
-                          check.running
-                              ? check.cancelled
-                                    ? AppI10n.backupDirectCheckStopping
-                                    : AppI10n.backupDirectCheckCancel
-                              : canResume
-                              ? AppI10n.backupDirectCheckResume
-                              : AppI10n.backupDirectCheckStart,
-                          namedArgs: <String, String>{
-                            'count':
-                                '${canResume ? checkableCount - check.done : checkableCount}',
-                          },
-                        ),
-                        icon: check.running
-                            ? Icons.stop_rounded
-                            : Icons.fact_check_outlined,
-                        colour: Theme.of(context).status.note,
-                        onPressed: check.running && check.cancelled
-                            ? null
-                            : check.running
-                            ? batch.cancel
-                            : () => batch.start(
-                                scan: scan,
-                                backupRoot: ref.read(backupRootProvider)!,
-                                entries: reconcile,
-                              ),
-                      ),
-                    ),
-                    if (check.running || check.done > 0) ...<Widget>[
-                      const SizedBox(height: 6),
-                      LinearProgressIndicator(
-                        value: check.total == 0
-                            ? null
-                            : check.done / check.total,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tr(
-                          AppI10n.backupDirectCheckProgress,
-                          namedArgs: <String, String>{
-                            'done': '${check.done}',
-                            'total': '${check.total}',
-                            'matches': '$matches',
-                            'different': '$different',
-                            'review': '$review',
-                          },
-                        ),
-                      ),
-                    ],
-                    if (actionableMatches > 0) ...<Widget>[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: <Widget>[
-                            BackupBulkActionButton(
-                              label: tr(
-                                AppI10n.backupDirectCheckDeletePacked,
-                                namedArgs: <String, String>{
-                                  'count': '$actionableMatches',
-                                },
-                              ),
-                              icon: Icons.delete_outline,
-                              colour: Theme.of(context).status.bad,
-                              destructive: true,
-                              onPressed: () => deleteEquivalentBackupCopies(
-                                context,
-                                removedFormat: BackupCopyFormat.packed,
-                              ),
-                            ),
-                            BackupBulkActionButton(
-                              label: tr(
-                                AppI10n.backupDirectCheckDeleteUnpacked,
-                                namedArgs: <String, String>{
-                                  'count': '$actionableMatches',
-                                },
-                              ),
-                              icon: Icons.delete_outline,
-                              colour: Theme.of(context).status.bad,
-                              destructive: true,
-                              onPressed: () => deleteEquivalentBackupCopies(
-                                context,
-                                removedFormat: BackupCopyFormat.unpacked,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
         if (shown.ignored && ignoredCount > 0)
           _BackupIssueHeader(
             noteKey: const ValueKey<String>('backup-ignored-note'),
@@ -775,11 +634,13 @@ class _BackupIssueHeader extends StatelessWidget {
     required this.noteKey,
     required this.child,
     this.pinned = false,
+    this.trailing,
   });
 
   final Key noteKey;
   final Widget child;
   final bool pinned;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -788,7 +649,64 @@ class _BackupIssueHeader extends StatelessWidget {
         : Colors.transparent,
     child: Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 8),
-      child: _BackupIssueNote(key: noteKey, child: child),
+      child: trailing == null
+          ? _BackupIssueNote(key: noteKey, child: child)
+          : LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth < 750
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _BackupIssueNote(key: noteKey, child: child),
+                        const SizedBox(height: 5),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: trailing!,
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _BackupIssueNote(key: noteKey, child: child),
+                        ),
+                        const SizedBox(width: 12),
+                        trailing!,
+                      ],
+                    ),
+            ),
+    ),
+  );
+}
+
+class _InlineReconcileProgress extends StatelessWidget {
+  const _InlineReconcileProgress({
+    required this.label,
+    required this.detail,
+    required this.value,
+    required this.colour,
+  });
+
+  final String label;
+  final String detail;
+  final double value;
+  final Color colour;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 5),
+        ProgressBar(
+          value: value,
+          colour: colour,
+          step: const Duration(milliseconds: 150),
+        ),
+        const SizedBox(height: 4),
+        Text(detail, style: Theme.of(context).textTheme.bodySmall),
+      ],
     ),
   );
 }

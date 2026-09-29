@@ -7,6 +7,7 @@ class _PairedUpdateTree extends StatefulWidget {
     required this.changes,
     this.matching = const <String>[],
     required this.toolbar,
+    this.compareBar,
     required this.manualSelection,
     required this.manualAction,
     required this.onCompareSelect,
@@ -20,6 +21,7 @@ class _PairedUpdateTree extends StatefulWidget {
   final BackupFileChanges changes;
   final List<String> matching;
   final Widget toolbar;
+  final Widget? compareBar;
   final FileTreeCompareSelection manualSelection;
   final FileTreeCompareAction? manualAction;
   final void Function(FileTreeCompareCandidate, bool, bool) onCompareSelect;
@@ -36,6 +38,7 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
   late Set<String> _removed;
   late Set<String> _modified;
   late Set<String> _matching;
+  String? _preparingComparison;
 
   UpdateFileChanges get config => widget.configuration;
   Color get foreground => config.foreground;
@@ -282,6 +285,31 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
     ),
   );
 
+  Future<void> _compareUnderlying(String relative) async {
+    final prepare = config.prepareUnderlyingComparison;
+    if (prepare == null || _preparingComparison != null) return;
+    setState(() => _preparingComparison = relative);
+    try {
+      final prepared = await prepare(relative);
+      if (!mounted) return;
+      if (prepared == null) {
+        showErrorToast(tr(AppI10n.backupDetailFileUnavailable));
+        return;
+      }
+      await _fileCompareAction(
+        firstLabel: config.sourceLabel,
+        firstPath: prepared.firstPath,
+        secondLabel: config.destinationLabel,
+        secondPath: prepared.secondPath,
+        foreground: foreground,
+      ).open(context);
+    } catch (_) {
+      if (mounted) showErrorToast(tr(AppI10n.backupDetailFileUnavailable));
+    } finally {
+      if (mounted) setState(() => _preparingComparison = null);
+    }
+  }
+
   Widget _cell(
     ({String name, String relative, bool folder, int depth}) row,
     bool live,
@@ -323,7 +351,9 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
         depth: row.depth,
         icon: Icons.remove_circle_outline,
         label: tr(
-          live ? AppI10n.backupMissingLive : AppI10n.backupMissingBackup,
+          config.virtualPackedSource == null
+              ? (live ? AppI10n.backupMissingLive : AppI10n.backupMissingBackup)
+              : AppI10n.backupDetailNotInThisCopy,
         ),
         tooltip: row.relative,
         foreground: foreground.withValues(alpha: .65),
@@ -332,11 +362,13 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
     }
     final String folder = (live ? config.liveFolder : config.backupFolder)!;
     final String label = live ? config.sourceLabel : config.destinationLabel;
+    final bool virtual = config.virtualPackedSource != null;
+    final bool packed = config.virtualPackedSource == live && virtual;
     final bool inspectablePackage =
         widget.inspectPackages &&
         _modified.contains(row.relative) &&
         _pathNamed(row.relative, WallpaperFiles.packedScene);
-    final FileTreeCompareCandidate? candidate = added || removed
+    final FileTreeCompareCandidate? candidate = !virtual && (added || removed)
         ? FileTreeCompareCandidate(
             id: '$side::${row.relative}',
             path: path.join(folder, row.relative),
@@ -349,8 +381,8 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
       displayLabel: row.name.split('/').last,
       colour: colour,
       foreground: foreground,
-      firstFolder: folder,
-      firstLabel: label,
+      firstFolder: packed ? null : folder,
+      firstLabel: packed ? null : label,
       choice: choice,
       subtitle: removed && selection != null
           ? _deletionSubtitle(selection, row.relative)
@@ -359,24 +391,29 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
       compareSelection: widget.manualSelection.selected,
       manualCompareAction: widget.manualAction,
       onCompareSelect: widget.onCompareSelect,
-      onOpenDetails: inspectablePackage
+      onOpenDetails: virtual
+          ? null
+          : inspectablePackage
           ? () => _inspectPackage(row.relative)
           : _modified.contains(row.relative)
           ? () => _inspect(row.relative)
           : null,
-      extraTrailing:
-          widget.fileAction?.call(row.relative, live) ??
-          (inspectablePackage
-              ? TextButton.icon(
-                  key: ValueKey<String>(
-                    'update-inspect-package-$side-${row.relative}',
-                  ),
-                  onPressed: () => _inspectPackage(row.relative),
-                  icon: const Icon(Icons.manage_search_rounded, size: 16),
-                  label: Text(tr(AppI10n.backupDetailInspectPackageAction)),
-                )
-              : null),
-      pairedCompareAction: !added && !removed
+      extraTrailing: virtual
+          ? null
+          : widget.fileAction?.call(row.relative, live) ??
+                (inspectablePackage
+                    ? TextButton.icon(
+                        key: ValueKey<String>(
+                          'update-inspect-package-$side-${row.relative}',
+                        ),
+                        onPressed: () => _inspectPackage(row.relative),
+                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                        label: Text(
+                          tr(AppI10n.backupDetailInspectPackageAction),
+                        ),
+                      )
+                    : null),
+      pairedCompareAction: !virtual && !added && !removed
           ? _fileCompareAction(
               firstLabel: config.sourceLabel,
               firstPath: path.join(config.liveFolder!, row.relative),
@@ -401,6 +438,18 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          if (rows.isEmpty && config.emptyMessage != null)
+            Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(config.emptyMessage!),
+            ),
           for (final row in rows)
             SizedBox(
               key: ValueKey<String>(
@@ -451,8 +500,32 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
                         child: Center(
                           child:
                               !row.folder &&
-                                  (_modified.contains(row.relative) ||
-                                      _matching.contains(row.relative))
+                                  config.virtualPackedSource != null &&
+                                  _modified.contains(row.relative) &&
+                                  config.prepareUnderlyingComparison != null
+                              ? _preparingComparison == row.relative
+                                    ? const SizedBox.square(
+                                        dimension: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : FileTreeAction(
+                                        key: ValueKey<String>(
+                                          'update-pair-compare-${row.relative}',
+                                        ),
+                                        icon: Icons.compare_rounded,
+                                        tooltip: tr(
+                                          AppI10n.backupDetailCompareFiles,
+                                        ),
+                                        foreground: foreground,
+                                        onPressed: () =>
+                                            _compareUnderlying(row.relative),
+                                      )
+                              : !row.folder &&
+                                    config.virtualPackedSource == null &&
+                                    (_modified.contains(row.relative) ||
+                                        _matching.contains(row.relative))
                               ? _fileCompareAction(
                                   key: ValueKey<String>(
                                     'update-pair-compare-${row.relative}',
@@ -530,6 +603,8 @@ class _PairedUpdateTreeState extends State<_PairedUpdateTree> {
                     ),
                   ),
                 ),
+                if (widget.compareBar != null)
+                  Center(child: widget.compareBar!),
                 Row(
                   children: <Widget>[
                     Expanded(

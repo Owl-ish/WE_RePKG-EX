@@ -61,6 +61,7 @@ Future<void> showScan(
   WidgetTester tester,
   BackupScan scan, {
   List<BackupTile> tiles = const <BackupTile>[],
+  List<ReconcileTile>? reconcileTiles,
   String backupRoot = r'C:\backup',
   String? workshopPath,
   String? myProjectsPath,
@@ -83,6 +84,14 @@ Future<void> showScan(
       backupVisibleTilesProvider.overrideWithValue(
         AsyncValue<List<BackupTile>>.data(tiles),
       ),
+      if (reconcileTiles != null) ...[
+        backupReconcileTilesProvider.overrideWithValue(
+          AsyncValue<List<ReconcileTile>>.data(reconcileTiles),
+        ),
+        backupVisibleReconcileTilesProvider.overrideWithValue(
+          AsyncValue<List<ReconcileTile>>.data(reconcileTiles),
+        ),
+      ],
     ],
     child: MaterialApp(
       theme: AppTheme.lightTheme,

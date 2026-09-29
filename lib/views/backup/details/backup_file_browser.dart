@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -5,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:we_repkg/actions/wallpaper_actions.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
+import 'package:we_repkg/cores/toast.dart';
 import 'package:we_repkg/models/wallpaper.dart';
 import 'package:we_repkg/views/content/detail_dialog.dart';
 import 'package:we_repkg/widgets/app_dialog_surface.dart';
 import 'package:we_repkg/widgets/file_tree_panel.dart';
+import 'package:we_repkg/widgets/input_controls.dart';
 import 'package:we_repkg/widgets/linked_scroll.dart';
 
 import 'content_details.dart';
@@ -24,6 +28,11 @@ class BackupFileBrowser extends StatefulWidget {
     this.updateSelection,
     this.wallpaper,
     this.overview,
+    this.underlyingDifferences,
+    this.packedSource,
+    this.underlyingIncomplete = false,
+    this.semanticMatch = false,
+    this.defaultTrueDifferences = false,
     this.showChanges = false,
     this.comparisonOnly = false,
     this.sourceLabel,
@@ -45,6 +54,11 @@ class BackupFileBrowser extends StatefulWidget {
   final BackupUpdateSelection? updateSelection;
   final WallpaperInfo? wallpaper;
   final FolderFileOverview? overview;
+  final FolderFileOverview? underlyingDifferences;
+  final bool? packedSource;
+  final bool underlyingIncomplete;
+  final bool semanticMatch;
+  final bool defaultTrueDifferences;
   final bool showChanges;
   final bool comparisonOnly;
   final String? sourceLabel;
@@ -64,9 +78,16 @@ class BackupFileBrowser extends StatefulWidget {
 
 class _BackupFileBrowserState extends State<BackupFileBrowser> {
   final LinkedVerticalScroll _scroll = LinkedVerticalScroll();
+  final ScenePkgInspectionSession _underlyingSession =
+      ScenePkgInspectionSession();
   bool _showComparison = false;
   bool _comparisonRequested = false;
   bool _deleting = false;
+  bool _showUnderlying = false;
+  bool _unpacking = false;
+  bool _showExtracted = false;
+  String? _extractedFolder;
+  FolderFileOverview? _extractedOverview;
 
   String get _sourceLabel => widget.sourceLabel ?? tr(AppI10n.backupLiveFiles);
   String get _destinationLabel =>
@@ -75,6 +96,8 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
   @override
   void initState() {
     super.initState();
+    _showUnderlying =
+        widget.defaultTrueDifferences && widget.underlyingDifferences != null;
     if ((widget.showChanges || widget.comparisonOnly) &&
         widget.liveFolder != null &&
         widget.backupFolder != null) {
@@ -89,6 +112,46 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
 
   void _compare() {
     setState(_requestComparison);
+  }
+
+  Future<void> _unpack() async {
+    if (_unpacking || widget.packedSource == null || widget.rePKGPath == null) {
+      return;
+    }
+    final bool packedSource = widget.packedSource!;
+    final String? packedFolder = packedSource
+        ? widget.liveFolder
+        : widget.backupFolder;
+    final String? otherFolder = packedSource
+        ? widget.backupFolder
+        : widget.liveFolder;
+    if (packedFolder == null || otherFolder == null) return;
+    setState(() => _unpacking = true);
+    try {
+      final String? extracted = await _underlyingSession.unpackForInspection(
+        packedFolder: Directory(packedFolder),
+        tool: widget.rePKGPath!,
+      );
+      if (extracted == null) return;
+      final FolderFileOverview? overview = await compareFolderFileOverview(
+        firstFolder: packedSource ? extracted : otherFolder,
+        secondFolder: packedSource ? otherFolder : extracted,
+      );
+      if (!mounted) return;
+      if (overview == null) {
+        showErrorToast(tr(AppI10n.backupDetailUnpackFailed));
+        return;
+      }
+      setState(() {
+        _extractedFolder = extracted;
+        _extractedOverview = overview;
+        _showExtracted = true;
+      });
+    } catch (_) {
+      if (mounted) showErrorToast(tr(AppI10n.backupDetailUnpackFailed));
+    } finally {
+      if (mounted) setState(() => _unpacking = false);
+    }
   }
 
   Future<void> _delete(Future<bool> Function() action) async {
@@ -106,7 +169,31 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
   @override
   void dispose() {
     _scroll.dispose();
+    unawaited(_underlyingSession.dispose());
     super.dispose();
+  }
+
+  Future<({String firstPath, String secondPath})?> _prepareUnderlyingComparison(
+    String relativePath,
+  ) async {
+    final bool packedSource = widget.packedSource!;
+    final String? packedFolder = packedSource
+        ? widget.liveFolder
+        : widget.backupFolder;
+    final String? unpackedFolder = packedSource
+        ? widget.backupFolder
+        : widget.liveFolder;
+    if (packedFolder == null || unpackedFolder == null) return null;
+    final prepared = await _underlyingSession.preparePackedComparison(
+      packedFolder: Directory(packedFolder),
+      unpackedFolder: Directory(unpackedFolder),
+      relativePath: relativePath,
+      tool: widget.rePKGPath,
+    );
+    if (prepared == null) return null;
+    return packedSource
+        ? (firstPath: prepared.packedPath, secondPath: prepared.unpackedPath)
+        : (firstPath: prepared.unpackedPath, secondPath: prepared.packedPath);
   }
 
   Widget _folder(
@@ -208,17 +295,51 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
     );
   }
 
-  Widget _changes(Color foreground) {
+  Widget _changes(
+    Color foreground, {
+    bool underlying = false,
+    bool extracted = false,
+  }) {
+    final bool packedSource = widget.packedSource == true;
+    final String? sourceFolder = extracted && packedSource
+        ? _extractedFolder
+        : widget.liveFolder;
+    final String? destinationFolder = extracted && !packedSource
+        ? _extractedFolder
+        : widget.backupFolder;
     return UpdateFileChanges(
+      key: ValueKey<String>(
+        extracted
+            ? 'extracted-package'
+            : underlying
+            ? 'true-differences'
+            : 'folder-files',
+      ),
       wallpaper: widget.wallpaper,
       wallpaperName: widget.wallpaperName,
-      liveFolder: widget.liveFolder,
-      backupFolder: widget.backupFolder,
-      sourceLabel: _sourceLabel,
-      destinationLabel: _destinationLabel,
-      sourceOnlyTitle: widget.sourceOnlyTitle,
-      destinationOnlyTitle: widget.destinationOnlyTitle,
-      sourceActions: widget.comparisonOnly
+      liveFolder: sourceFolder,
+      backupFolder: destinationFolder,
+      sourceLabel: extracted && packedSource
+          ? '$_sourceLabel · ${tr(AppI10n.backupDetailUnpackedPreview)}'
+          : _sourceLabel,
+      destinationLabel: extracted && !packedSource
+          ? '$_destinationLabel · ${tr(AppI10n.backupDetailUnpackedPreview)}'
+          : _destinationLabel,
+      sourceOnlyTitle: underlying
+          ? tr(
+              widget.packedSource == true
+                  ? AppI10n.backupDetailOnlyPacked
+                  : AppI10n.backupDetailOnlyUnpacked,
+            )
+          : widget.sourceOnlyTitle,
+      destinationOnlyTitle: underlying
+          ? tr(
+              widget.packedSource == false
+                  ? AppI10n.backupDetailOnlyPacked
+                  : AppI10n.backupDetailOnlyUnpacked,
+            )
+          : widget.destinationOnlyTitle,
+      sourceActions: widget.comparisonOnly && !extracted
           ? _paneActions(
               folder: widget.liveFolder,
               openLabel:
@@ -229,7 +350,7 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
               onDelete: widget.onDeleteSource,
             )
           : null,
-      destinationActions: widget.comparisonOnly
+      destinationActions: widget.comparisonOnly && !extracted
           ? _paneActions(
               folder: widget.backupFolder,
               openLabel:
@@ -242,8 +363,24 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
             )
           : null,
       bidirectional: widget.comparisonOnly,
-      includeMatchingFiles: widget.updateSelection == null,
-      overview: widget.overview,
+      includeMatchingFiles:
+          extracted || (!underlying && widget.updateSelection == null),
+      overview: extracted
+          ? _extractedOverview
+          : underlying
+          ? widget.underlyingDifferences
+          : widget.overview,
+      virtualPackedSource: underlying ? widget.packedSource : null,
+      prepareUnderlyingComparison: underlying
+          ? _prepareUnderlyingComparison
+          : null,
+      emptyMessage: underlying
+          ? tr(
+              widget.semanticMatch
+                  ? AppI10n.backupDetailIdenticalContents
+                  : AppI10n.backupDetailNoConfirmedPaths,
+            )
+          : null,
       rePKGPath: widget.rePKGPath,
       foreground: foreground,
       selection: widget.updateSelection,
@@ -412,11 +549,115 @@ class _BackupFileBrowserState extends State<BackupFileBrowser> {
                       ),
                   ],
                 ),
+              if (widget.comparisonOnly &&
+                  widget.underlyingDifferences != null) ...<Widget>[
+                const SizedBox(height: 4),
+                Center(
+                  child: SlidingSegmentedToggle(
+                    key: const ValueKey<String>(
+                      'backup-difference-view-toggle',
+                    ),
+                    firstLabel: tr(AppI10n.backupDetailBackupFolderFiles),
+                    secondLabel: tr(AppI10n.backupDetailTrueDifferences),
+                    secondSelected: _showUnderlying,
+                    onChanged: (value) => setState(() {
+                      _showUnderlying = value;
+                      _showExtracted = false;
+                    }),
+                  ),
+                ),
+                if (_showUnderlying)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      tr(
+                        widget.underlyingIncomplete
+                            ? AppI10n.backupDetailUnderlyingIncomplete
+                            : AppI10n.backupDetailUnderlyingInsidePackage,
+                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: foreground),
+                    ),
+                  ),
+              ],
+              if (widget.comparisonOnly &&
+                  widget.packedSource != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const ValueKey<String>('backup-unpack-for-inspection'),
+                    style: toolbarButtonStyle,
+                    onPressed:
+                        _unpacking ||
+                            (_extractedFolder == null &&
+                                widget.rePKGPath == null)
+                        ? null
+                        : _extractedFolder == null
+                        ? _unpack
+                        : () => setState(() {
+                            _showExtracted = !_showExtracted;
+                          }),
+                    icon: _unpacking
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: Text(
+                      tr(
+                        _unpacking
+                            ? AppI10n.backupDetailUnpackingPackage
+                            : _extractedFolder == null
+                            ? AppI10n.backupDetailUnpackForInspection
+                            : _showExtracted
+                            ? AppI10n.backupDetailShowOriginalFiles
+                            : AppI10n.backupDetailShowUnpackedFiles,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (widget.semanticMatch || _showExtracted) ...<Widget>[
+                const SizedBox(height: 8),
+                Container(
+                  key: const ValueKey<String>('backup-comparison-banner'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    tr(
+                      _showExtracted
+                          ? AppI10n.backupDetailTemporaryUnpackedView
+                          : AppI10n.backupDetailPackedUnpackedMatchBanner,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Expanded(
                 // Keep package sessions and folder expansion while switching views.
                 child: widget.comparisonOnly
-                    ? _changes(foreground)
+                    ? _showExtracted
+                          ? _changes(foreground, extracted: true)
+                          : widget.underlyingDifferences == null
+                          ? _changes(foreground)
+                          : IndexedStack(
+                              index: _showUnderlying ? 1 : 0,
+                              children: <Widget>[
+                                _changes(foreground),
+                                _changes(foreground, underlying: true),
+                              ],
+                            )
                     : IndexedStack(
                         index: _showComparison ? 1 : 0,
                         children: <Widget>[

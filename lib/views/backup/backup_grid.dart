@@ -19,6 +19,7 @@ class _Grid extends ConsumerStatefulWidget {
 
 class _GridState extends ConsumerState<_Grid> {
   static const SelectionEngine<String> _selection = SelectionEngine<String>();
+  DuplicateLiveOperationProgress? _duplicateLiveProgress;
 
   bool _takeEntrance() => widget.entrance.take();
 
@@ -51,6 +52,10 @@ class _GridState extends ConsumerState<_Grid> {
     }
   }
 
+  void _setDuplicateLiveProgress(DuplicateLiveOperationProgress? progress) {
+    if (mounted) setState(() => _duplicateLiveProgress = progress);
+  }
+
   Widget _selectionGrid(
     WidgetRef ref,
     BuildContext context, {
@@ -65,6 +70,7 @@ class _GridState extends ConsumerState<_Grid> {
     itemBuilder,
     EdgeInsets padding = const EdgeInsets.only(top: LayoutNums.contentGap),
     List<SelectionGridSection> sections = const <SelectionGridSection>[],
+    bool animateGroupedChanges = false,
     int? entranceToken,
     bool? entranceOnMount,
   }) {
@@ -84,6 +90,7 @@ class _GridState extends ConsumerState<_Grid> {
       entranceOnMount: entranceOnMount ?? _takeEntrance(),
       reflowIdentity: reflowIdentity,
       sections: sections,
+      animateGroupedChanges: animateGroupedChanges,
       itemBuilder: itemBuilder,
     );
   }
@@ -157,14 +164,6 @@ class _GridState extends ConsumerState<_Grid> {
         ),
       };
 
-  String _directCheckTitle(DirectBackupProbeStatus status) => switch (status) {
-    DirectBackupProbeStatus.candidateMatch => AppI10n.backupDirectCheckMatch,
-    DirectBackupProbeStatus.different => AppI10n.backupTileVerificationChanged,
-    DirectBackupProbeStatus.differentIncomplete =>
-      AppI10n.backupDirectCheckIncomplete,
-    DirectBackupProbeStatus.unavailable => AppI10n.backupDirectCheckReview,
-  };
-
   Widget _reconcileGrid(
     WidgetRef ref,
     AsyncValue<List<ReconcileTile>> tiles, {
@@ -185,16 +184,8 @@ class _GridState extends ConsumerState<_Grid> {
       AsyncData<List<ReconcileTile>>(:final List<ReconcileTile> value) => Builder(
         builder: (BuildContext context) {
           widget.entrance.discard();
-          final BackupDirectBatchState check = ref
-              .read(backupDirectBatchProvider)
-              .forScan(scan, backupRoot);
-          final List<ReconcileTile> scanning = <ReconcileTile>[];
-          final Map<DirectBackupProbeStatus, List<ReconcileTile>> checked =
-              <DirectBackupProbeStatus, List<ReconcileTile>>{
-                for (final DirectBackupProbeStatus status
-                    in DirectBackupProbeStatus.values)
-                  status: <ReconcileTile>[],
-              };
+          final BackupDirectBatch batch = ref.read(backupDirectBatchProvider);
+          final BackupDirectBatchState check = batch.forScan(scan, backupRoot);
           final Map<BackupReconcileReason, List<ReconcileTile>> groups =
               <BackupReconcileReason, List<ReconcileTile>>{
                 for (final BackupReconcileReason reason
@@ -205,34 +196,204 @@ class _GridState extends ConsumerState<_Grid> {
             final BackupReconcileReason? reason =
                 tile.entry.activePrimaryReason;
             if (reason == null) continue;
-            if (reason == BackupReconcileReason.conflictingBackupCopies &&
-                BackupDirectBatch.eligible(tile.entry)) {
-              final DirectBackupProbeStatus? status =
-                  check.results[tile.entry.name.toLowerCase()]?.status;
-              if (status != null) {
-                checked[status]!.add(tile);
-                continue;
-              }
-              if (check.running && !check.cancelled) {
-                scanning.add(tile);
-                continue;
-              }
-            }
             groups[reason]!.add(tile);
           }
-          final List<ReconcileTile> grouped = <ReconcileTile>[
-            ...scanning,
-            for (final DirectBackupProbeStatus status
-                in DirectBackupProbeStatus.values)
-              ...checked[status]!,
-            for (final BackupReconcileReason reason
-                in BackupReconcileReason.values)
-              ...groups[reason]!,
+          final List<
+            ({
+              BackupReconcileReason reason,
+              String title,
+              String? resultLabel,
+              String? about,
+              List<ReconcileTile> tiles,
+              TileBadgeData? primaryBadge,
+            })
+          >
+          issueSections = [];
+          for (final BackupReconcileReason reason
+              in BackupReconcileReason.values) {
+            final List<ReconcileTile> tiles = groups[reason]!;
+            if (tiles.isEmpty) continue;
+            if (reason != BackupReconcileReason.conflictingBackupCopies) {
+              issueSections.add((
+                reason: reason,
+                title: _reconcileText(reason).title,
+                resultLabel: null,
+                about: _reconcileText(reason).about,
+                tiles: tiles,
+                primaryBadge: null,
+              ));
+              continue;
+            }
+            final List<ReconcileTile> pending = [];
+            final List<ReconcileTile> matches = [];
+            final List<ReconcileTile> different = [];
+            final List<ReconcileTile> inconclusive = [];
+            final List<ReconcileTile> other = [];
+            for (final ReconcileTile tile in tiles) {
+              if (!BackupDirectBatch.isPackedUnpackedConflict(tile.entry)) {
+                other.add(tile);
+                continue;
+              }
+              final DirectBackupProbeStatus? status =
+                  check.results[tile.entry.name.toLowerCase()]?.status;
+              if (status == DirectBackupProbeStatus.candidateMatch) {
+                matches.add(tile);
+              } else if (status == DirectBackupProbeStatus.different ||
+                  status == DirectBackupProbeStatus.differentIncomplete) {
+                different.add(tile);
+              } else if (status == DirectBackupProbeStatus.unavailable ||
+                  !BackupDirectBatch.eligible(tile.entry)) {
+                inconclusive.add(tile);
+              } else {
+                pending.add(tile);
+              }
+            }
+            final String packedTitle = AppI10n.backupPackedUnpackedTitle;
+            if (matches.isNotEmpty) {
+              issueSections.add((
+                reason: reason,
+                title: packedTitle,
+                resultLabel: AppI10n.backupDirectCheckMatch,
+                about: null,
+                tiles: matches,
+                primaryBadge: TileBadgeData(
+                  text: tr(AppI10n.backupDirectCheckMatch),
+                  colour: Theme.of(context).status.good,
+                ),
+              ));
+            }
+            if (different.isNotEmpty) {
+              issueSections.add((
+                reason: reason,
+                title: packedTitle,
+                resultLabel: AppI10n.backupTileVerificationChanged,
+                about: null,
+                tiles: different,
+                primaryBadge: TileBadgeData(
+                  text: tr(AppI10n.backupTileVerificationChanged),
+                  colour: Theme.of(context).status.bad,
+                ),
+              ));
+            }
+            if (inconclusive.isNotEmpty) {
+              issueSections.add((
+                reason: reason,
+                title: packedTitle,
+                resultLabel: AppI10n.backupDirectCheckReview,
+                about: null,
+                tiles: inconclusive,
+                primaryBadge: TileBadgeData(
+                  text: tr(AppI10n.backupDirectCheckReview),
+                  colour: Theme.of(context).status.warn,
+                ),
+              ));
+            }
+            if (pending.isNotEmpty) {
+              issueSections.add((
+                reason: reason,
+                title: packedTitle,
+                resultLabel: AppI10n.backupDirectCheckAwaiting,
+                about: check.total == 0
+                    ? AppI10n.backupPackedUnpackedAbout
+                    : null,
+                tiles: pending,
+                primaryBadge: TileBadgeData(
+                  text: tr(AppI10n.backupPackedUnpackedTag),
+                  colour: Theme.of(context).status.note,
+                ),
+              ));
+            }
+            if (other.isNotEmpty) {
+              issueSections.add((
+                reason: reason,
+                title: AppI10n.backupOtherConflictsTitle,
+                resultLabel: null,
+                about: _reconcileText(reason).about,
+                tiles: other,
+                primaryBadge: null,
+              ));
+            }
+          }
+          final grouped = <({ReconcileTile tile, TileBadgeData? primaryBadge})>[
+            for (final section in issueSections)
+              for (final tile in section.tiles)
+                (tile: tile, primaryBadge: section.primaryBadge),
           ];
           final List<String> ids = <String>[
-            for (final ReconcileTile tile in grouped)
-              reconcileTileId(tile.entry.name),
+            for (final item in grouped) reconcileTileId(item.tile.entry.name),
           ];
+          final List<ReconcileEntry> activeEntries =
+              visibleBackupReconcileEntries(
+                scan,
+                ref.read(backupResolvedIssuesProvider),
+              );
+          final List<ReconcileEntry> actionableMatchEntries = batch
+              .matchedEntries(
+                scan: scan,
+                backupRoot: backupRoot,
+                entries: activeEntries,
+              );
+          final int actionableMatches = actionableMatchEntries.length;
+          final int duplicateLiveCount = activeEntries
+              .where(
+                (entry) => entry.activeReasons.contains(
+                  BackupReconcileReason.duplicateLiveCopies,
+                ),
+              )
+              .length;
+          final List<ReconcileEntry> duplicateLiveEntries = activeEntries
+              .where(
+                (entry) => entry.activeReasons.contains(
+                  BackupReconcileReason.duplicateLiveCopies,
+                ),
+              )
+              .toList();
+          final List<WallpaperLibrary> duplicateLiveLocations =
+              <WallpaperLibrary>[
+                if (duplicateLiveEntries.any(
+                  (entry) => entry.evidence.liveWorkshop,
+                ))
+                  WallpaperLibrary.workshop,
+                if (duplicateLiveEntries.any(
+                  (entry) => entry.evidence.liveMyProjects,
+                ))
+                  WallpaperLibrary.myProjects,
+              ];
+          int duplicateCountFor(WallpaperLibrary library) =>
+              duplicateLiveEntries
+                  .where(
+                    (entry) => library == WallpaperLibrary.workshop
+                        ? entry.liveWorkshop
+                        : entry.liveMyProjects,
+                  )
+                  .length;
+          final bool showDuplicateActions =
+              duplicateLiveCount > 0 && duplicateLiveLocations.isNotEmpty;
+          final int checkableCount = activeEntries
+              .where(BackupDirectBatch.eligible)
+              .length;
+          final int firstPackedSection = issueSections.indexWhere(
+            (section) => section.title == AppI10n.backupPackedUnpackedTitle,
+          );
+          final bool showPackedProgress = check.running || check.done > 0;
+          final int matches = check.results.values
+              .where(
+                (result) =>
+                    result.status == DirectBackupProbeStatus.candidateMatch,
+              )
+              .length;
+          final int different = check.results.values
+              .where(
+                (result) =>
+                    result.status == DirectBackupProbeStatus.different ||
+                    result.status ==
+                        DirectBackupProbeStatus.differentIncomplete,
+              )
+              .length;
+          final int review = check.results.length - matches - different;
+          final bool canResume = check.cancelled && check.done < checkableCount;
+          final double duplicateActionsExtent =
+              MediaQuery.sizeOf(context).width < 1100 ? 108 : 60;
 
           return _selectionGrid(
             ref,
@@ -243,79 +404,301 @@ class _GridState extends ConsumerState<_Grid> {
             entranceToken: 0,
             entranceOnMount: false,
             reflowIdentity: const ValueKey<String>('reconcile-groups'),
+            animateGroupedChanges: true,
             sections: <SelectionGridSection>[
-              if (scanning.isNotEmpty)
+              for (final (sectionIndex, section) in issueSections.indexed)
                 SelectionGridSection(
-                  itemCount: scanning.length,
+                  itemCount: section.tiles.length,
+                  identity: '${section.title}:${section.resultLabel}',
+                  afterHeaderExtent:
+                      sectionIndex == firstPackedSection &&
+                              showPackedProgress ||
+                          section.resultLabel ==
+                                  AppI10n.backupDirectCheckMatch &&
+                              actionableMatches > 0 ||
+                          section.reason ==
+                                  BackupReconcileReason.duplicateLiveCopies &&
+                              showDuplicateActions
+                      ? (sectionIndex == firstPackedSection &&
+                                    showPackedProgress
+                                ? 74.0
+                                : 0.0) +
+                            (section.resultLabel ==
+                                        AppI10n.backupDirectCheckMatch &&
+                                    actionableMatches > 0
+                                ? 80.0
+                                : 0.0) +
+                            (section.reason ==
+                                        BackupReconcileReason
+                                            .duplicateLiveCopies &&
+                                    showDuplicateActions
+                                ? duplicateActionsExtent +
+                                      (_duplicateLiveProgress == null
+                                          ? 0.0
+                                          : 74.0)
+                                : 0.0)
+                      : null,
+                  afterHeader:
+                      sectionIndex == firstPackedSection &&
+                              showPackedProgress ||
+                          section.resultLabel ==
+                                  AppI10n.backupDirectCheckMatch &&
+                              actionableMatches > 0 ||
+                          section.reason ==
+                                  BackupReconcileReason.duplicateLiveCopies &&
+                              showDuplicateActions
+                      ? Column(
+                          children: <Widget>[
+                            if (sectionIndex == firstPackedSection &&
+                                showPackedProgress)
+                              _InlineReconcileProgress(
+                                label: tr(
+                                  check.running
+                                      ? AppI10n
+                                            .backupDirectCheckCheckingContents
+                                      : check.cancelled
+                                      ? AppI10n.backupDirectCheckPaused
+                                      : AppI10n.backupDirectCheckComplete,
+                                ),
+                                detail: tr(
+                                  AppI10n.backupDirectCheckProgress,
+                                  namedArgs: <String, String>{
+                                    'done': '${check.done}',
+                                    'total': '${check.total}',
+                                    'matches': '$matches',
+                                    'different': '$different',
+                                    'review': '$review',
+                                  },
+                                ),
+                                value: check.total == 0
+                                    ? 0
+                                    : check.done / check.total,
+                                colour: Theme.of(context).status.note,
+                              ),
+                            if (section.resultLabel ==
+                                    AppI10n.backupDirectCheckMatch &&
+                                actionableMatches > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: LayoutNums.contentGap,
+                                  bottom: LayoutNums.smallGap,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: <Widget>[
+                                      for (final format in <BackupCopyFormat>[
+                                        BackupCopyFormat.packed,
+                                        BackupCopyFormat.unpacked,
+                                      ])
+                                        BackupBulkActionButton(
+                                          label: tr(
+                                            format == BackupCopyFormat.packed
+                                                ? AppI10n
+                                                      .backupDirectCheckDeletePacked
+                                                : AppI10n
+                                                      .backupDirectCheckDeleteUnpacked,
+                                            namedArgs: <String, String>{
+                                              'count': '$actionableMatches',
+                                            },
+                                          ),
+                                          icon: Icons.delete_outline,
+                                          colour: Theme.of(context).status.bad,
+                                          destructive: true,
+                                          onPressed: () =>
+                                              deleteEquivalentBackupCopies(
+                                                context,
+                                                removedFormat: format,
+                                              ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (section.reason ==
+                                    BackupReconcileReason.duplicateLiveCopies &&
+                                showDuplicateActions)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: LayoutNums.contentGap,
+                                  bottom: LayoutNums.smallGap,
+                                ),
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: <Widget>[
+                                      for (final library
+                                          in duplicateLiveLocations)
+                                        BackupBulkActionButton(
+                                          key: ValueKey<String>(
+                                            'backup-delete-duplicate-live-${library.name}',
+                                          ),
+                                          label: tr(
+                                            AppI10n
+                                                .backupActionDeleteVerifiedLiveCopies,
+                                            namedArgs: <String, String>{
+                                              'count':
+                                                  '${duplicateCountFor(library)}',
+                                              'version': tr(
+                                                library ==
+                                                        WallpaperLibrary
+                                                            .workshop
+                                                    ? AppI10n
+                                                          .backupDetailWorkshopLive
+                                                    : AppI10n
+                                                          .backupDetailMyProjectsLive,
+                                              ),
+                                            },
+                                          ),
+                                          icon: Icons.delete_outline,
+                                          colour: Theme.of(context).status.bad,
+                                          destructive: true,
+                                          onPressed:
+                                              _duplicateLiveProgress != null
+                                              ? null
+                                              : () => deleteIdenticalLiveCopies(
+                                                  context,
+                                                  removedLibrary: library,
+                                                  onProgress:
+                                                      _setDuplicateLiveProgress,
+                                                ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (section.reason ==
+                                BackupReconcileReason.duplicateLiveCopies)
+                              if (_duplicateLiveProgress
+                                  case final DuplicateLiveOperationProgress
+                                      progress)
+                                _InlineReconcileProgress(
+                                  label: tr(
+                                    progress.stage ==
+                                            DuplicateLiveOperationStage.checking
+                                        ? AppI10n.backupActionCheckingLiveCopies
+                                        : AppI10n
+                                              .backupActionDeletingLiveCopies,
+                                    namedArgs: <String, String>{
+                                      'version': tr(
+                                        progress.location ==
+                                                WallpaperLibrary.workshop
+                                            ? AppI10n.backupDetailWorkshopLive
+                                            : AppI10n
+                                                  .backupDetailMyProjectsLive,
+                                      ),
+                                    },
+                                  ),
+                                  detail: tr(
+                                    AppI10n.backupActionLiveProgress,
+                                    namedArgs: <String, String>{
+                                      'done': '${progress.done}',
+                                      'total': '${progress.total}',
+                                    },
+                                  ),
+                                  value: progress.total == 0
+                                      ? 0
+                                      : progress.done / progress.total,
+                                  colour: Theme.of(context).status.bad,
+                                ),
+                          ],
+                        )
+                      : null,
                   headerPinned: true,
-                  headerExtent: _backupIssueHeaderHeight,
+                  headerExtent:
+                      sectionIndex == firstPackedSection &&
+                          checkableCount > 0 &&
+                          backupRoot != null &&
+                          MediaQuery.sizeOf(context).width < 1100
+                      ? 104
+                      : _backupIssueHeaderHeight,
                   header: _BackupIssueHeader(
-                    noteKey: const ValueKey<String>(
-                      'backup-reconcile-note-scanning',
+                    noteKey: ValueKey<String>(
+                      'backup-reconcile-note-${section.title}-${section.resultLabel}',
                     ),
                     pinned: true,
-                    child: Text(
-                      '${tr(AppI10n.backupDirectCheckScanning)} (${scanning.length})',
+                    trailing:
+                        sectionIndex == firstPackedSection &&
+                            checkableCount > 0 &&
+                            backupRoot != null
+                        ? BackupBulkActionButton(
+                            key: const ValueKey<String>(
+                              'backup-check-packed-unpacked',
+                            ),
+                            label: tr(
+                              check.running
+                                  ? check.cancelled
+                                        ? AppI10n.backupDirectCheckStopping
+                                        : AppI10n.backupDirectCheckCancel
+                                  : canResume
+                                  ? AppI10n.backupDirectCheckResume
+                                  : AppI10n.backupDirectCheckStart,
+                              namedArgs: <String, String>{
+                                'count':
+                                    '${canResume ? checkableCount - check.done : checkableCount}',
+                              },
+                            ),
+                            icon: check.running
+                                ? Icons.stop_rounded
+                                : Icons.fact_check_outlined,
+                            colour: Theme.of(context).status.note,
+                            onPressed: check.running && check.cancelled
+                                ? null
+                                : check.running
+                                ? batch.cancel
+                                : () => batch.start(
+                                    scan: scan,
+                                    backupRoot: backupRoot,
+                                    entries: activeEntries,
+                                  ),
+                          )
+                        : null,
+                    child: Text.rich(
+                      TextSpan(
+                        children: <InlineSpan>[
+                          TextSpan(
+                            text:
+                                '${tr(section.title)}'
+                                '${section.resultLabel == null ? '' : ' · ${tr(section.resultLabel!)}'}'
+                                ' (${section.tiles.length})'
+                                '${section.about == null ? '' : ' - '}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          if (section.about case final String about)
+                            TextSpan(text: tr(about)),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
-              for (final DirectBackupProbeStatus status
-                  in DirectBackupProbeStatus.values)
-                if (checked[status]!.isNotEmpty)
-                  SelectionGridSection(
-                    itemCount: checked[status]!.length,
-                    headerPinned: true,
-                    headerExtent: _backupIssueHeaderHeight,
-                    header: _BackupIssueHeader(
-                      noteKey: ValueKey<String>(
-                        'backup-reconcile-note-${status.name}',
-                      ),
-                      pinned: true,
-                      child: Text(
-                        '${tr(_directCheckTitle(status))} (${checked[status]!.length})',
-                      ),
-                    ),
-                  ),
-              for (final BackupReconcileReason reason
-                  in BackupReconcileReason.values)
-                if (groups[reason]!.isNotEmpty)
-                  SelectionGridSection(
-                    itemCount: groups[reason]!.length,
-                    headerPinned: true,
-                    headerExtent: _backupIssueHeaderHeight,
-                    header: _BackupIssueHeader(
-                      noteKey: ValueKey<String>(
-                        'backup-reconcile-note-${reason.name}',
-                      ),
-                      pinned: true,
-                      child: Text.rich(
-                        TextSpan(
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: '${tr(_reconcileText(reason).title)} - ',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            TextSpan(text: tr(_reconcileText(reason).about)),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
             ],
             itemBuilder:
                 (BuildContext context, int index, GridGeometry geometry) {
-                  final ReconcileTile tile = grouped[index];
+                  final item = grouped[index];
+                  final ReconcileTile tile = item.tile;
                   return ReconcileTileView(
                     key: ValueKey<String>(ids[index]),
                     width: geometry.tile,
                     tile: tile,
-                    contentStatus:
-                        check.results[tile.entry.name.toLowerCase()]?.status,
-                    contentScanning: scanning.contains(tile),
+                    primaryBadge: item.primaryBadge,
+                    contentProbe: check.results[tile.entry.name.toLowerCase()],
+                    canDeleteMatchedCopy:
+                        BackupDirectBatch.eligible(tile.entry) &&
+                        check.results[tile.entry.name.toLowerCase()]?.status ==
+                            DirectBackupProbeStatus.candidateMatch,
+                    contentScanning:
+                        check.running &&
+                        !check.cancelled &&
+                        BackupDirectBatch.eligible(tile.entry) &&
+                        !check.results.containsKey(
+                          tile.entry.name.toLowerCase(),
+                        ),
                     folders: reconcileFolders(
                       entry: tile.entry,
                       backupRoot: backupRoot,
@@ -500,6 +883,112 @@ class _GridState extends ConsumerState<_Grid> {
         );
       },
     );
+  }
+
+  Widget _updateSyncGrid(
+    WidgetRef ref,
+    AsyncValue<List<BackupTile>> tiles, {
+    required BackupScan scan,
+    required BackupResolvedIssuesState resolved,
+    required String? backupRoot,
+    required String? workshop,
+    required String? myProjects,
+  }) {
+    return switch (tiles) {
+      AsyncData<List<BackupTile>>(value: final List<BackupTile> value)
+          when value.isEmpty =>
+        Builder(
+          builder: (_) {
+            widget.entrance.discard();
+            return const NoResultsView(key: NoResultsView.viewKey);
+          },
+        ),
+      AsyncData<List<BackupTile>>(:final List<BackupTile> value) => Builder(
+        builder: (BuildContext context) {
+          final List<BackupTile> updates = [];
+          final List<BackupTile> syncs = [];
+          final List<BackupTile> both = [];
+          for (final BackupTile tile in value) {
+            final BackupUpdatePlan plan =
+                visibleBackupUpdatePlan(scan, resolved, tile.card) ??
+                const BackupUpdatePlan(updateContent: true);
+            if (plan.updateContent && plan.needsSync) {
+              both.add(tile);
+            } else if (plan.needsSync) {
+              syncs.add(tile);
+            } else {
+              updates.add(tile);
+            }
+          }
+          final List<({String title, List<BackupTile> tiles})> sections = [
+            (title: AppI10n.backupUpdateOnlyTitle, tiles: updates),
+            (title: AppI10n.backupSyncOnlyTitle, tiles: syncs),
+            (title: AppI10n.backupUpdateSyncTitle, tiles: both),
+          ];
+          final List<BackupTile> grouped = [
+            for (final section in sections) ...section.tiles,
+          ];
+          final List<String> ids = [for (final tile in grouped) tile.card.id];
+          return _selectionGrid(
+            ref,
+            context,
+            id: 'backup-grid',
+            ids: ids,
+            reflowIdentity: BackupState.updateAvailable,
+            animateGroupedChanges: true,
+            sections: [
+              for (final section in sections)
+                if (section.tiles.isNotEmpty)
+                  SelectionGridSection(
+                    itemCount: section.tiles.length,
+                    identity: section.title,
+                    headerPinned: true,
+                    headerExtent: _backupIssueHeaderHeight,
+                    header: _BackupIssueHeader(
+                      noteKey: ValueKey<String>(
+                        'backup-update-sync-${section.title}',
+                      ),
+                      pinned: true,
+                      child: Text(
+                        '${tr(section.title)} (${section.tiles.length})',
+                      ),
+                    ),
+                  ),
+            ],
+            itemBuilder:
+                (BuildContext context, int index, GridGeometry geometry) {
+                  final BackupTile tile = grouped[index];
+                  return BackupTileView(
+                    key: ValueKey<String>(ids[index]),
+                    width: geometry.tile,
+                    tile: tile,
+                    updatePlan: visibleBackupUpdatePlan(
+                      scan,
+                      resolved,
+                      tile.card,
+                    ),
+                    backupRoot: backupRoot,
+                    folders: cardFolders(
+                      library: tile.card.library,
+                      name: tile.card.name,
+                      liveExists: scan.presence[tile.card.id]?.live ?? false,
+                      backupExists:
+                          scan.presence[tile.card.id]?.backup ?? false,
+                      backupRoot: backupRoot,
+                      liveWorkshopPath: workshop,
+                      liveMyProjectsPath: myProjects,
+                    ),
+                    onTap: () => _click(ref, ids, index),
+                  );
+                },
+          );
+        },
+      ),
+      AsyncError<List<BackupTile>>(:final Object error) => Center(
+        child: Text('${tr(AppI10n.backupTilesFailed)} $error'),
+      ),
+      _ => const _Scanning(idle: AppI10n.backupPreparingGrid),
+    };
   }
 
   ({String title, String about}) _junkText(WallpaperJunkKind kind) =>
@@ -703,6 +1192,16 @@ class _GridState extends ConsumerState<_Grid> {
           workshop: workshop,
           myProjects: myProjects,
         ),
+      );
+    } else if (shown.state == BackupState.updateAvailable) {
+      grid = _updateSyncGrid(
+        ref,
+        ref.watch(backupVisibleTilesProvider),
+        scan: scan,
+        resolved: resolved,
+        backupRoot: backupRoot,
+        workshop: workshop,
+        myProjects: myProjects,
       );
     } else if (shown.state == BackupState.emptyBackup) {
       grid = _junkGrid(

@@ -216,6 +216,9 @@ class UpdateFileChanges extends StatefulWidget {
     this.destinationActions,
     this.bidirectional = false,
     this.overview,
+    this.virtualPackedSource,
+    this.prepareUnderlyingComparison,
+    this.emptyMessage,
   });
 
   final WallpaperInfo? wallpaper;
@@ -234,6 +237,12 @@ class UpdateFileChanges extends StatefulWidget {
   final Widget? destinationActions;
   final bool bidirectional;
   final FolderFileOverview? overview;
+
+  /// Which pane represents indexed files inside a package, if any.
+  final bool? virtualPackedSource;
+  final Future<({String firstPath, String secondPath})?> Function(String)?
+  prepareUnderlyingComparison;
+  final String? emptyMessage;
 
   @override
   State<UpdateFileChanges> createState() => _UpdateFileChangesState();
@@ -328,191 +337,191 @@ class _UpdateFileChangesState extends State<UpdateFileChanges> {
     );
   }
 
-  Widget _buildChanges(BuildContext context) =>
-      FutureBuilder<_DisplayedFileChanges?>(
-        future: _changes,
-        initialData: widget.overview == null
-            ? null
-            : _displayedOverview(widget.overview!),
-        builder:
-            (
-              BuildContext context,
-              AsyncSnapshot<_DisplayedFileChanges?> snapshot,
-            ) {
-              final _DisplayedFileChanges? displayed = snapshot.data;
-              if (displayed == null &&
-                  snapshot.connectionState != ConnectionState.done) {
-                return FileTreeSurface(
-                  foreground: widget.foreground,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      children: <Widget>[
-                        SizedBox.square(
-                          dimension: 15,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: widget.foreground.withValues(alpha: .7),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            tr(AppI10n.backupDetailComparingFiles),
-                            style: TextStyle(color: widget.foreground),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              if (snapshot.hasError || displayed == null) {
-                return _fileChangeMessage(
-                  tr(AppI10n.backupDetailFileComparisonUnavailable),
-                );
-              }
-              final BackupFileChanges changes = displayed.changes;
-              final int total =
-                  changes.modified.length +
-                  changes.onlyLive.length +
-                  changes.onlyBackup.length +
-                  displayed.matching.length;
-              if (total == 0 &&
-                  widget.sourceActions == null &&
-                  widget.destinationActions == null) {
-                return _fileChangeMessage(
-                  tr(AppI10n.backupDetailNoFileDifferences),
-                );
-              }
-              final List<FileTreeCompareCandidate> compareCandidates =
-                  <FileTreeCompareCandidate>[
-                    ..._manualCompareCandidates(
-                      paths: changes.onlyLive,
-                      side: 'live',
-                      folder: widget.liveFolder,
-                      label: widget.sourceLabel,
-                    ),
-                    ..._manualCompareCandidates(
-                      paths: changes.onlyBackup,
-                      side: 'backup',
-                      folder: widget.backupFolder,
-                      label: widget.destinationLabel,
-                    ),
-                  ];
-              final FileTreeCompareAction? manualCompareAction =
-                  _selectedManualCompareAction(
-                    candidates: compareCandidates,
-                    selectedIds: _manualCompare.selected,
-                    foreground: widget.foreground,
-                  );
-              final StatusPalette colours = Theme.of(context).status;
-              final BackupUpdateSelection? selection = widget.selection;
-              return _PairedUpdateTree(
-                key: const ValueKey<String>('backup-update-file-tree'),
-                configuration: widget,
-                changes: changes,
-                matching: displayed.matching,
-                manualSelection: _manualCompare,
-                manualAction: manualCompareAction,
-                onCompareSelect: (candidate, control, shift) =>
-                    _selectManualCompare(
-                      compareCandidates,
-                      candidate,
-                      control,
-                      shift,
-                    ),
-                toolbar: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildChanges(
+    BuildContext context,
+  ) => FutureBuilder<_DisplayedFileChanges?>(
+    future: _changes,
+    initialData: widget.overview == null
+        ? null
+        : _displayedOverview(widget.overview!),
+    builder:
+        (BuildContext context, AsyncSnapshot<_DisplayedFileChanges?> snapshot) {
+          final _DisplayedFileChanges? displayed = snapshot.data;
+          if (displayed == null &&
+              snapshot.connectionState != ConnectionState.done) {
+            return FileTreeSurface(
+              foreground: widget.foreground,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
                   children: <Widget>[
-                    if (compareCandidates.length >= 2)
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: FileTreeCompareBar(
-                          keyBase: 'backup-manual-compare',
-                          candidates: compareCandidates,
-                          selection: _manualCompare,
-                          foreground: widget.foreground,
-                          label: tr(AppI10n.backupDetailCompareFiles),
-                          clearTooltip: tr(AppI10n.backupDetailDeselectAll),
-                          actionBuilder: (key, first, second) =>
-                              _fileCompareAction(
-                                key: key,
-                                firstLabel: first.label,
-                                firstPath: first.path,
-                                secondLabel: second.label,
-                                secondPath: second.path,
-                                foreground: widget.foreground,
-                              ),
-                          onClear: () => setState(_manualCompare.clear),
-                        ),
+                    SizedBox.square(
+                      dimension: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: widget.foreground.withValues(alpha: .7),
                       ),
-                    Wrap(
-                      spacing: 12,
-                      children: <Widget>[
-                        if (changes.modified.isNotEmpty)
-                          FileTreeGroupHeader(
-                            title: tr(AppI10n.backupDetailModified),
-                            count: changes.modified.length,
-                            accent: colours.warn,
-                            foreground: widget.foreground,
-                            trailing: selection == null
-                                ? null
-                                : _copyGroupChoice(
-                                    selection,
-                                    changes.modified,
-                                    widget.foreground,
-                                    keyBase: 'modified',
-                                  ),
-                          ),
-                        if (changes.onlyLive.isNotEmpty)
-                          FileTreeGroupHeader(
-                            title:
-                                widget.sourceOnlyTitle ??
-                                tr(AppI10n.backupDetailAddedFiles),
-                            count: changes.onlyLive.length,
-                            accent: colours.good,
-                            foreground: widget.foreground,
-                            trailing: selection == null
-                                ? null
-                                : _copyGroupChoice(
-                                    selection,
-                                    changes.onlyLive,
-                                    widget.foreground,
-                                    keyBase: 'only-live',
-                                  ),
-                          ),
-                        if (changes.onlyBackup.isNotEmpty)
-                          FileTreeGroupHeader(
-                            title:
-                                widget.destinationOnlyTitle ??
-                                tr(AppI10n.backupDetailRemovedFiles),
-                            count: changes.onlyBackup.length,
-                            accent: colours.note,
-                            foreground: widget.foreground,
-                            trailing: selection == null
-                                ? null
-                                : _deletionGroupChoice(
-                                    selection,
-                                    changes.onlyBackup,
-                                    widget.foreground,
-                                    keyBase: 'only-backup',
-                                  ),
-                          ),
-                        if (displayed.matching.isNotEmpty)
-                          FileTreeGroupHeader(
-                            title: tr(AppI10n.backupDetailMatchingFiles),
-                            count: displayed.matching.length,
-                            accent: colours.good,
-                            foreground: widget.foreground,
-                          ),
-                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tr(AppI10n.backupDetailComparingFiles),
+                        style: TextStyle(color: widget.foreground),
+                      ),
                     ),
                   ],
                 ),
+              ),
+            );
+          }
+          if (snapshot.hasError || displayed == null) {
+            return _fileChangeMessage(
+              tr(AppI10n.backupDetailFileComparisonUnavailable),
+            );
+          }
+          final BackupFileChanges changes = displayed.changes;
+          final int total =
+              changes.modified.length +
+              changes.onlyLive.length +
+              changes.onlyBackup.length +
+              displayed.matching.length;
+          if (total == 0 &&
+              widget.sourceActions == null &&
+              widget.destinationActions == null) {
+            return _fileChangeMessage(
+              widget.emptyMessage ?? tr(AppI10n.backupDetailNoFileDifferences),
+            );
+          }
+          final List<FileTreeCompareCandidate> compareCandidates =
+              widget.virtualPackedSource != null
+              ? <FileTreeCompareCandidate>[]
+              : <FileTreeCompareCandidate>[
+                  ..._manualCompareCandidates(
+                    paths: changes.onlyLive,
+                    side: 'live',
+                    folder: widget.liveFolder,
+                    label: widget.sourceLabel,
+                  ),
+                  ..._manualCompareCandidates(
+                    paths: changes.onlyBackup,
+                    side: 'backup',
+                    folder: widget.backupFolder,
+                    label: widget.destinationLabel,
+                  ),
+                ];
+          final FileTreeCompareAction? manualCompareAction =
+              _selectedManualCompareAction(
+                candidates: compareCandidates,
+                selectedIds: _manualCompare.selected,
+                foreground: widget.foreground,
               );
-            },
-      );
+          final StatusPalette colours = Theme.of(context).status;
+          final BackupUpdateSelection? selection = widget.selection;
+          return _PairedUpdateTree(
+            key: const ValueKey<String>('backup-update-file-tree'),
+            configuration: widget,
+            changes: changes,
+            matching: displayed.matching,
+            manualSelection: _manualCompare,
+            manualAction: manualCompareAction,
+            onCompareSelect: (candidate, control, shift) =>
+                _selectManualCompare(
+                  compareCandidates,
+                  candidate,
+                  control,
+                  shift,
+                ),
+            compareBar: compareCandidates.length < 2
+                ? null
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: FileTreeCompareBar(
+                      keyBase: 'backup-manual-compare',
+                      candidates: compareCandidates,
+                      selection: _manualCompare,
+                      foreground: widget.foreground,
+                      label: tr(AppI10n.backupDetailCompareFiles),
+                      clearTooltip: tr(AppI10n.backupDetailDeselectAll),
+                      actionBuilder: (key, first, second) => _fileCompareAction(
+                        key: key,
+                        firstLabel: first.label,
+                        firstPath: first.path,
+                        secondLabel: second.label,
+                        secondPath: second.path,
+                        foreground: widget.foreground,
+                      ),
+                      onClear: () => setState(_manualCompare.clear),
+                    ),
+                  ),
+            toolbar: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Wrap(
+                  spacing: 12,
+                  children: <Widget>[
+                    if (changes.modified.isNotEmpty)
+                      FileTreeGroupHeader(
+                        title: tr(AppI10n.backupDetailModified),
+                        count: changes.modified.length,
+                        accent: colours.warn,
+                        foreground: widget.foreground,
+                        trailing: selection == null
+                            ? null
+                            : _copyGroupChoice(
+                                selection,
+                                changes.modified,
+                                widget.foreground,
+                                keyBase: 'modified',
+                              ),
+                      ),
+                    if (changes.onlyLive.isNotEmpty)
+                      FileTreeGroupHeader(
+                        title:
+                            widget.sourceOnlyTitle ??
+                            tr(AppI10n.backupDetailAddedFiles),
+                        count: changes.onlyLive.length,
+                        accent: colours.good,
+                        foreground: widget.foreground,
+                        trailing: selection == null
+                            ? null
+                            : _copyGroupChoice(
+                                selection,
+                                changes.onlyLive,
+                                widget.foreground,
+                                keyBase: 'only-live',
+                              ),
+                      ),
+                    if (changes.onlyBackup.isNotEmpty)
+                      FileTreeGroupHeader(
+                        title:
+                            widget.destinationOnlyTitle ??
+                            tr(AppI10n.backupDetailRemovedFiles),
+                        count: changes.onlyBackup.length,
+                        accent: colours.note,
+                        foreground: widget.foreground,
+                        trailing: selection == null
+                            ? null
+                            : _deletionGroupChoice(
+                                selection,
+                                changes.onlyBackup,
+                                widget.foreground,
+                                keyBase: 'only-backup',
+                              ),
+                      ),
+                    if (displayed.matching.isNotEmpty)
+                      FileTreeGroupHeader(
+                        title: tr(AppI10n.backupDetailMatchingFiles),
+                        count: displayed.matching.length,
+                        accent: colours.good,
+                        foreground: widget.foreground,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+  );
 
   Widget _fileChangeMessage(String text) => FileTreeSurface(
     foreground: widget.foreground,

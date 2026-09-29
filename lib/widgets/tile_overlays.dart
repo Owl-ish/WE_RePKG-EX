@@ -127,7 +127,11 @@ class _TileBadge extends StatelessWidget {
   final double allocatedWidth;
   final double lineHeight;
 
-  static const double _backgroundMix = .60;
+  static const double _backgroundMix = .50;
+  static const double _leftPadding = 5;
+  static const double _rightPadding = 11;
+  static const double _verticalPadding = 3;
+  static const double _horizontalInset = _leftPadding + _rightPadding;
   static const TextStyle _style = TextStyle(
     color: Colors.white,
     fontSize: 11,
@@ -161,22 +165,30 @@ class _TileBadge extends StatelessWidget {
           textScaler: scaler,
           locale: locale,
         )..layout();
-        return (width: painter.width + 12, height: painter.height);
+        return (
+          width: painter.width + _horizontalInset,
+          height: painter.height,
+        );
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final double viewport = math.max(0, allocatedWidth - 12);
-    final double textWidth = math.max(0, naturalWidth - 12);
+    final double viewport = math.max(0, allocatedWidth - _horizontalInset);
+    final double textWidth = math.max(0, naturalWidth - _horizontalInset);
     final bool overflows = textWidth > viewport + .5;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.only(
+        left: _leftPadding,
+        right: _rightPadding,
+        top: _verticalPadding,
+        bottom: _verticalPadding,
+      ),
       decoration: BoxDecoration(
         color: Color.alphaBlend(
           data.colour.withValues(alpha: _backgroundMix),
-          Colors.black,
+          Colors.black.withValues(alpha: .55),
         ),
         borderRadius: BorderRadius.circular(4),
       ),

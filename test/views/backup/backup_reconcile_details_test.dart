@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:we_repkg/config/theme.dart';
 import 'package:we_repkg/constants/i10n.dart';
 import 'package:we_repkg/cores/backup.dart';
+import 'package:we_repkg/cores/scene_pkg_inspection.dart';
 import 'package:we_repkg/provider/system.dart';
 import 'package:we_repkg/utils/backup_diff.dart';
 import 'package:we_repkg/utils/backup_tiles.dart';
@@ -78,9 +79,18 @@ void main() {
     expect(find.text(AppI10n.backupOpenBackupFolder), findsNothing);
   });
 
-  testWidgets('reconcile tile surfaces every known issue badge', (
+  testWidgets('reconcile tile shows the main issue and details show all tags', (
     tester,
   ) async {
+    final Directory live = Directory.systemTemp.createTempSync(
+      'we_repkg_reconcile_tags',
+    );
+    addTearDown(() {
+      if (live.existsSync()) live.deleteSync(recursive: true);
+    });
+    File(
+      '${live.path}${Platform.pathSeparator}project.json',
+    ).writeAsStringSync('{"title":"Multi-issue","type":"scene"}');
     const ReconcileTile tile = (
       entry: ReconcileEntry(
         name: 'multi-issue',
@@ -107,7 +117,7 @@ void main() {
               child: ReconcileTileView(
                 width: 180,
                 tile: tile,
-                folders: const (live: null, backup: null),
+                folders: (live: live.path, backup: null),
                 onTap: () {},
               ),
             ),
@@ -116,10 +126,45 @@ void main() {
       ),
     );
 
-    expect(find.text(AppI10n.backupTileDuplicateLive), findsOneWidget);
-    expect(find.text(AppI10n.backupTileBackupsConflict), findsOneWidget);
-    expect(find.text(AppI10n.backupStateUpdateAvailable), findsOneWidget);
-    expect(find.text(AppI10n.backupStateSynced), findsNothing);
+    final Finder tileFinder = find.byType(ReconcileTileView);
+    final TileBadgeStrip tileTags = tester.widget<TileBadgeStrip>(
+      find.descendant(of: tileFinder, matching: find.byType(TileBadgeStrip)),
+    );
+    expect(tileTags.badges.map((badge) => badge.text), <String>[
+      AppI10n.backupTileDuplicateLive,
+    ]);
+
+    await tester.tap(tileFinder);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(tileFinder);
+    for (
+      int attempt = 0;
+      attempt < 40 && find.byType(WallpaperDetailDialog).evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    final TileBadgeStrip detailTags = tester.widget<TileBadgeStrip>(
+      find.descendant(
+        of: find.byType(WallpaperDetailDialog),
+        matching: find.byType(TileBadgeStrip),
+      ),
+    );
+    expect(
+      detailTags.badges.map((badge) => badge.text),
+      containsAll(<String>[
+        AppI10n.backupTileDuplicateLive,
+        AppI10n.backupTileBackupsConflict,
+        AppI10n.backupStateUpdateAvailable,
+      ]),
+    );
+    expect(
+      detailTags.badges.map((badge) => badge.text),
+      isNot(contains(AppI10n.backupStateSynced)),
+    );
   });
 
   testWidgets('reconcile details surface hidden ordinary attention states', (
@@ -597,6 +642,143 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('backup-file-view-delete-destination')),
       findsNothing,
+    );
+    for (final DirectBackupProbeStatus status in <DirectBackupProbeStatus>[
+      DirectBackupProbeStatus.candidateMatch,
+      DirectBackupProbeStatus.different,
+    ]) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Scaffold(
+              body: Center(
+                child: ReconcileTileView(
+                  width: 180,
+                  tile: tile,
+                  folders: (live: live.path, backup: null),
+                  backupRoot: root.path,
+                  contentProbe: (
+                    status: status,
+                    changes: const (
+                      modified: <String>['project.json'],
+                      onlyPacked: <String>[],
+                      onlyUnpacked: <String>[],
+                    ),
+                    reasons: const <DirectBackupProbeReason>{},
+                  ),
+                  canDeleteMatchedCopy:
+                      status == DirectBackupProbeStatus.candidateMatch,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(tileFinder);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(tileFinder);
+      for (int attempt = 0; attempt < 40; attempt++) {
+        if (openFiles.evaluate().isNotEmpty) break;
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        });
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(openFiles, findsOneWidget);
+      await tester.tap(openFiles);
+      for (int attempt = 0; attempt < 40; attempt++) {
+        if (find
+            .byKey(const ValueKey<String>('backup-file-view-delete-source'))
+            .evaluate()
+            .isNotEmpty) {
+          break;
+        }
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        find.byKey(const ValueKey<String>('backup-file-view-delete-source')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('backup-file-view-delete-destination'),
+        ),
+        findsOneWidget,
+      );
+    }
+    File(
+      '${workshopBackup.path}${Platform.pathSeparator}scene.pkg',
+    ).deleteSync();
+    File(
+      '${workshopBackup.path}${Platform.pathSeparator}scene.json',
+    ).writeAsStringSync('{"sameFormat":true}');
+    const ReconcileTile sameFormatTile = (
+      entry: ReconcileEntry(
+        name: 'small-conflict',
+        reason: BackupReconcileReason.conflictingBackupCopies,
+        states: <WallpaperLibrary, BackupState>{
+          WallpaperLibrary.workshop: BackupState.synced,
+        },
+        backupWorkshop: true,
+        backupMyProjects: true,
+        backupDifference: BackupCopyDifference(
+          differentSize: <String>['project.json'],
+          workshopFormat: BackupCopyFormat.unpacked,
+          myProjectsFormat: BackupCopyFormat.unpacked,
+        ),
+      ),
+      face: null,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: Center(
+              child: ReconcileTileView(
+                width: 180,
+                tile: sameFormatTile,
+                folders: (live: live.path, backup: null),
+                backupRoot: root.path,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(tileFinder);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(tileFinder);
+    for (int attempt = 0; attempt < 40; attempt++) {
+      if (openFiles.evaluate().isNotEmpty) break;
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(openFiles, findsOneWidget);
+    await tester.tap(openFiles);
+    for (int attempt = 0; attempt < 40; attempt++) {
+      if (find
+          .byKey(const ValueKey<String>('backup-file-view-delete-source'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(
+      find.byKey(const ValueKey<String>('backup-file-view-delete-source')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('backup-file-view-delete-destination')),
+      findsOneWidget,
     );
     await tester.pump(const Duration(seconds: 2));
   });

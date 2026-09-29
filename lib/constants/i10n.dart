@@ -40,6 +40,10 @@ class AppI10n {
   static const String backupDirectCheckCancel = 'backup.directCheckCancel';
   static const String backupDirectCheckStopping = 'backup.directCheckStopping';
   static const String backupDirectCheckProgress = 'backup.directCheckProgress';
+  static const String backupDirectCheckCheckingContents =
+      'backup.directCheckCheckingContents';
+  static const String backupDirectCheckComplete = 'backup.directCheckComplete';
+  static const String backupDirectCheckPaused = 'backup.directCheckPaused';
   static const String backupDirectCheckMatch = 'backup.directCheckMatch';
   static const String backupDirectCheckDeletePacked =
       'backup.directCheckDeletePacked';
@@ -54,6 +58,14 @@ class AppI10n {
   static const String backupDirectCheckIncomplete =
       'backup.directCheckIncomplete';
   static const String backupDirectCheckReview = 'backup.directCheckReview';
+  static const String backupDirectCheckAwaiting = 'backup.directCheckAwaiting';
+  static const String backupPackedUnpackedTitle = 'backup.packedUnpackedTitle';
+  static const String backupPackedUnpackedTag = 'backup.packedUnpackedTag';
+  static const String backupPackedUnpackedAbout = 'backup.packedUnpackedAbout';
+  static const String backupOtherConflictsTitle = 'backup.otherConflictsTitle';
+  static const String backupUpdateOnlyTitle = 'backup.updateOnlyTitle';
+  static const String backupSyncOnlyTitle = 'backup.syncOnlyTitle';
+  static const String backupUpdateSyncTitle = 'backup.updateSyncTitle';
   static const String backupReconcileReasonDuplicateLiveTitle =
       'backup.reconcileReason.duplicateLiveTitle';
   static const String backupReconcileReasonDuplicateLiveAbout =
@@ -104,6 +116,36 @@ class AppI10n {
   static const String backupDetailInMyProjectsLive =
       'backup.detail.inMyProjectsLive';
   static const String backupDetailFileChanges = 'backup.detail.fileChanges';
+  static const String backupDetailBackupFolderFiles =
+      'backup.detail.backupFolderFiles';
+  static const String backupDetailTrueDifferences =
+      'backup.detail.trueDifferences';
+  static const String backupDetailOnlyPacked = 'backup.detail.onlyPacked';
+  static const String backupDetailOnlyUnpacked = 'backup.detail.onlyUnpacked';
+  static const String backupDetailNotInThisCopy = 'backup.detail.notInThisCopy';
+  static const String backupDetailUnderlyingInsidePackage =
+      'backup.detail.underlyingInsidePackage';
+  static const String backupDetailUnderlyingIncomplete =
+      'backup.detail.underlyingIncomplete';
+  static const String backupDetailNoConfirmedPaths =
+      'backup.detail.noConfirmedPaths';
+  static const String backupDetailIdenticalContents =
+      'backup.detail.identicalContents';
+  static const String backupDetailPackedUnpackedMatchBanner =
+      'backup.detail.packedUnpackedMatchBanner';
+  static const String backupDetailUnpackForInspection =
+      'backup.detail.unpackForInspection';
+  static const String backupDetailUnpackingPackage =
+      'backup.detail.unpackingPackage';
+  static const String backupDetailShowOriginalFiles =
+      'backup.detail.showOriginalFiles';
+  static const String backupDetailShowUnpackedFiles =
+      'backup.detail.showUnpackedFiles';
+  static const String backupDetailUnpackedPreview =
+      'backup.detail.unpackedPreview';
+  static const String backupDetailTemporaryUnpackedView =
+      'backup.detail.temporaryUnpackedView';
+  static const String backupDetailUnpackFailed = 'backup.detail.unpackFailed';
   static const String backupDetailExpandFileChanges =
       'backup.detail.expandFileChanges';
   static const String backupDetailComparingFiles =
@@ -283,12 +325,29 @@ class AppI10n {
       'backup.action.deleteLiveVersionTitle';
   static const String backupActionDeleteLiveVersionMessage =
       'backup.action.deleteLiveVersionMessage';
+  static const String backupActionDeleteVerifiedLiveCopies =
+      'backup.action.deleteVerifiedLiveCopies';
+  static const String backupActionCheckingLiveCopies =
+      'backup.action.checkingLiveCopies';
+  static const String backupActionDeletingLiveCopies =
+      'backup.action.deletingLiveCopies';
+  static const String backupActionLiveProgress = 'backup.action.liveProgress';
+  static const String backupActionDeleteIdenticalLiveTitle =
+      'backup.action.deleteIdenticalLiveTitle';
+  static const String backupActionDeleteIdenticalLiveMessage =
+      'backup.action.deleteIdenticalLiveMessage';
+  static const String backupActionNoIdenticalLiveCopies =
+      'backup.action.noIdenticalLiveCopies';
   static const String backupActionDeleteBackupVersion =
       'backup.action.deleteBackupVersion';
+  static const String backupActionDeleteBackupVersionButton =
+      'backup.action.deleteBackupVersionButton';
   static const String backupActionDeleteBackupVersionTitle =
       'backup.action.deleteBackupVersionTitle';
   static const String backupActionDeleteBackupVersionMessage =
       'backup.action.deleteBackupVersionMessage';
+  static const String backupActionDeleteDifferentBackupVersionMessage =
+      'backup.action.deleteDifferentBackupVersionMessage';
   static const String backupActionDeleteBackupVersionsTitle =
       'backup.action.deleteBackupVersionsTitle';
   static const String backupActionDeleteBackupVersionsMessage =
