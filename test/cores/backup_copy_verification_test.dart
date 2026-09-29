@@ -299,6 +299,65 @@ void main() {
     );
   });
 
+  test(
+    'explicit comparison materializes only the selected package entry',
+    () async {
+      final fixtures = _pair(temporary);
+      final File package = File(path.join(fixtures.packed.path, 'scene.pkg'));
+      _writePackage(package, <String, List<int>>{
+        'materials/changed.json': utf8.encode('{"source":"packed"}'),
+        'materials/other.json': utf8.encode('{"source":"other"}'),
+      });
+      final File unpacked = File(
+        path.join(fixtures.unpacked.path, 'materials', 'changed.json'),
+      );
+      unpacked.parent.createSync(recursive: true);
+      unpacked.writeAsStringSync('{"source":"unpacked"}');
+
+      final ScenePkgInspectionSession session = ScenePkgInspectionSession();
+      try {
+        final prepared = await session.preparePackedComparison(
+          packedFolder: fixtures.packed,
+          unpackedFolder: fixtures.unpacked,
+          relativePath: 'materials/changed.json',
+        );
+        expect(prepared, isNotNull);
+        expect(
+          File(prepared!.packedPath).readAsStringSync(),
+          '{"source":"packed"}',
+        );
+        expect(prepared.unpackedPath, unpacked.path);
+        expect(
+          File(
+            path.join(path.dirname(prepared.packedPath), 'other.json'),
+          ).existsSync(),
+          isFalse,
+        );
+        expect(
+          await session.preparePackedComparison(
+            packedFolder: fixtures.packed,
+            unpackedFolder: fixtures.unpacked,
+            relativePath: 'materials/changed.json',
+          ),
+          prepared,
+        );
+      await session.dispose();
+      expect(File(prepared.packedPath).existsSync(), isFalse);
+      expect(unpacked.existsSync(), isTrue);
+      expect(
+        await session.preparePackedComparison(
+          packedFolder: fixtures.packed,
+          unpackedFolder: fixtures.unpacked,
+          relativePath: 'materials/changed.json',
+        ),
+        isNull,
+      );
+      } finally {
+        await session.dispose();
+      }
+    },
+  );
+
   test('package index reads entry tables across buffer boundaries', () async {
     final File package = File(path.join(temporary.path, 'large-scene.pkg'));
     final Map<String, List<int>> entries = <String, List<int>>{

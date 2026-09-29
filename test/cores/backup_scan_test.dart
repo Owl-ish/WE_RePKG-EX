@@ -866,6 +866,8 @@ void main() {
       );
       File(p.join(packed.path, 'scene.pkg')).writeAsStringSync('package');
       File(p.join(unpacked.path, 'scene.json')).writeAsStringSync('{}');
+      // A filename extending another key must not change manifest ordering.
+      File(p.join(packed.path, 'project.json-extra')).writeAsStringSync('x');
 
       final BackupScan result = await scan(root: backupRoot.path);
 

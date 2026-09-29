@@ -177,7 +177,7 @@ Future<String?> backupCopyVerificationSignature({
 Future<List<String>?> _verificationManifest(Directory folder) async {
   try {
     if (!await folder.exists()) return null;
-    final List<String> entries = <String>[];
+    final Map<String, String> entries = <String, String>{};
     await for (final FileSystemEntity entity in folder.list(
       recursive: true,
       followLinks: false,
@@ -188,12 +188,12 @@ Future<List<String>?> _verificationManifest(Directory folder) async {
       if (isRebuiltShaderPath(relative)) continue;
       final FileStat stat = await entity.stat();
       if (stat.type != FileSystemEntityType.file) return null;
-      entries.add(
-        '${relative.toLowerCase().replaceAll('/', r'\')}:${stat.size}:${stat.modified.microsecondsSinceEpoch}',
-      );
+      final String key = relative.toLowerCase().replaceAll('/', r'\');
+      entries[key] = '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
     }
-    entries.sort();
-    return entries;
+    // Match the scan's path ordering before appending size and modification time.
+    final List<String> keys = entries.keys.toList()..sort();
+    return <String>[for (final String key in keys) '$key:${entries[key]}'];
   } on FileSystemException {
     return null;
   }
@@ -1813,8 +1813,12 @@ Future<void> _deleteTempDirectory(Directory directory) async {
 /// enough for the caller to inspect them.
 class ScenePkgInspectionSession {
   CancelToken? _token;
+  CancelToken? _unpackToken;
   bool _disposed = false;
   Directory? _retainedTempRoot;
+  Future<String?>? _unpackPending;
+  final Map<String, Future<({String packedPath, String unpackedPath})?>>
+  _preparedComparisons = {};
 
   String get temporaryBasePath =>
       path.join(Directory.systemTemp.path, 'WeRePKG', 'pkg-diff');
@@ -1826,6 +1830,73 @@ class ScenePkgInspectionSession {
     } on FileSystemException {
       // Inspection reports the real failure later; confirmation can still show
       // the intended temporary location when pre-creation is blocked.
+    }
+  }
+
+  /// Keeps an explicitly unpacked package in this inspection session only.
+  Future<String?> unpackForInspection({
+    required Directory packedFolder,
+    required String tool,
+  }) async {
+    if (_disposed) return null;
+    final Future<String?> pending = _unpackPending ??= _unpackForInspection(
+      packedFolder: packedFolder,
+      tool: tool,
+    );
+    try {
+      final String? result = await pending;
+      if (result == null) _unpackPending = null;
+      return result;
+    } catch (_) {
+      _unpackPending = null;
+      rethrow;
+    }
+  }
+
+  Future<String?> _unpackForInspection({
+    required Directory packedFolder,
+    required String tool,
+  }) async {
+    final File package = File(
+      path.join(packedFolder.path, WallpaperFiles.packedScene),
+    );
+    if (!await package.exists() || !await File(tool).exists()) {
+      throw const ScenePkgInspectionException();
+    }
+    Directory? root = _retainedTempRoot;
+    if (root == null) {
+      final Directory base = Directory(temporaryBasePath);
+      await base.create(recursive: true);
+      await _clearStaleSessions(base);
+      root = await base.createTemp('packed-view-');
+      _retainedTempRoot = root;
+    }
+    final Directory output = Directory(path.join(root.path, 'unpacked-scene'));
+    await output.create(recursive: true);
+    final CancelToken token = CancelToken();
+    _unpackToken = token;
+    try {
+      final FileStat before = await package.stat();
+      final bool extracted = await _extractPackage(
+        tool,
+        package,
+        output,
+        token,
+      );
+      final FileStat after = await package.stat();
+      if (!extracted ||
+          token.isCancelled ||
+          _disposed ||
+          before.size != after.size ||
+          before.modified != after.modified) {
+        throw const ScenePkgInspectionException();
+      }
+      return output.path;
+    } catch (_) {
+      await _deleteTempDirectory(output);
+      rethrow;
+    } finally {
+      if (identical(_unpackToken, token)) _unpackToken = null;
     }
   }
 
@@ -1912,6 +1983,192 @@ class ScenePkgInspectionSession {
     }
   }
 
+  /// Materializes one indexed package entry for an explicit comparison.
+  /// Other package entries stay on disk inside scene.pkg. Temporary files live
+  /// until this session is disposed, so repeated comparisons reuse the result.
+  Future<({String packedPath, String unpackedPath})?> preparePackedComparison({
+    required Directory packedFolder,
+    required Directory unpackedFolder,
+    required String relativePath,
+    String? tool,
+  }) async {
+    if (_disposed) return null;
+    final String key = relativePath.replaceAll('/', r'\').toLowerCase();
+    final pending = _preparedComparisons.putIfAbsent(
+      key,
+      () => _preparePackedComparison(
+        packedFolder: packedFolder,
+        unpackedFolder: unpackedFolder,
+        relativePath: relativePath,
+        tool: tool,
+      ),
+    );
+    try {
+      final prepared = await pending;
+      if (prepared == null) await _preparedComparisons.remove(key);
+      return prepared;
+    } catch (_) {
+      await _preparedComparisons.remove(key);
+      rethrow;
+    }
+  }
+
+  Future<({String packedPath, String unpackedPath})?> _preparePackedComparison({
+    required Directory packedFolder,
+    required Directory unpackedFolder,
+    required String relativePath,
+    required String? tool,
+  }) async {
+    if (_disposed ||
+        path.isAbsolute(relativePath) ||
+        relativePath
+            .split(RegExp(r'[/\\]'))
+            .any((part) => part.isEmpty || part == '.' || part == '..')) {
+      return null;
+    }
+    final String localRelative = path.joinAll(
+      relativePath.split(RegExp(r'[/\\]')),
+    );
+    final File unpacked = File(path.join(unpackedFolder.path, localRelative));
+    if (!await unpacked.exists()) return null;
+    final File package = File(
+      path.join(packedFolder.path, WallpaperFiles.packedScene),
+    );
+    final ScenePackageIndex? index = await readScenePackageIndex(package);
+    final ScenePackageEntry? entry =
+        index?.entries[relativePath.replaceAll('/', r'\').toLowerCase()];
+    if (entry == null) {
+      final File wrapper = File(path.join(packedFolder.path, localRelative));
+      return await wrapper.exists()
+          ? (packedPath: wrapper.path, unpackedPath: unpacked.path)
+          : null;
+    }
+
+    final CancelToken token = CancelToken();
+    _token = token;
+    File? extracted;
+    bool complete = false;
+    try {
+      Directory? root = _retainedTempRoot;
+      if (root == null) {
+        final Directory base = Directory(temporaryBasePath);
+        await base.create(recursive: true);
+        await _clearStaleSessions(base);
+        root = await base.createTemp('packed-view-');
+        _retainedTempRoot = root;
+      }
+      final String extractedPath = path.normalize(
+        path.joinAll(<String>[
+          root.path,
+          'packed',
+          ...entry.path.split(RegExp(r'[/\\]')),
+        ]),
+      );
+      if (!path.isWithin(root.path, extractedPath)) return null;
+      extracted = File(extractedPath);
+      await extracted.parent.create(recursive: true);
+      final FileStat before = await package.stat();
+      RandomAccessFile? input;
+      RandomAccessFile? output;
+      try {
+        input = await package.open();
+        output = await extracted.open(mode: FileMode.write);
+        await input.setPosition(index!.headerBytes + entry.offset);
+        int remaining = entry.length;
+        while (remaining > 0 && !token.isCancelled && !_disposed) {
+          final List<int> chunk = await input.read(
+            remaining < 64 * 1024 ? remaining : 64 * 1024,
+          );
+          if (chunk.isEmpty) return null;
+          await output.writeFrom(chunk);
+          remaining -= chunk.length;
+        }
+        if (remaining != 0 || token.isCancelled || _disposed) return null;
+      } finally {
+        await output?.close();
+        await input?.close();
+      }
+      final FileStat after = await package.stat();
+      if (before.size != after.size || before.modified != after.modified) {
+        return null;
+      }
+      complete = true;
+
+      if (path.extension(relativePath).toLowerCase() == '.tex' &&
+          tool != null &&
+          await File(tool).exists()) {
+        final String slot = sha256
+            .convert(utf8.encode(relativePath))
+            .toString();
+        final Directory packedImages = Directory(
+          path.join(root.path, 'images', slot, 'packed'),
+        );
+        final Directory unpackedImages = Directory(
+          path.join(root.path, 'images', slot, 'unpacked'),
+        );
+        try {
+          final bool packedConverted = await _convertTexture(
+            tool,
+            extracted,
+            packedImages,
+            token,
+          );
+          final bool unpackedConverted = await _convertTexture(
+            tool,
+            unpacked,
+            unpackedImages,
+            token,
+          );
+          if (packedConverted && unpackedConverted) {
+            final File? packedImage = await _firstConvertedImage(packedImages);
+            final File? unpackedImage = await _firstConvertedImage(
+              unpackedImages,
+            );
+            if (packedImage != null && unpackedImage != null) {
+              return (
+                packedPath: packedImage.path,
+                unpackedPath: unpackedImage.path,
+              );
+            }
+          }
+        } on Exception {
+          // Raw textures can still be compared when conversion is unavailable.
+        }
+      }
+      return _disposed || token.isCancelled
+          ? null
+          : (packedPath: extracted.path, unpackedPath: unpacked.path);
+    } on FileSystemException {
+      return null;
+    } finally {
+      if (identical(_token, token)) _token = null;
+      if (!complete || token.isCancelled || _disposed) {
+        try {
+          await extracted?.delete();
+        } on FileSystemException {
+          // Session cleanup removes anything left by a cancelled read.
+        }
+      }
+    }
+  }
+
+  Future<File?> _firstConvertedImage(Directory folder) async {
+    if (!await folder.exists()) return null;
+    await for (final FileSystemEntity item in folder.list()) {
+      if (item is File &&
+          <String>{
+            '.png',
+            '.jpg',
+            '.jpeg',
+            '.gif',
+            '.bmp',
+          }.contains(path.extension(item.path).toLowerCase())) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   /// Saves one inspected file as a new, user-chosen copy outside either library.
   /// Existing destinations are never replaced. A failed write removes its
   /// incomplete copy when possible and reports if cleanup could not finish.
@@ -1944,6 +2201,15 @@ class ScenePkgInspectionSession {
   Future<void> dispose() async {
     _disposed = true;
     _token?.cancel();
+    _unpackToken?.cancel();
+    if (_unpackPending case final Future<String?> pending) {
+      await pending.then((_) {}, onError: (Object _) {});
+    }
+    await Future.wait(
+      _preparedComparisons.values.map(
+        (future) => future.then((_) {}, onError: (Object _) {}),
+      ),
+    );
     final Directory? root = _retainedTempRoot;
     _retainedTempRoot = null;
     if (root != null) await _deleteTempDirectory(root);

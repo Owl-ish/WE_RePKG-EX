@@ -536,6 +536,7 @@ Future<BackupActionResult> recycleDuplicateLiveCopy({
   required WallpaperLibrary removedLibrary,
   required String? liveWorkshopPath,
   required String? liveMyProjectsPath,
+  Future<bool> Function(Directory first, Directory second)? verifyEquivalent,
   BackupTrash? trashFolder,
 }) async {
   if (name.isEmpty || path.basename(name) != name) {
@@ -563,6 +564,9 @@ Future<BackupActionResult> recycleDuplicateLiveCopy({
       library: targetLibrary,
       check: (Directory candidate) async =>
           await candidate.exists() && await survivor.exists(),
+      claimedCheck: verifyEquivalent == null
+          ? null
+          : (Directory claimed) => verifyEquivalent(claimed, survivor),
       trashFolder: trashFolder,
     );
   } catch (error) {
@@ -571,8 +575,8 @@ Future<BackupActionResult> recycleDuplicateLiveCopy({
 }
 
 /// Recycles one explicitly chosen conflicting backup while the other survives.
-/// Both representations are rechecked around the claim so stale scan evidence
-/// cannot remove a replacement that appeared at the same path.
+/// Both formats and the caller's reviewed content verdict are checked around
+/// the claim so stale evidence cannot remove a replacement at the same path.
 Future<BackupActionResult> recycleConflictingBackupCopy({
   required String name,
   required WallpaperLibrary removedLibrary,
@@ -580,7 +584,7 @@ Future<BackupActionResult> recycleConflictingBackupCopy({
   required BackupCopyFormat expectedSurvivingFormat,
   required String? backupRoot,
   required Future<bool> Function(Directory packed, Directory unpacked)
-  verifyEquivalent,
+  verifyExpectedPair,
   BackupTrash? trashFolder,
 }) async {
   if (name.isEmpty || path.basename(name) != name) {
@@ -592,6 +596,44 @@ Future<BackupActionResult> recycleConflictingBackupCopy({
   };
   if (!expected.contains(BackupCopyFormat.packed) ||
       !expected.contains(BackupCopyFormat.unpacked)) {
+    return (changed: false, error: tr(AppI10n.backupActionStateChanged));
+  }
+  return recycleReviewedBackupCopy(
+    name: name,
+    removedLibrary: removedLibrary,
+    expectedRemovedFormat: expectedRemovedFormat,
+    expectedSurvivingFormat: expectedSurvivingFormat,
+    backupRoot: backupRoot,
+    verifyExpectedPair: (removed, survivor) {
+      final Directory packed = expectedRemovedFormat == BackupCopyFormat.packed
+          ? removed
+          : survivor;
+      final Directory unpacked =
+          expectedRemovedFormat == BackupCopyFormat.unpacked
+          ? removed
+          : survivor;
+      return verifyExpectedPair(packed, unpacked);
+    },
+    trashFolder: trashFolder,
+  );
+}
+
+/// Removes one explicitly reviewed backup copy while keeping the other in place.
+Future<BackupActionResult> recycleReviewedBackupCopy({
+  required String name,
+  required WallpaperLibrary removedLibrary,
+  required BackupCopyFormat expectedRemovedFormat,
+  required BackupCopyFormat expectedSurvivingFormat,
+  required String? backupRoot,
+  required Future<bool> Function(Directory removed, Directory surviving)
+  verifyExpectedPair,
+  BackupTrash? trashFolder,
+}) async {
+  if (name.isEmpty || path.basename(name) != name) {
+    return (changed: false, error: tr(AppI10n.backupActionUnsafeDestination));
+  }
+  if (expectedRemovedFormat == BackupCopyFormat.unknown ||
+      expectedSurvivingFormat == BackupCopyFormat.unknown) {
     return (changed: false, error: tr(AppI10n.backupActionStateChanged));
   }
   final String? workshopRoot = backupWorkshopPath(backupRoot);
@@ -619,17 +661,8 @@ Future<BackupActionResult> recycleConflictingBackupCopy({
       check: (Directory candidate) async =>
           await inspectBackupCopyFormat(candidate) == expectedRemovedFormat &&
           await inspectBackupCopyFormat(survivor) == expectedSurvivingFormat,
-      claimedCheck: (Directory claimed) {
-        final Directory packed =
-            expectedRemovedFormat == BackupCopyFormat.packed
-            ? claimed
-            : survivor;
-        final Directory unpacked =
-            expectedRemovedFormat == BackupCopyFormat.unpacked
-            ? claimed
-            : survivor;
-        return verifyEquivalent(packed, unpacked);
-      },
+      claimedCheck: (Directory claimed) =>
+          verifyExpectedPair(claimed, survivor),
       trashFolder: trashFolder,
     );
   } catch (error) {

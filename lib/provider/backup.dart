@@ -270,20 +270,26 @@ class BackupDirectBatch extends ValueNotifier<BackupDirectBatchState> {
     );
   }
 
-  static bool eligible(ReconcileEntry entry) {
+  static bool isPackedUnpackedConflict(ReconcileEntry entry) {
     final BackupCopyDifference? difference = entry.backupDifference;
-    return entry.activeReasons.contains(
+    if (difference == null ||
+        !entry.activeReasons.contains(
           BackupReconcileReason.conflictingBackupCopies,
-        ) &&
-        difference?.verificationSignature != null &&
-        <BackupCopyFormat>{
-          difference!.workshopFormat,
-          difference.myProjectsFormat,
-        }.containsAll(<BackupCopyFormat>{
-          BackupCopyFormat.packed,
-          BackupCopyFormat.unpacked,
-        });
+        )) {
+      return false;
+    }
+    return <BackupCopyFormat>{
+      difference.workshopFormat,
+      difference.myProjectsFormat,
+    }.containsAll(<BackupCopyFormat>{
+      BackupCopyFormat.packed,
+      BackupCopyFormat.unpacked,
+    });
   }
+
+  static bool eligible(ReconcileEntry entry) =>
+      isPackedUnpackedConflict(entry) &&
+      entry.backupDifference?.verificationSignature != null;
 
   BackupDirectBatchState forScan(BackupScan scan, String? root) =>
       identical(value.scan, scan) && value.backupRoot == root

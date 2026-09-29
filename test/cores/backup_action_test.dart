@@ -805,6 +805,52 @@ void main() {
     },
   );
 
+  test(
+    'bulk duplicate live guard restores a pair that fails verification',
+    () async {
+      final Directory workshopRoot = Directory(
+        path.join(temporary.path, 'workshop'),
+      )..createSync();
+      final Directory projectsRoot = Directory(
+        path.join(temporary.path, 'projects'),
+      )..createSync();
+      final Directory workshop = Directory(path.join(workshopRoot.path, 'demo'))
+        ..createSync();
+      final Directory projects = Directory(path.join(projectsRoot.path, 'demo'))
+        ..createSync();
+      File(path.join(workshop.path, 'scene.json')).writeAsStringSync('old');
+      File(path.join(projects.path, 'scene.json')).writeAsStringSync('new');
+      int trashCalls = 0;
+
+      final result = await recycleDuplicateLiveCopy(
+        name: 'demo',
+        removedLibrary: WallpaperLibrary.workshop,
+        liveWorkshopPath: workshopRoot.path,
+        liveMyProjectsPath: projectsRoot.path,
+        verifyEquivalent: (Directory claimed, Directory survivor) async {
+          expect(claimed.path, isNot(workshop.path));
+          expect(survivor.path, projects.path);
+          return false;
+        },
+        trashFolder: (_) async {
+          trashCalls++;
+          return null;
+        },
+      );
+
+      expect(result.changed, isFalse);
+      expect(trashCalls, 0);
+      expect(
+        File(path.join(workshop.path, 'scene.json')).readAsStringSync(),
+        'old',
+      );
+      expect(
+        File(path.join(projects.path, 'scene.json')).readAsStringSync(),
+        'new',
+      );
+    },
+  );
+
   test('backup conflict resolution recycles only the chosen format', () async {
     final Directory backupRoot = Directory(path.join(temporary.path, 'backup'))
       ..createSync();
@@ -823,7 +869,7 @@ void main() {
       expectedRemovedFormat: BackupCopyFormat.packed,
       expectedSurvivingFormat: BackupCopyFormat.unpacked,
       backupRoot: backupRoot.path,
-      verifyEquivalent: (Directory packed, Directory unpacked) async => true,
+      verifyExpectedPair: (Directory packed, Directory unpacked) async => true,
       trashFolder: (String claimed) async {
         expect(packed.existsSync(), isFalse);
         expect(unpacked.existsSync(), isTrue);
@@ -859,7 +905,7 @@ void main() {
       expectedRemovedFormat: BackupCopyFormat.unpacked,
       expectedSurvivingFormat: BackupCopyFormat.packed,
       backupRoot: backupRoot.path,
-      verifyEquivalent: (Directory survivingPacked, Directory claimed) async {
+      verifyExpectedPair: (Directory survivingPacked, Directory claimed) async {
         expect(unpacked.existsSync(), isFalse);
         expect(survivingPacked.path, packed.path);
         expect(
@@ -918,7 +964,7 @@ void main() {
         expectedRemovedFormat: BackupCopyFormat.packed,
         expectedSurvivingFormat: BackupCopyFormat.unpacked,
         backupRoot: backupRoot.path,
-        verifyEquivalent:
+        verifyExpectedPair:
             (Directory packedCopy, Directory unpackedCopy) async =>
                 (await probePackedBackupCopyDirect(
                   packedFolder: packedCopy,
@@ -971,7 +1017,7 @@ void main() {
       expectedRemovedFormat: BackupCopyFormat.packed,
       expectedSurvivingFormat: BackupCopyFormat.unpacked,
       backupRoot: backupRoot.path,
-      verifyEquivalent: (Directory packed, Directory unpacked) async => true,
+      verifyExpectedPair: (Directory packed, Directory unpacked) async => true,
       trashFolder: (String claimed) async {
         trashCalls++;
         return null;
@@ -1007,7 +1053,7 @@ void main() {
         expectedRemovedFormat: BackupCopyFormat.packed,
         expectedSurvivingFormat: BackupCopyFormat.unpacked,
         backupRoot: backupRoot.path,
-        verifyEquivalent: (Directory claimed, Directory survivor) async {
+        verifyExpectedPair: (Directory claimed, Directory survivor) async {
           expect(packed.existsSync(), isFalse);
           expect(claimed.existsSync(), isTrue);
           expect(survivor.path, unpacked.path);
@@ -1024,6 +1070,61 @@ void main() {
       expect(trashCalls, 0);
       expect(packed.existsSync(), isTrue);
       expect(unpacked.existsSync(), isTrue);
+    },
+  );
+
+  test(
+    'reviewed same-format conflict keeps the survivor and restores on refusal',
+    () async {
+      final Directory backupRoot = Directory(
+        path.join(temporary.path, 'backup'),
+      )..createSync();
+      final Directory workshop = Directory(
+        path.join(backupWorkshopPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      final Directory myProjects = Directory(
+        path.join(backupMyProjectsPath(backupRoot.path)!, 'demo'),
+      )..createSync(recursive: true);
+      File(path.join(workshop.path, 'scene.json')).writeAsStringSync('first');
+      File(
+        path.join(myProjects.path, 'scene.json'),
+      ).writeAsStringSync('second');
+      int trashCalls = 0;
+      Future<BackupActionResult> remove(bool allow) =>
+          recycleReviewedBackupCopy(
+            name: 'demo',
+            removedLibrary: WallpaperLibrary.workshop,
+            expectedRemovedFormat: BackupCopyFormat.unpacked,
+            expectedSurvivingFormat: BackupCopyFormat.unpacked,
+            backupRoot: backupRoot.path,
+            verifyExpectedPair: (claimed, survivor) async {
+              expect(workshop.existsSync(), isFalse);
+              expect(claimed.existsSync(), isTrue);
+              expect(survivor.path, myProjects.path);
+              return allow;
+            },
+            trashFolder: (claimed) async {
+              trashCalls++;
+              await Directory(claimed).delete(recursive: true);
+              return null;
+            },
+          );
+
+      expect((await remove(false)).changed, isFalse);
+      expect(trashCalls, 0);
+      expect(
+        File(path.join(workshop.path, 'scene.json')).readAsStringSync(),
+        'first',
+      );
+      expect(myProjects.existsSync(), isTrue);
+
+      expect(await remove(true), (changed: true, error: null));
+      expect(trashCalls, 1);
+      expect(workshop.existsSync(), isFalse);
+      expect(
+        File(path.join(myProjects.path, 'scene.json')).readAsStringSync(),
+        'second',
+      );
     },
   );
 
